@@ -9,6 +9,10 @@ pub enum SkillsageError {
     Network(String),
     #[error("GitHub API 返回错误状态: {0}")]
     GithubApi(u16),
+    #[error("skills.sh API error status: {0}")]
+    StoreApi(u16),
+    #[error("invalid skills.sh response: {0}")]
+    InvalidStoreData(String),
     #[error("无效的 SKILL.md: {0}")]
     InvalidSkill(String),
     #[error("技能已安装: {0}")]

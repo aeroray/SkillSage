@@ -8,3 +8,4 @@
 - Long-running write operations will later share one async lock; read-only operations may run concurrently.
 - MemoryCustodian rules remain authoritative for loading, routing, budgets, compaction, and forgetting behavior.
 - Phase 2's built-in fixture is intentionally offline; live skills.sh/GitHub installation belongs to the next store phase.
+- Until token/settings support exists, do not depend on skills.sh `/api/v1`; it requires Vercel OIDC. Use the public legacy search and HTML store pages for Phase 3.

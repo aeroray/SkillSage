@@ -29,20 +29,43 @@ pub async fn find_skill_files(
 ) -> Result<Vec<String>, SkillsageError> {
     let tree = client.get_tree(owner, repo, commit).await?;
     let prefix = skill_path.trim_matches('/');
-    let skill_file = format!("{prefix}/SKILL.md");
-    if !tree
+    let exact_skill_file = format!("{prefix}/SKILL.md");
+    let skill_file = if tree
         .tree
         .iter()
-        .any(|entry| entry.path == skill_file && entry.entry_type == "blob")
+        .any(|entry| entry.path == exact_skill_file && entry.entry_type == "blob")
     {
-        return Err(SkillsageError::PathNotFound(skill_file.into()));
-    }
+        exact_skill_file
+    } else {
+        let leaf = prefix.rsplit('/').next().unwrap_or(prefix);
+        let aliases = [
+            leaf,
+            leaf.split_once('-')
+                .map(|(_, suffix)| suffix)
+                .unwrap_or(leaf),
+        ];
+        tree.tree
+            .iter()
+            .filter(|entry| entry.entry_type == "blob" && entry.path.ends_with("/SKILL.md"))
+            .find(|entry| {
+                entry
+                    .path
+                    .strip_suffix("/SKILL.md")
+                    .and_then(|parent| parent.rsplit('/').next())
+                    .map(|parent| aliases.contains(&parent))
+                    .unwrap_or(false)
+            })
+            .map(|entry| entry.path.clone())
+            .ok_or_else(|| SkillsageError::PathNotFound(exact_skill_file.clone().into()))?
+    };
+    let actual_prefix = skill_file.strip_suffix("/SKILL.md").unwrap_or("");
     Ok(tree
         .tree
         .into_iter()
         .filter(|entry| {
             entry.entry_type == "blob"
-                && (entry.path == skill_file || entry.path.starts_with(&format!("{prefix}/")))
+                && (entry.path == skill_file
+                    || entry.path.starts_with(&format!("{actual_prefix}/")))
         })
         .map(|entry| entry.path)
         .collect())

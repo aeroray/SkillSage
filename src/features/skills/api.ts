@@ -5,6 +5,10 @@ export function installTestSkill(agents: string[]) {
   return invokeCommand<InstallResult>("install_test_skill", { agents });
 }
 
+export function installSkill(skillId: string, agents: string[]) {
+  return invokeCommand<InstallResult>("install_skill", { skillId, agents });
+}
+
 export function listInstalled() {
   return invokeCommand<InstalledSkillsList>("list_installed");
 }

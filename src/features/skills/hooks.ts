@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { installTestSkill, listInstalled, uninstallSkill } from "./api";
+import { installSkill, installTestSkill, listInstalled, uninstallSkill } from "./api";
 import type { InstallResult, InstalledSkill, SkillProgress } from "./types";
 import { normalizeTauriError } from "../../lib/tauri";
 
@@ -62,6 +62,51 @@ export function usePhase2Install(onCompleted: () => void) {
         setMessage("");
         setError(normalizeTauriError(reason));
         return undefined;
+      } finally {
+        unlisten?.();
+        setInstalling(false);
+      }
+    },
+    [onCompleted],
+  );
+
+  return { error, install, installing, message, stage };
+}
+
+export function useSkillInstall(onCompleted: () => void) {
+  const [installing, setInstalling] = useState(false);
+  const [stage, setStage] = useState("idle");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState<string>();
+
+  const install = useCallback(
+    async (skillId: string, agents: string[]) => {
+      setInstalling(true);
+      setStage("downloading");
+      setMessage("准备下载技能文件");
+      setError(undefined);
+      let unlisten: (() => void) | undefined;
+
+      try {
+        try {
+          unlisten = await listen<SkillProgress>("skill-progress", (event) => {
+            if (event.payload.skillId === skillId) {
+              setStage(event.payload.stage);
+              setMessage(event.payload.message);
+            }
+          });
+        } catch {
+          // Browser preview does not expose Tauri events.
+        }
+        const result = await installSkill(skillId, agents);
+        setStage("done");
+        setMessage("已完成落库、校验和分发");
+        onCompleted();
+        return result;
+      } catch (reason) {
+        setStage("failed");
+        setMessage("");
+        setError(normalizeTauriError(reason));
       } finally {
         unlisten?.();
         setInstalling(false);

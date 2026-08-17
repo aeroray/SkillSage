@@ -9,8 +9,12 @@ pub fn run() {
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::install::install_test_skill,
+            commands::install::install_skill,
             commands::manage::list_installed,
             commands::manage::uninstall_skill,
+            commands::store::get_leaderboard,
+            commands::store::get_skill_detail,
+            commands::store::search_skills,
             commands::tools::detect_tools,
         ])
         .setup(|app| {

@@ -4,6 +4,11 @@ use crate::error::SkillsageError;
 
 use super::tree::GitTreeResponse;
 
+#[derive(Debug, serde::Deserialize)]
+struct GitHubRepository {
+    default_branch: String,
+}
+
 #[derive(Clone)]
 pub struct GitHubClient {
     http: reqwest::Client,
@@ -35,6 +40,16 @@ impl GitHubClient {
             return Err(SkillsageError::GithubApi(response.status().as_u16()));
         }
         Ok(response.text().await?)
+    }
+
+    pub async fn get_default_branch(
+        &self,
+        owner: &str,
+        repo: &str,
+    ) -> Result<String, SkillsageError> {
+        let url = format!("https://api.github.com/repos/{owner}/{repo}");
+        let response: GitHubRepository = self.get_json(&url).await?;
+        Ok(response.default_branch)
     }
 
     async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T, SkillsageError> {
