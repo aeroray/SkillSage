@@ -7,3 +7,4 @@
 - All scrollable UI content uses a shared ScrollArea abstraction; do not introduce native `overflow-auto` containers.
 - Long-running write operations will later share one async lock; read-only operations may run concurrently.
 - MemoryCustodian rules remain authoritative for loading, routing, budgets, compaction, and forgetting behavior.
+- Phase 2's built-in fixture is intentionally offline; live skills.sh/GitHub installation belongs to the next store phase.

@@ -31,3 +31,13 @@ Reason: A fixed registry keeps detection and distribution predictable and aligne
 
 Decision: Vite must ignore `src-tauri/**` during development.
 Reason: Windows can lock Rust build executables under `src-tauri/target`, causing Vite's watcher to fail with `EBUSY` while Tauri compiles.
+
+## Phase 2 verification fixture
+
+Decision: Phase 2 validates the install pipeline with an offline built-in skill fixture; the GitHub tree/download client is implemented for later live sources.
+Reason: Local acceptance remains deterministic while preserving the same parse, hash, atomic write, distribute, and lock boundaries used by remote installs.
+
+## Windows link invocation
+
+Decision: Normalize registered tool paths to Windows separators and pass junction paths as separate `Command` arguments to `mklink`.
+Reason: Forward slashes can be parsed as `mklink` switches, while manually embedded quotes break `cmd.exe` argument parsing for paths containing spaces.
