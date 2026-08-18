@@ -194,6 +194,7 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
   if (command === "execute_migrate") return { migrated: ["legacy-research"], skipped: [], failed: [] } as T;
   if (command === "check_distribution_conflicts") return [] as T;
   if (command === "check_updates") return { updates: [] } as T;
+  if (command === "cleanup_app") return { mode: args?.mode ?? "all", removedLinks: 2, centralRemoved: args?.mode !== "keep-skills", managementDataRemoved: true } as T;
   return {} as T;
 }
 

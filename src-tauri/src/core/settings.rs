@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::core::repo::layout::RepoLayout;
+use crate::core::repo::{atomic, layout::RepoLayout};
 use crate::error::SkillsageError;
 
 const KEYRING_SERVICE: &str = "com.skillsage.desktop";
@@ -27,18 +27,20 @@ pub struct SettingsView {
 }
 
 pub fn load_runtime(layout: &RepoLayout) -> Result<RuntimeSettings, SkillsageError> {
+    layout.ensure_roots()?;
     let stored = load_stored(layout)?;
     let token = read_token()?;
     Ok(RuntimeSettings {
-        proxy_url: stored.proxy_url,
+        proxy_url: normalize_proxy(stored.proxy_url)?,
         github_token: token,
     })
 }
 
 pub fn load_view(layout: &RepoLayout) -> Result<SettingsView, SkillsageError> {
+    layout.ensure_roots()?;
     let stored = load_stored(layout)?;
     Ok(SettingsView {
-        proxy_url: stored.proxy_url,
+        proxy_url: normalize_proxy(stored.proxy_url)?,
         github_token_configured: read_token()?.is_some(),
     })
 }
@@ -63,13 +65,32 @@ pub fn save(
     layout.ensure_roots()?;
     let stored = StoredSettings { proxy_url };
     let temporary_path = layout.settings_path().with_extension("json.tmp");
+    if let Ok(metadata) = std::fs::symlink_metadata(&temporary_path) {
+        if metadata.file_type().is_symlink() {
+            return Err(SkillsageError::Settings(
+                "设置文件临时路径不能是符号链接".to_string(),
+            ));
+        }
+        std::fs::remove_file(&temporary_path)?;
+    }
     let content = serde_json::to_string_pretty(&stored)?;
     std::fs::write(&temporary_path, format!("{content}\n"))?;
-    if layout.settings_path().exists() {
-        std::fs::remove_file(layout.settings_path())?;
-    }
-    std::fs::rename(temporary_path, layout.settings_path())?;
+    atomic::replace_file(&temporary_path, &layout.settings_path())?;
     load_view(layout)
+}
+
+pub fn clear_for_cleanup(layout: &RepoLayout) -> Result<(), SkillsageError> {
+    match std::fs::symlink_metadata(layout.settings_path()) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(SkillsageError::Settings(
+                "设置文件不能是符号链接".to_string(),
+            ))
+        }
+        Ok(_) => std::fs::remove_file(layout.settings_path())?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    delete_token()
 }
 
 pub fn normalize_proxy(proxy_url: Option<String>) -> Result<Option<String>, SkillsageError> {
@@ -87,8 +108,17 @@ pub fn normalize_proxy(proxy_url: Option<String>) -> Result<Option<String>, Skil
 
 fn load_stored(layout: &RepoLayout) -> Result<StoredSettings, SkillsageError> {
     let path = layout.settings_path();
-    if !path.exists() {
-        return Ok(StoredSettings::default());
+    match std::fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(StoredSettings::default());
+        }
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(SkillsageError::Settings(
+                "设置文件不能是符号链接".to_string(),
+            ));
+        }
+        Err(error) => return Err(error.into()),
+        Ok(_) => {}
     }
     Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
 }

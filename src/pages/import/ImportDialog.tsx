@@ -8,6 +8,8 @@ import { Dialog } from "../../components/ui/dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { Skeleton } from "../../components/ui/skeleton";
+import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { ToolSelection, type ToolOption } from "../../components/common/ToolSelection";
 import { useImport } from "../../features/import/hooks";
 import { useDistributionConflicts } from "../../features/skills/hooks";
@@ -107,7 +109,8 @@ export function ImportDialog({ onClose, onCompleted, open, tools }: ImportDialog
           <Button className="self-start" disabled={!path.trim() || loading || importing} onClick={() => void previewPath(path)} variant="secondary">{loading ? "解析中…" : "解析预览"}</Button>
         </FieldGroup>
 
-        {error ? <Alert variant="destructive"><CircleAlert /><AlertDescription>{error}</AlertDescription></Alert> : null}
+        <ErrorBanner error={error} />
+        {loading ? <div aria-busy="true" className="flex flex-col gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-20" /></div> : null}
         {preview ? <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/40 p-4">
           <div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-sm font-semibold text-foreground">{preview.name}</h3><Badge variant="muted">{preview.sourceKind === "file" ? "单文件" : "目录"}</Badge></div><p className="mt-2 text-sm leading-6 text-muted-foreground">{preview.description}</p></div><Badge variant="success">{preview.fileCount} 个文件</Badge></div>
           {preview.remoteConflict ? <Alert variant="destructive"><CircleAlert /><AlertDescription>同名远程技能已存在，不能覆盖远程仓库内容。</AlertDescription></Alert> : null}

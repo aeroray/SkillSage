@@ -89,6 +89,11 @@ pub fn collect_files(root: &Path) -> Result<Vec<SourceFile>, SkillsageError> {
     Ok(files)
 }
 
+pub fn validate_tree(root: &Path) -> Result<(), SkillsageError> {
+    let mut ignored = Vec::new();
+    collect_files_inner(root, root, &mut ignored).map(|_| ())
+}
+
 pub fn collect_resolved_files(source: &ResolvedSource) -> Result<Vec<SourceFile>, SkillsageError> {
     if source.kind == "file" {
         return Ok(vec![SourceFile {

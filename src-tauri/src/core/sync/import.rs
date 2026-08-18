@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -6,6 +6,7 @@ use serde::Serialize;
 use crate::core::repo::{layout::RepoLayout, lockfile};
 use crate::core::skill::parser::is_valid_skill_name;
 use crate::core::tools::detection::detect_tools;
+use crate::core::tools::registry::find_tool;
 use crate::error::SkillsageError;
 
 use super::export::{SyncPackage, SyncSkillEntry, FORMAT_VERSION};
@@ -42,11 +43,18 @@ pub struct SyncImportPreview {
 
 pub fn load(path: &str) -> Result<SyncPackage, SkillsageError> {
     let path = Path::new(path);
-    if !path.is_file() {
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|error| SkillsageError::SyncInvalid(format!("无法读取同步清单: {error}")))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err(SkillsageError::SyncInvalid(format!(
             "同步清单不存在: {}",
             path.display()
         )));
+    }
+    if metadata.len() > 8 * 1024 * 1024 {
+        return Err(SkillsageError::SyncInvalid(
+            "同步清单超过 8 MiB，已拒绝读取".into(),
+        ));
     }
     let content = std::fs::read_to_string(path)
         .map_err(|error| SkillsageError::SyncInvalid(error.to_string()))?;
@@ -101,10 +109,14 @@ pub fn selected_entries(
             .map(|entry| entry.id.clone())
             .collect()
     } else {
-        selected_ids.iter().cloned().collect()
+        selected_ids.to_vec()
     };
     let mut entries = Vec::new();
+    let mut seen = HashSet::new();
     for id in selected {
+        if !seen.insert(id.clone()) {
+            continue;
+        }
         let entry = package
             .skills
             .iter()
@@ -141,15 +153,26 @@ fn validate(package: &SyncPackage) -> Result<(), SkillsageError> {
     if package.skills.len() > 1000 {
         return Err(SkillsageError::SyncInvalid("清单中的技能数量过多".into()));
     }
+    let mut ids = HashSet::new();
+    let mut names = HashSet::new();
     for entry in &package.skills {
         if entry.id.is_empty()
+            || entry.id.len() > 512
+            || !entry
+                .id
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || "/_-".contains(character))
             || !is_valid_skill_name(&entry.name)
+            || !ids.insert(entry.id.clone())
+            || !names.insert(entry.name.clone())
             || entry.owner.is_empty()
-            || entry.owner.contains('/')
+            || !is_safe_component(&entry.owner)
             || entry.repo.is_empty()
-            || entry.repo.contains('/')
+            || !is_safe_component(&entry.repo)
             || entry.current_version.is_empty()
-            || !entry.source.starts_with("https://")
+            || !is_safe_reference(&entry.current_version)
+            || entry.current_hash.is_empty()
+            || !is_allowed_source(&entry.source)
         {
             return Err(SkillsageError::SyncInvalid(format!(
                 "技能条目无效: {}",
@@ -162,6 +185,68 @@ fn validate(package: &SyncPackage) -> Result<(), SkillsageError> {
                 entry.name
             )));
         }
+        let mut tools = HashSet::new();
+        for agent in &entry.distributed_to {
+            if !tools.insert(agent) || find_tool(agent).is_err() {
+                return Err(SkillsageError::SyncInvalid(format!(
+                    "技能包含无效的分发目标: {}",
+                    entry.name
+                )));
+            }
+        }
+        if let Some(skill_path) = &entry.skill_path {
+            validate_skill_path(skill_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn is_safe_component(value: &str) -> bool {
+    value
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
+}
+
+fn is_safe_reference(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 512
+        && !value
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.' | '/')
+        })
+}
+
+fn is_allowed_source(value: &str) -> bool {
+    let Ok(url) = url::Url::parse(value) else {
+        return false;
+    };
+    url.scheme() == "https"
+        && url.username().is_empty()
+        && url.port().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none()
+        && matches!(
+            url.host_str(),
+            Some("skills.sh")
+                | Some("www.skills.sh")
+                | Some("github.com")
+                | Some("www.github.com")
+                | Some("raw.githubusercontent.com")
+        )
+}
+
+fn validate_skill_path(value: &str) -> Result<(), SkillsageError> {
+    if value.is_empty()
+        || value.contains('\\')
+        || value
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err(SkillsageError::SyncInvalid(format!(
+            "技能路径无效: {value}"
+        )));
     }
     Ok(())
 }

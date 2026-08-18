@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileJson, FolderOpen, Upload } from "lucide-react";
+import { FolderOpen, Upload } from "lucide-react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 
 import { Alert, AlertDescription } from "../../components/ui/alert";
@@ -10,6 +10,8 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { Dialog } from "../../components/ui/dialog";
 import { Field, FieldDescription, FieldLabel, FieldSet } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
+import { Skeleton } from "../../components/ui/skeleton";
+import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { ToolSelection, type ToolOption } from "../../components/common/ToolSelection";
 import { useSyncImport } from "../../features/sync";
 import type { SyncImportOptions } from "../../features/sync";
@@ -17,11 +19,12 @@ import type { SyncImportOptions } from "../../features/sync";
 type SyncImportDialogProps = {
   onClose: () => void;
   onCompleted: () => void;
+  onOpenSettings?: () => void;
   open: boolean;
   tools: ToolOption[];
 };
 
-export function SyncImportDialog({ onClose, onCompleted, open, tools }: SyncImportDialogProps) {
+export function SyncImportDialog({ onClose, onCompleted, onOpenSettings, open, tools }: SyncImportDialogProps) {
   const { error, importing, loading, preview, previewPath, run, setPreview } = useSyncImport();
   const [path, setPath] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -92,7 +95,8 @@ export function SyncImportDialog({ onClose, onCompleted, open, tools }: SyncImpo
           </Field>
         </FieldSet>
 
-        {error ? <Alert variant="destructive"><FileJson /><AlertDescription>{error}</AlertDescription></Alert> : null}
+        <ErrorBanner error={error} onOpenSettings={onOpenSettings} />
+        {loading ? <div aria-busy="true" className="flex flex-col gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-20" /></div> : null}
         {resultMessage ? <Alert><Upload /><AlertDescription>{resultMessage}</AlertDescription></Alert> : null}
 
         {preview ? <>

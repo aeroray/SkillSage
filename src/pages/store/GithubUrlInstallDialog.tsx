@@ -7,6 +7,8 @@ import { Dialog } from "../../components/ui/dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { Skeleton } from "../../components/ui/skeleton";
+import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { ToolSelection, type ToolOption } from "../../components/common/ToolSelection";
 import { useDistributionConflicts } from "../../features/skills/hooks";
 import type { DistributionConflict } from "../../features/skills/types";
@@ -15,11 +17,12 @@ import { useGithubUrlInstall } from "../../features/url-install/hooks";
 type GithubUrlInstallDialogProps = {
   onClose: () => void;
   onCompleted: () => void;
+  onOpenSettings?: () => void;
   open: boolean;
   tools: ToolOption[];
 };
 
-export function GithubUrlInstallDialog({ onClose, onCompleted, open, tools }: GithubUrlInstallDialogProps) {
+export function GithubUrlInstallDialog({ onClose, onCompleted, onOpenSettings, open, tools }: GithubUrlInstallDialogProps) {
   const [url, setUrl] = useState("");
   const [selectedPath, setSelectedPath] = useState("");
   const [agents, setAgents] = useState<string[]>([]);
@@ -88,8 +91,9 @@ export function GithubUrlInstallDialog({ onClose, onCompleted, open, tools }: Gi
           </Field>
         </FieldGroup>
 
-        {error ? <Alert variant="destructive"><CircleAlert /><AlertDescription>{error}</AlertDescription></Alert> : null}
-        {conflictCheck.error ? <Alert variant="destructive"><CircleAlert /><AlertDescription>{conflictCheck.error}</AlertDescription></Alert> : null}
+        <ErrorBanner error={error} onOpenSettings={onOpenSettings} />
+        <ErrorBanner error={conflictCheck.error} onOpenSettings={onOpenSettings} />
+        {loading ? <div aria-busy="true" className="flex flex-col gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-16" /></div> : null}
         {inspection ? <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/40 p-4">
           <div className="flex items-center gap-2"><GitBranch aria-hidden="true" className="h-4 w-4" /><p className="text-sm font-medium text-foreground">{inspection.parsed.owner}/{inspection.parsed.repo}</p><Badge variant="muted">{inspection.skills.length} 个技能</Badge></div>
           {inspection.skills.length > 1 ? <Field><FieldLabel htmlFor="github-skill-path">选择技能</FieldLabel><Select onValueChange={(value) => setSelectedPath(value === "__root__" ? "" : value)} value={selectedPath || "__root__"}><SelectTrigger id="github-skill-path"><SelectValue placeholder="选择仓库中的技能" /></SelectTrigger><SelectContent><SelectGroup>{inspection.skills.map((skill) => <SelectItem key={skill.skillPath || "root"} value={skill.skillPath || "__root__"}>{skill.name} · {skill.skillPath || "仓库根目录"}</SelectItem>)}</SelectGroup></SelectContent></Select></Field> : null}

@@ -126,14 +126,27 @@ pub fn install_skill_from_store_at_with_conflicts(
     }
 
     let mut actual_agents = agents.clone();
+    let mut takeovers = Vec::new();
     for conflict_item in conflict::find_for_skill(layout, &parsed.manifest.name, &actual_agents)? {
         match actions.get(&conflict_item.tool_id).map(String::as_str) {
             Some("skip") => actual_agents.retain(|agent| agent != &conflict_item.tool_id),
             Some("takeover") => {
-                conflict::takeover_at(layout, &conflict_item, &parsed.manifest.name)?;
+                match conflict::takeover_at_transaction(
+                    layout,
+                    &conflict_item,
+                    &parsed.manifest.name,
+                ) {
+                    Ok(transaction) => takeovers.push(transaction),
+                    Err(error) => {
+                        let _ = atomic::remove_dir(&destination);
+                        conflict::rollback_takeovers(layout, takeovers);
+                        return Err(error);
+                    }
+                }
             }
             _ => {
                 let _ = atomic::remove_dir(&destination);
+                conflict::rollback_takeovers(layout, takeovers);
                 return Err(SkillsageError::DistributionConflict(format!(
                     "{} 的目标路径已存在: {}",
                     conflict_item.tool_name, conflict_item.path
@@ -141,13 +154,21 @@ pub fn install_skill_from_store_at_with_conflicts(
             }
         }
     }
-    let tools = validate_agents(&actual_agents)?;
+    let tools = match validate_agents(&actual_agents) {
+        Ok(tools) => tools,
+        Err(error) => {
+            let _ = atomic::remove_dir(&destination);
+            conflict::rollback_takeovers(layout, takeovers);
+            return Err(error);
+        }
+    };
     let mut tracker = LinkTracker::default();
     for tool in tools {
         let target = tool.skills_path()?.join(&parsed.manifest.name);
         if let Err(error) = tracker.create(&destination, target) {
             tracker.rollback();
             let _ = atomic::remove_dir(&destination);
+            conflict::rollback_takeovers(layout, takeovers);
             return Err(error);
         }
     }
@@ -157,12 +178,14 @@ pub fn install_skill_from_store_at_with_conflicts(
         Err(error) => {
             tracker.rollback();
             let _ = atomic::remove_dir(&destination);
+            conflict::rollback_takeovers(layout, takeovers);
             return Err(error);
         }
     };
     if lock.skills.contains_key(&detail.id) {
         tracker.rollback();
         let _ = atomic::remove_dir(&destination);
+        conflict::rollback_takeovers(layout, takeovers);
         return Err(SkillsageError::AlreadyInstalled(detail.id));
     }
 
@@ -195,6 +218,7 @@ pub fn install_skill_from_store_at_with_conflicts(
             let _ = link::remove_link(path);
         }
         let _ = atomic::remove_dir(&destination);
+        conflict::rollback_takeovers(layout, takeovers);
         return Err(error);
     }
 

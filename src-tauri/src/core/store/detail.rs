@@ -49,6 +49,11 @@ fn parse_detail(skill_id: &str, html: &str) -> Result<SkillDetail, SkillsageErro
         .or_else(|| meta_description(&document))
         .unwrap_or("No description available.")
         .to_string();
+    let license = software
+        .get("license")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| meta_content(&document, "license").map(str::to_string));
     let installs = software
         .get("interactionStatistic")
         .and_then(|value| value.get("userInteractionCount"))
@@ -63,7 +68,7 @@ fn parse_detail(skill_id: &str, html: &str) -> Result<SkillDetail, SkillsageErro
         slug,
         name,
         description,
-        license: None,
+        license,
         installs,
         github_stars,
         url: format!("https://www.skills.sh/{skill_id}"),
@@ -74,8 +79,12 @@ fn parse_detail(skill_id: &str, html: &str) -> Result<SkillDetail, SkillsageErro
     })
 }
 
-fn meta_description<'a>(document: &'a Html) -> Option<&'a str> {
-    let selector = Selector::parse("meta[name=description]").ok()?;
+fn meta_description(document: &Html) -> Option<&str> {
+    meta_content(document, "description")
+}
+
+fn meta_content<'a>(document: &'a Html, name: &str) -> Option<&'a str> {
+    let selector = Selector::parse(&format!("meta[name=\"{name}\"]")).ok()?;
     document
         .select(&selector)
         .next()
@@ -132,13 +141,14 @@ mod tests {
     fn parses_detail_fields_from_skills_page_markup() {
         let html = r#"
             <script type="application/ld+json">
-            {"@type":"SoftwareApplication","name":"react-skill","description":"React guidance","interactionStatistic":{"userInteractionCount":1234}}
+            {"@type":"SoftwareApplication","name":"react-skill","description":"React guidance","license":"MIT","interactionStatistic":{"userInteractionCount":1234}}
             </script>
             <div class="bg-background py-8"><span>GitHub Stars</span><span>5.2K</span></div>
             <a href="/owner/repo/skill/security/socket"><span>Socket</span><span>Pass</span></a>
         "#;
         let detail = parse_detail("owner/repo/skill", html).expect("detail should parse");
         assert_eq!(detail.description, "React guidance");
+        assert_eq!(detail.license.as_deref(), Some("MIT"));
         assert_eq!(detail.installs, 1234);
         assert_eq!(detail.github_stars, Some(5200));
         assert_eq!(detail.audits[0].status, "pass");

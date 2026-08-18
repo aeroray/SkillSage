@@ -14,6 +14,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "..
 import { ArrowRight, Check, CircleAlert, Download, FolderOpen, Library, MoreHorizontal, PackageOpen, RefreshCw, Search, Settings2, SlidersHorizontal, Trash2, Undo2, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
+import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PageHeader } from "../../components/common/PageHeader";
 import { ImportDialog } from "../import/ImportDialog";
 import { MigrationDialog } from "../migrate/MigrationDialog";
@@ -27,24 +28,20 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { Separator } from "../../components/ui/separator";
+import { Skeleton } from "../../components/ui/skeleton";
 import { useDetectedTools } from "../../features/tools/hooks";
 import { useDistributionConflicts, useInstalledSkills, usePhase2Install, useSkillManagement, useSkillUpdates } from "../../features/skills/hooks";
 import { useSyncExport } from "../../features/sync";
 import type { DistributionConflict, InstalledSkill } from "../../features/skills/types";
-
-type SourceFilter = "all" | "skills.sh" | "builtin" | "local";
-type StatusFilter = "all" | "update" | "current";
-type SortMode = "recent" | "name" | "source";
-
-function sourceLabel(source: string) {
-  if (source.startsWith("local://")) return "本地导入";
-  if (source.startsWith("builtin://")) return "内置 fixture";
-  if (source.includes("skills.sh")) return "skills.sh";
-  return source.replace(/^https?:\/\//, "").split("/").slice(0, 2).join("/");
-}
+import { filterAndSortSkills, groupByAuthor, sourceLabel, type SkillSortMode, type SkillSourceFilter, type SkillStatusFilter } from "../../features/skills/selectors";
 
 function shortVersion(version: string) {
   return version.length > 12 ? version.slice(0, 8) : version;
+}
+
+function SkillsLoadingState() {
+  return <div aria-busy="true" aria-label="正在加载已安装技能" className="flex flex-col gap-4">{Array.from({ length: 3 }, (_, index) => <Card key={index}><CardContent className="flex items-center gap-4 p-5"><Skeleton className="size-4" /><div className="flex flex-1 flex-col gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-2/3" /></div><Skeleton className="h-8 w-24" /></CardContent></Card>)}</div>;
 }
 
 function ToolPicker({ agents, onToggle, tools }: { agents: string[]; onToggle: (id: string, checked: boolean) => void; tools: { id: string; name: string; detected: boolean }[] }) {
@@ -88,15 +85,15 @@ export function SkillsPage() {
   const { error: toolsError, loading: toolsLoading, refresh: refreshTools, tools } = useDetectedTools();
   const { error: skillsError, loading: skillsLoading, refresh: refreshSkills, skills } = useInstalledSkills();
   const { check: checkUpdatesNow, checking: updatesChecking, error: updatesError, updates } = useSkillUpdates();
-  const refreshPage = useCallback(() => { void refreshSkills(); void checkUpdatesNow(); }, [checkUpdatesNow, refreshSkills]);
+  const refreshPage = useCallback(() => { void refreshSkills(); void refreshTools(); void checkUpdatesNow(); }, [checkUpdatesNow, refreshSkills, refreshTools]);
   const management = useSkillManagement(refreshPage);
   const distributionConflictCheck = useDistributionConflicts();
   const installState = usePhase2Install(refreshPage);
   const [search, setSearch] = useState("");
-  const [source, setSource] = useState<SourceFilter>("all");
-  const [status, setStatus] = useState<StatusFilter>("all");
+  const [source, setSource] = useState<SkillSourceFilter>("all");
+  const [status, setStatus] = useState<SkillStatusFilter>("all");
   const [tool, setTool] = useState("all");
-  const [sort, setSort] = useState<SortMode>("recent");
+  const [sort, setSort] = useState<SkillSortMode>("recent");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [batchAgents, setBatchAgents] = useState<string[]>([]);
@@ -128,27 +125,15 @@ export function SkillsPage() {
   useEffect(() => { if (!skillsLoading) void checkUpdatesNow(); }, [checkUpdatesNow, skillsLoading]);
 
   const updatesById = useMemo(() => new Map(updates.map((item) => [item.id, item])), [updates]);
-  const filteredSkills = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return [...skills].filter((skill) => {
-      const updateAvailable = updatesById.get(skill.id)?.updateAvailable ?? false;
-      const matchesQuery = !query || [skill.name, skill.owner, skill.description, skill.source].join(" ").toLowerCase().includes(query);
-      const matchesSource = source === "all" || (source === "builtin" && skill.source.startsWith("builtin://")) || (source === "local" && skill.source.startsWith("local://")) || (source === "skills.sh" && !skill.source.startsWith("builtin://") && !skill.source.startsWith("local://"));
-      const matchesStatus = status === "all" || (status === "update" && updateAvailable) || (status === "current" && !updateAvailable);
-      const matchesTool = tool === "all" || skill.distributedTo.includes(tool);
-      return matchesQuery && matchesSource && matchesStatus && matchesTool;
-    }).sort((left, right) => sort === "name" ? left.name.localeCompare(right.name) : sort === "source" ? sourceLabel(left.source).localeCompare(sourceLabel(right.source)) : right.installedAt.localeCompare(left.installedAt));
-  }, [search, skills, sort, source, status, tool, updatesById]);
+  const filteredSkills = useMemo(() => filterAndSortSkills(skills, updatesById, { search, sort, source, status, tool }), [search, skills, sort, source, status, tool, updatesById]);
 
   const groups = useMemo(() => {
-    const grouped = new Map<string, InstalledSkill[]>();
-    for (const skill of filteredSkills) grouped.set(skill.owner, [...(grouped.get(skill.owner) ?? []), skill]);
-    return [...grouped.entries()];
+    return groupByAuthor(filteredSkills);
   }, [filteredSkills]);
 
   const filteredIds = filteredSkills.map((skill) => skill.id);
   const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
-  const pageError = toolsError ?? skillsError ?? updatesError ?? management.error ?? installState.error ?? syncExport.error ?? distributionConflictCheck.error;
+  const pageError = toolsError ?? skillsError ?? updatesError ?? management.error ?? installState.error ?? distributionConflictCheck.error;
   const openDistribution = (skill: InstalledSkill) => { setDistributionSkill(skill); setDistributionAgents(skill.distributedTo); };
   const confirmUninstall = async () => { if (!uninstallTarget) return; await management.uninstall(uninstallTarget.id); setUninstallTarget(undefined); };
   const saveDistribution = async () => {
@@ -197,14 +182,15 @@ export function SkillsPage() {
   return (
     <div>
       <PageHeader actions={<Button onClick={() => navigate("/store")}>技能商店<ArrowRight data-icon="inline-end" /></Button>} description="集中查看、更新、回滚和分发已安装的技能。" eyebrow="02 / LIBRARY" title="我的技能" />
-      {pageError ? <Alert className="mb-6" variant="destructive"><CircleAlert /><AlertDescription>{pageError}</AlertDescription></Alert> : null}
+      <ErrorBanner className="mb-6" error={pageError} onOpenSettings={() => navigate("/settings")} onRetry={refreshPage} />
 
       <Card className="mb-6"><CardHeader className="flex flex-row items-center justify-between gap-4"><div className="flex items-center gap-4"><div className="flex size-10 items-center justify-center rounded-md bg-primary-soft text-primary"><Library aria-hidden="true" className="h-5 w-5" /></div><div><CardTitle>中央技能仓库</CardTitle><CardDescription className="mt-1">~/.skillsage/remote · 单一数据源</CardDescription></div></div><div className="flex items-center gap-2"><Badge variant="muted">{skills.length} 个技能</Badge><Button aria-label="刷新技能与工具状态" disabled={skillsLoading || toolsLoading || updatesChecking} onClick={() => { void refreshSkills(); void refreshTools(); void checkUpdatesNow(); }} size="icon" variant="ghost"><RefreshCw /></Button></div></CardHeader></Card>
 
-      <Card className="mb-6"><CardContent className="flex flex-col gap-4 p-4"><div className="flex flex-wrap items-center gap-3"><label className="relative min-w-56 flex-1"><span className="sr-only">搜索已安装技能</span><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" onChange={(event) => setSearch(event.target.value)} placeholder="搜索技能、作者或描述" value={search} /></label><Select onValueChange={(value) => setSource(value as SourceFilter)} value={source}><SelectTrigger aria-label="来源筛选" className="w-36"><SelectValue placeholder="来源" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">全部来源</SelectItem><SelectItem value="skills.sh">skills.sh</SelectItem><SelectItem value="builtin">内置 fixture</SelectItem><SelectItem value="local">本地导入</SelectItem></SelectGroup></SelectContent></Select><Select onValueChange={(value) => setStatus(value as StatusFilter)} value={status}><SelectTrigger aria-label="状态筛选" className="w-36"><SelectValue placeholder="状态" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">全部状态</SelectItem><SelectItem value="update">有可用更新</SelectItem><SelectItem value="current">已是最新</SelectItem></SelectGroup></SelectContent></Select><Select onValueChange={setTool} value={tool}><SelectTrigger aria-label="工具筛选" className="w-40"><SelectValue placeholder="工具" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">全部工具</SelectItem>{tools.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectGroup></SelectContent></Select><Select onValueChange={(value) => setSort(value as SortMode)} value={sort}><SelectTrigger aria-label="排序方式" className="w-36"><SelectValue placeholder="排序" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="recent">最近安装</SelectItem><SelectItem value="name">名称</SelectItem><SelectItem value="source">来源</SelectItem></SelectGroup></SelectContent></Select></div><div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4"><div className="flex items-center gap-2"><Checkbox checked={allFilteredSelected} id="select-filtered" onCheckedChange={(checked) => setSelectedIds((current) => checked === true ? [...new Set([...current, ...filteredIds])] : current.filter((id) => !filteredIds.includes(id)))} /><Label className="font-normal text-muted-foreground" htmlFor="select-filtered">选择当前筛选结果 ({selectedIds.length})</Label></div><div className="flex flex-wrap items-center gap-2"><Button disabled={selectedIds.length === 0 || Boolean(management.pending)} onClick={() => setBatchOpen(true)} variant="outline"><SlidersHorizontal data-icon="inline-start" />批量分发</Button><Button disabled={updatesChecking} onClick={() => void checkUpdatesNow()} variant="secondary"><RefreshCw data-icon="inline-start" />{updatesChecking ? "检查中" : "检查更新"}</Button><Button onClick={() => setImportOpen(true)} variant="outline"><FolderOpen data-icon="inline-start" />导入技能</Button><Button onClick={() => setMigrationOpen(true)} variant="outline"><FolderOpen data-icon="inline-start" />迁移存量</Button><Button onClick={() => setSyncOpen(true)} variant="outline"><Upload data-icon="inline-start" />导入同步</Button><Button disabled={syncExport.exporting} onClick={() => void syncExport.run()} variant="outline"><Download data-icon="inline-start" />{syncExport.exporting ? "导出中…" : "导出同步"}</Button></div></div></CardContent></Card>
+      <Card className="mb-6"><CardContent className="flex flex-col gap-4 p-4"><div className="flex flex-wrap items-center gap-3"><label className="relative min-w-56 flex-1"><span className="sr-only">搜索已安装技能</span><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" onChange={(event) => setSearch(event.target.value)} placeholder="搜索技能、作者或描述" value={search} /></label><Select onValueChange={(value) => setSource(value as SkillSourceFilter)} value={source}><SelectTrigger aria-label="来源筛选" className="w-36"><SelectValue placeholder="来源" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">全部来源</SelectItem><SelectItem value="skills.sh">skills.sh</SelectItem><SelectItem value="builtin">内置 fixture</SelectItem><SelectItem value="local">本地导入</SelectItem></SelectGroup></SelectContent></Select><Select onValueChange={(value) => setStatus(value as SkillStatusFilter)} value={status}><SelectTrigger aria-label="状态筛选" className="w-36"><SelectValue placeholder="状态" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">全部状态</SelectItem><SelectItem value="update">有可用更新</SelectItem><SelectItem value="current">已是最新</SelectItem></SelectGroup></SelectContent></Select><Select onValueChange={setTool} value={tool}><SelectTrigger aria-label="工具筛选" className="w-40"><SelectValue placeholder="工具" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">全部工具</SelectItem>{tools.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectGroup></SelectContent></Select><Select onValueChange={(value) => setSort(value as SkillSortMode)} value={sort}><SelectTrigger aria-label="排序方式" className="w-36"><SelectValue placeholder="排序" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="recent">最近安装</SelectItem><SelectItem value="name">名称</SelectItem><SelectItem value="source">来源</SelectItem></SelectGroup></SelectContent></Select></div><Separator /><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><Checkbox checked={allFilteredSelected} id="select-filtered" onCheckedChange={(checked) => setSelectedIds((current) => checked === true ? [...new Set([...current, ...filteredIds])] : current.filter((id) => !filteredIds.includes(id)))} /><Label className="font-normal text-muted-foreground" htmlFor="select-filtered">选择当前筛选结果 ({selectedIds.length})</Label></div><div className="flex flex-wrap items-center gap-2"><Button disabled={selectedIds.length === 0 || Boolean(management.pending)} onClick={() => setBatchOpen(true)} variant="outline"><SlidersHorizontal data-icon="inline-start" />批量分发</Button><Button disabled={updatesChecking} onClick={() => void checkUpdatesNow()} variant="secondary"><RefreshCw data-icon="inline-start" />{updatesChecking ? "检查中" : "检查更新"}</Button><Button onClick={() => setImportOpen(true)} variant="outline"><FolderOpen data-icon="inline-start" />导入技能</Button><Button onClick={() => setMigrationOpen(true)} variant="outline"><FolderOpen data-icon="inline-start" />迁移存量</Button><Button onClick={() => setSyncOpen(true)} variant="outline"><Upload data-icon="inline-start" />导入同步</Button><Button disabled={syncExport.exporting} onClick={() => void syncExport.run()} variant="outline"><Download data-icon="inline-start" />{syncExport.exporting ? "导出中…" : "导出同步"}</Button></div></div></CardContent></Card>
+      <ErrorBanner className="mb-6" error={syncExport.error} onOpenSettings={() => navigate("/settings")} onRetry={() => void syncExport.run()} />
       {syncExport.path ? <Alert className="mb-6"><Download /><AlertDescription>同步清单已导出：{syncExport.path}</AlertDescription></Alert> : null}
 
-      {skills.length === 0 ? <><Card className="mb-6"><CardHeader className="flex flex-row items-start justify-between gap-4"><div><div className="flex items-center gap-2"><Badge>Phase 2</Badge><span className="text-xs text-muted-foreground">本地验证 fixture</span></div><CardTitle className="mt-4">安装测试技能</CardTitle><CardDescription className="mt-2">使用内置 fixture 验证本地仓库、lock 记录和工具分发链路，不访问网络。</CardDescription></div><Button disabled={installState.installing} onClick={() => void installState.install(selectedAgents)}>{installState.installing ? "安装中" : "安装测试技能"}</Button></CardHeader>{installState.message ? <CardContent className="pt-0 text-xs text-muted-foreground">{installState.message}</CardContent> : null}</Card><EmptyState action={<Button onClick={() => navigate("/store")} variant="secondary">发现更多技能<ArrowRight data-icon="inline-end" /></Button>} description="从技能商店安装技能后，它们会出现在这里，并可以按作者分组管理。" icon={PackageOpen} title="还没有已安装技能" /></> : groups.length === 0 ? <EmptyState description="调整搜索条件或筛选器，查看已安装的技能。" icon={Search} title="没有匹配的技能" /> : <Accordion className="flex flex-col gap-4" defaultValue={groups.map(([owner]) => owner)} type="multiple">{groups.map(([owner, ownerSkills]) => <AccordionItem className="rounded-lg border border-border bg-card shadow-sm" key={owner} value={owner}><AccordionTrigger className="px-5 py-4 hover:no-underline"><div className="flex items-center gap-3"><span className="text-sm font-semibold text-foreground">{owner}</span><Badge variant="muted">{ownerSkills.length} 个技能</Badge></div></AccordionTrigger><AccordionContent className="pb-0"><div>{ownerSkills.map((skill) => <SkillRow checked={selectedIds.includes(skill.id)} key={skill.id} onAdjust={openDistribution} onCheck={(checked) => setSelectedIds((current) => checked ? [...new Set([...current, skill.id])] : current.filter((id) => id !== skill.id))} onHistory={setHistorySkill} onUninstall={setUninstallTarget} onUpdate={(item) => void management.update(item.id)} pending={management.pending === skill.id} skill={skill} updateAvailable={updatesById.get(skill.id)?.updateAvailable ?? false} />)}</div></AccordionContent></AccordionItem>)}</Accordion>}
+      {skillsLoading ? <SkillsLoadingState /> : skills.length === 0 ? <><Card className="mb-6"><CardHeader className="flex flex-row items-start justify-between gap-4"><div><div className="flex items-center gap-2"><Badge>Phase 2</Badge><span className="text-xs text-muted-foreground">本地验证 fixture</span></div><CardTitle className="mt-4">安装测试技能</CardTitle><CardDescription className="mt-2">使用内置 fixture 验证本地仓库、lock 记录和工具分发链路，不访问网络。</CardDescription></div><Button disabled={installState.installing} onClick={() => void installState.install(selectedAgents)}>{installState.installing ? "安装中" : "安装测试技能"}</Button></CardHeader>{installState.message ? <CardContent className="pt-0 text-xs text-muted-foreground">{installState.message}</CardContent> : null}</Card><EmptyState action={<Button onClick={() => navigate("/store")} variant="secondary">发现更多技能<ArrowRight data-icon="inline-end" /></Button>} description="从技能商店安装技能后，它们会出现在这里，并可以按作者分组管理。" icon={PackageOpen} title="还没有已安装技能" /></> : groups.length === 0 ? <EmptyState description="调整搜索条件或筛选器，查看已安装的技能。" icon={Search} title="没有匹配的技能" /> : <Accordion className="flex flex-col gap-4" defaultValue={groups.map(([owner]) => owner)} type="multiple">{groups.map(([owner, ownerSkills]) => <AccordionItem className="rounded-lg border border-border bg-card shadow-sm" key={owner} value={owner}><AccordionTrigger className="px-5 py-4 hover:no-underline"><div className="flex items-center gap-3"><span className="text-sm font-semibold text-foreground">{owner}</span><Badge variant="muted">{ownerSkills.length} 个技能</Badge></div></AccordionTrigger><AccordionContent className="pb-0"><div>{ownerSkills.map((skill) => <SkillRow checked={selectedIds.includes(skill.id)} key={skill.id} onAdjust={openDistribution} onCheck={(checked) => setSelectedIds((current) => checked ? [...new Set([...current, skill.id])] : current.filter((id) => id !== skill.id))} onHistory={setHistorySkill} onUninstall={setUninstallTarget} onUpdate={(item) => void management.update(item.id)} pending={management.pending === skill.id} skill={skill} updateAvailable={updatesById.get(skill.id)?.updateAvailable ?? false} />)}</div></AccordionContent></AccordionItem>)}</Accordion>}
 
       {skills.length > 0 ? <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground"><Check aria-hidden="true" className="h-3.5 w-3.5 text-success" />中央仓库内容更新时，分发链接无需重复创建。</p> : null}
 
@@ -215,7 +201,7 @@ export function SkillsPage() {
       <AlertDialog onOpenChange={(open) => !open && setUninstallTarget(undefined)} open={Boolean(uninstallTarget)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>确认卸载</AlertDialogTitle><AlertDialogDescription>卸载只会移除分发链接、中央仓库内容和 lock 记录，不会影响其他技能。</AlertDialogDescription></AlertDialogHeader><p className="text-sm leading-6 text-muted-foreground">确定要卸载“{uninstallTarget?.name}”吗？</p><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={Boolean(management.pending)} onClick={() => void confirmUninstall()} variant="destructive">{management.pending ? "卸载中" : "确认卸载"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <ImportDialog onClose={() => setImportOpen(false)} onCompleted={refreshPage} open={importOpen} tools={tools} />
       <MigrationDialog onClose={() => setMigrationOpen(false)} onCompleted={refreshPage} open={migrationOpen} tools={tools} />
-      <SyncImportDialog onClose={() => setSyncOpen(false)} onCompleted={refreshPage} open={syncOpen} tools={tools} />
+      <SyncImportDialog onClose={() => setSyncOpen(false)} onCompleted={refreshPage} onOpenSettings={() => navigate("/settings")} open={syncOpen} tools={tools} />
     </div>
   );
 }

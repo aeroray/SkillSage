@@ -12,8 +12,9 @@ import {
   Sparkles,
   Star,
 } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
+import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
@@ -63,7 +64,7 @@ function SkillCard({ group, onOpen }: { group: SkillGroup; onOpen: (skillId: str
   const { primary, additional, source } = group;
   return (
     <Card
-      className="h-full min-h-48 cursor-pointer shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="h-full min-h-48 cursor-pointer shadow-sm transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       onClick={() => onOpen(primary.id)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") onOpen(primary.id);
@@ -95,6 +96,7 @@ function DetailContent({
   installError,
   installMessage,
   installing,
+  onOpenSettings,
   onInstall,
   selectedAgents,
   setSelectedAgents,
@@ -107,6 +109,7 @@ function DetailContent({
   installMessage: string;
   installing: boolean;
   onInstall: () => void;
+  onOpenSettings: () => void;
   selectedAgents: string[];
   setSelectedAgents: Dispatch<SetStateAction<string[]>>;
   stage: string;
@@ -116,6 +119,7 @@ function DetailContent({
   const toggleAgent = (agentId: string, checked: boolean) => {
     setSelectedAgents((current) => checked ? [...current, agentId] : current.filter((id) => id !== agentId));
   };
+  const auditWarnings = detail.audits.filter((audit) => audit.status.toLowerCase() !== "pass");
 
   return (
     <div className="flex flex-col gap-6">
@@ -138,10 +142,11 @@ function DetailContent({
       </section>
 
       <Separator />
+      {auditWarnings.length > 0 ? <Alert className="mb-6" variant="destructive"><CircleAlert aria-hidden="true" /><AlertDescription>安全审计存在 {auditWarnings.map((audit) => `${audit.provider}: ${audit.status}`).join("、")}，请在安装前确认来源和内容。</AlertDescription></Alert> : null}
       <section aria-labelledby="install-target-title">
         <div className="flex items-start justify-between gap-4"><div><h3 className="text-sm font-medium text-foreground" id="install-target-title">安装到工具</h3><p className="mt-1 text-xs text-muted-foreground">技能内容由 Rust 安装管线落入中央仓库，再按选择创建链接。</p></div><span className="text-xs text-muted-foreground">{selectedAgents.length} 个目标</span></div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">{tools.map((tool) => <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md border border-border px-3 transition-colors hover:bg-muted" key={tool.id}><span className="flex items-center gap-3"><Checkbox checked={selectedAgents.includes(tool.id)} disabled={installing || toolsLoading} onCheckedChange={(checked) => toggleAgent(tool.id, checked === true)} /><span className="text-sm text-foreground">{tool.name}</span></span>{tool.detected ? <Badge variant="success">已检测</Badge> : <Badge variant="muted">未检测</Badge>}</label>)}</div>
-        {installError ? <Alert className="mt-4" variant="destructive"><CircleAlert /><AlertDescription>{installError}</AlertDescription></Alert> : null}
+        <ErrorBanner className="mt-4" error={installError} onOpenSettings={onOpenSettings} />
         {installMessage ? <p className="mt-4 text-xs text-muted-foreground" role="status">{installMessage}</p> : null}
         <div className="mt-5 flex items-center justify-between gap-4"><div>{installing ? <Badge variant="success">{stageLabels[stage] ?? "处理中"}</Badge> : null}</div><Button disabled={installing || selectedAgents.length === 0} onClick={onInstall}><Download data-icon="inline-start" />{installing ? "安装中" : "安装技能"}</Button></div>
       </section>
@@ -153,19 +158,22 @@ function DetailContent({
 
 export function StorePage() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const [query, setQuery] = useState("");
   const [range, setRange] = useState<LeaderboardRange>("all-time");
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [githubUrlOpen, setGithubUrlOpen] = useState(false);
   const [installConflicts, setInstallConflicts] = useState<DistributionConflict[]>();
   const initializedDetail = useRef<string | undefined>(undefined);
-  const selectedSkillId = searchParams.get("skill");
-  const { error: leaderboardError, loading: leaderboardLoading, skills: leaderboardSkills } = useLeaderboard(range);
-  const { error: searchError, loading: searchLoading, skills: searchResults } = useSkillSearch(query);
-  const { detail, error: detailError, loading: detailLoading } = useSkillDetail(selectedSkillId);
+  const routeSkillId = location.pathname.startsWith("/store/")
+    ? decodeRouteSkillId(location.pathname.slice("/store/".length))
+    : null;
+  const selectedSkillId = routeSkillId || null;
+  const { error: leaderboardError, loading: leaderboardLoading, refresh: refreshLeaderboard, skills: leaderboardSkills } = useLeaderboard(range);
+  const { error: searchError, loading: searchLoading, refresh: refreshSearch, skills: searchResults } = useSkillSearch(query);
+  const { detail, error: detailError, loading: detailLoading, refresh: refreshDetail } = useSkillDetail(selectedSkillId);
   const { error: toolsError, loading: toolsLoading, refresh: refreshTools, tools } = useDetectedTools();
-  const closeDetail = useCallback(() => { const next = new URLSearchParams(searchParams); next.delete("skill"); setSearchParams(next); }, [searchParams, setSearchParams]);
+  const closeDetail = useCallback(() => { navigate("/store"); }, [navigate]);
   const installState = useSkillInstall(closeDetail);
   const conflictCheck = useDistributionConflicts();
 
@@ -181,7 +189,7 @@ export function StorePage() {
   const displayLoading = isSearching ? searchLoading : leaderboardLoading;
   const displayError = isSearching ? searchError : leaderboardError;
   const groups = useMemo(() => groupByRepository(displaySkills), [displaySkills]);
-  const openDetail = (skillId: string) => { const next = new URLSearchParams(searchParams); next.set("skill", skillId); setSearchParams(next); };
+  const openDetail = (skillId: string) => { navigate(`/store/${skillId.split("/").map(encodeURIComponent).join("/")}`); };
   const startStoreInstall = async () => {
     if (!detail) return;
     const conflicts = await conflictCheck.check(detail.name, selectedAgents);
@@ -216,18 +224,26 @@ export function StorePage() {
 
       <section aria-labelledby="leaderboard-title" className="mt-8">
         <div className="flex items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{isSearching ? "SEARCH RESULTS" : "LEADERBOARD"}</p><h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground" id="leaderboard-title">{isSearching ? `“${query.trim()}” 的搜索结果` : "热门技能"}</h2></div>{!isSearching ? <Tabs onValueChange={(value) => setRange(value as LeaderboardRange)} value={range}><TabsList aria-label="排行榜范围">{leaderboardTabs.map((tab) => <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>)}</TabsList></Tabs> : null}</div>
-        {displayError ? <Alert className="mt-5" variant="destructive"><CircleAlert /><AlertDescription>{displayError}</AlertDescription></Alert> : displayLoading ? <div className="mt-5"><LoadingCards /></div> : groups.length > 0 ? <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{groups.map((group) => <SkillCard group={group} key={group.source} onOpen={openDetail} />)}</div> : <div className="mt-5"><EmptyState description={isSearching ? "换一个关键词试试，或者浏览排行榜中的热门技能。" : "暂时没有可展示的技能。"} icon={Search} title="没有找到技能" /></div>}
+        {displayError ? <ErrorBanner className="mt-5" error={displayError} onOpenSettings={() => navigate("/settings")} onRetry={isSearching ? refreshSearch : refreshLeaderboard} /> : displayLoading ? <div className="mt-5"><LoadingCards /></div> : groups.length > 0 ? <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{groups.map((group) => <SkillCard group={group} key={group.source} onOpen={openDetail} />)}</div> : <div className="mt-5"><EmptyState description={isSearching ? "换一个关键词试试，或者浏览排行榜中的热门技能。" : "暂时没有可展示的技能。"} icon={Search} title="没有找到技能" /></div>}
       </section>
 
       <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground"><CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-success" />同一仓库的技能会聚合展示，安装时仍可单独打开详情并选择工具。</div>
 
       <Dialog description={detail?.source ?? "加载技能详情"} onClose={closeDetail} open={Boolean(selectedSkillId)} title={detail?.name ?? "技能详情"}>
-        {detailLoading ? <div aria-busy="true" className="flex flex-col gap-4"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-20" /><Skeleton className="h-24" /></div> : detailError ? <Alert variant="destructive"><CircleAlert /><AlertDescription>{detailError}</AlertDescription></Alert> : detail ? <DetailContent detail={detail} installError={installState.error ?? conflictCheck.error} installMessage={installState.message} installing={installState.installing || conflictCheck.checking} onInstall={() => void startStoreInstall()} selectedAgents={selectedAgents} setSelectedAgents={setSelectedAgents} stage={installState.stage} tools={tools} toolsLoading={toolsLoading} /> : <p className="text-sm text-muted-foreground">无法加载技能详情。</p>}
-        {toolsError ? <p className="mt-4 text-xs text-muted-foreground">工具检测提示：{toolsError}</p> : null}
+        {detailLoading ? <div aria-busy="true" className="flex flex-col gap-4"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-20" /><Skeleton className="h-24" /></div> : detailError ? <ErrorBanner error={detailError} onOpenSettings={() => navigate("/settings")} onRetry={refreshDetail} /> : detail ? <DetailContent detail={detail} installError={installState.error ?? conflictCheck.error} installMessage={installState.message} installing={installState.installing || conflictCheck.checking} onInstall={() => void startStoreInstall()} onOpenSettings={() => navigate("/settings")} selectedAgents={selectedAgents} setSelectedAgents={setSelectedAgents} stage={installState.stage} tools={tools} toolsLoading={toolsLoading} /> : <p className="text-sm text-muted-foreground">无法加载技能详情。</p>}
+        {toolsError ? <ErrorBanner className="mt-4" error={toolsError} onRetry={() => void refreshTools()} /> : null}
         {selectedSkillId && !toolsLoading ? <Button className="mt-4" onClick={() => void refreshTools()} size="sm" variant="ghost"><Star data-icon="inline-start" />刷新工具检测</Button> : null}
       </Dialog>
       <Dialog description="目标工具目录中已有非 SkillSage 条目。" onClose={() => setInstallConflicts(undefined)} open={Boolean(installConflicts)} title="处理安装冲突"><div className="flex flex-col gap-4"><Alert variant="destructive"><CircleAlert /><AlertDescription>{installConflicts?.map((item) => `${item.toolName}: ${item.path}`).join("；")}</AlertDescription></Alert><p className="text-sm leading-6 text-muted-foreground">跳过会忽略冲突工具；接管会先把原实体迁入中央仓库本地区并改名保存；取消则返回安装流程。</p><div className="flex flex-wrap justify-end gap-2"><Button onClick={() => setInstallConflicts(undefined)} variant="ghost">取消</Button><Button disabled={installState.installing} onClick={() => void installSkippingConflicts()} variant="outline">跳过冲突项</Button><Button disabled={installState.installing} onClick={() => void installTakingOverConflicts()}>接管并安装</Button></div></div></Dialog>
-      <GithubUrlInstallDialog onClose={() => setGithubUrlOpen(false)} onCompleted={() => undefined} open={githubUrlOpen} tools={tools} />
+      <GithubUrlInstallDialog onClose={() => setGithubUrlOpen(false)} onCompleted={() => undefined} onOpenSettings={() => navigate("/settings")} open={githubUrlOpen} tools={tools} />
     </div>
   );
+}
+
+function decodeRouteSkillId(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }

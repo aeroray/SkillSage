@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Checkbox } from "../../components/ui/checkbox";
 import { Dialog } from "../../components/ui/dialog";
 import { Label } from "../../components/ui/label";
+import { Skeleton } from "../../components/ui/skeleton";
+import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { useMigration } from "../../features/migrate";
 import type { MigrateItem } from "../../features/migrate";
 import type { ToolOption } from "../../components/common/ToolSelection";
@@ -57,9 +59,9 @@ export function MigrationDialog({ onClose, onCompleted, open, tools }: Migration
 
   return <Dialog description="扫描工具目录和公共技能目录，将外部实体移入中央仓库并重建链接。" onClose={onClose} open={open} title="迁移存量技能">
     <div className="flex flex-col gap-5">
-      {error ? <Alert variant="destructive"><ScanSearch /><AlertDescription>{error}</AlertDescription></Alert> : null}
+      <ErrorBanner error={error} onRetry={() => void runScan()} />
       {message ? <Alert><FolderSync /><AlertDescription>{message}</AlertDescription></Alert> : null}
-      {scanning ? <div className="flex items-center gap-3 rounded-md border border-border p-4 text-sm text-muted-foreground"><ScanSearch />正在扫描工具目录与 ~/.agents/skills…</div> : null}
+      {scanning ? <div aria-busy="true" className="flex flex-col gap-3 rounded-md border border-border p-4"><div className="flex items-center gap-3 text-sm text-muted-foreground"><ScanSearch />正在扫描工具目录与 ~/.agents/skills…</div><Skeleton className="h-5 w-2/3" /><Skeleton className="h-5 w-1/2" /></div> : null}
       {scan && !scanning ? <>
         <Card><CardHeader><CardTitle className="text-base">扫描结果</CardTitle><CardDescription>发现 {scan.items.length} 个条目，可接管 {eligible.length} 个。未知来源链接不会自动移动。</CardDescription></CardHeader><CardContent className="flex flex-col gap-3">
           {scan.items.length === 0 ? <p className="text-sm text-muted-foreground">没有发现可迁移的存量技能。</p> : scan.items.map((item: MigrateItem) => <div className="flex items-start gap-3 rounded-md border border-border p-3" key={item.id}>

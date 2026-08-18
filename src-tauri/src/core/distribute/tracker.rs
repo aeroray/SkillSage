@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::error::SkillsageError;
 
@@ -10,7 +10,7 @@ pub struct LinkTracker {
 }
 
 impl LinkTracker {
-    pub fn create(&mut self, source: &PathBuf, target: PathBuf) -> Result<(), SkillsageError> {
+    pub fn create(&mut self, source: &Path, target: PathBuf) -> Result<(), SkillsageError> {
         link::create_link(source, &target)?;
         self.created.push(target);
         Ok(())

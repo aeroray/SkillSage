@@ -1,3 +1,4 @@
+pub mod cleanup;
 pub mod distribution;
 pub mod import;
 pub mod install;

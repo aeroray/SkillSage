@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   adjustDistribution,
@@ -19,17 +19,19 @@ export function useInstalledSkills() {
   const [skills, setSkills] = useState<InstalledSkill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     setLoading(true);
     setError(undefined);
     try {
       const result = await refreshInstalled();
-      setSkills(result.skills);
+      if (currentRequest === requestId.current) setSkills(result.skills);
     } catch (reason) {
-      setError(normalizeTauriError(reason));
+      if (currentRequest === requestId.current) setError(normalizeTauriError(reason));
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) setLoading(false);
     }
   }, []);
 
@@ -156,19 +158,21 @@ export function useSkillUpdates() {
   const [updates, setUpdates] = useState<UpdateInfo[]>([]);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string>();
+  const requestId = useRef(0);
 
   const check = useCallback(async (skillId?: string) => {
+    const currentRequest = ++requestId.current;
     setChecking(true);
     setError(undefined);
     try {
       const result = await checkUpdates(skillId);
-      setUpdates(result.updates);
+      if (currentRequest === requestId.current) setUpdates(result.updates);
       return result.updates;
     } catch (reason) {
-      setError(normalizeTauriError(reason));
+      if (currentRequest === requestId.current) setError(normalizeTauriError(reason));
       return [];
     } finally {
-      setChecking(false);
+      if (currentRequest === requestId.current) setChecking(false);
     }
   }, []);
 

@@ -64,7 +64,7 @@ Reason: Centralizing filesystem mutation preserves the single-source-of-truth an
 
 ## Frontend component baseline
 
-Decision: Frontend controls and overlays use source-owned shadcn/Radix components configured in `components.json`; page-level styling stays in Tailwind utility classes, while `App.css` only retains Tailwind directives.
+Decision: Frontend controls and overlays use source-owned shadcn/Radix components configured in `components.json`; page-level styling stays in Tailwind utility classes, while `index.css` is the single Tailwind entrypoint and token file.
 Reason: This keeps keyboard behavior, focus states, and semantic interaction consistent across the desktop UI without retaining parallel hand-rolled controls.
 
 ## shadcn and Tailwind version baseline
@@ -90,3 +90,22 @@ Reason: The scanner preserves the single-source-of-truth and avoids silently del
 
 Decision: External distribution conflicts require an explicit skip, takeover, or cancel action; takeover preserves the old entity under a renamed local record before the requested skill occupies the original tool path.
 Reason: Conflict resolution must be reversible enough to avoid silently destroying pre-existing skills.
+
+## 2026-08-18 - Phase 7 cleanup and observability
+
+Decision: The app cleanup command supports full removal and metadata-only removal while retaining managed skill links in keep mode.
+Reason: Existing junctions/symlinks cannot remain usable after deleting their central target, so keep mode prioritizes safe, working skills.
+
+Decision: Tauri writes normal logs and a tracing subscriber stream to the platform app log directory in every build profile.
+Reason: User feedback needs actionable diagnostics without exposing GitHub credentials.
+
+## 2026-08-18 - Review hardening
+
+Decision: Managed repository roots, lock/settings files, imported trees, snapshots, and distribution links reject symlink-like paths unless the path is an explicitly owned link being removed.
+Reason: A desktop skill manager handles user-controlled filesystem paths; following an unexpected link could read, overwrite, or delete data outside SkillSage's repository.
+
+Decision: Conflict takeover is treated as a reversible transaction and rolls back adopted entities when later installation or distribution steps fail.
+Reason: A failed multi-step install must not leave a skill orphaned in the central repository or silently replace an external tool entry.
+
+Decision: Leaderboard results are cached only for the current application session and can be invalidated by an explicit refresh.
+Reason: This reduces repeated store requests without persisting potentially stale third-party data.

@@ -1,3 +1,4 @@
+pub mod cleanup;
 pub mod distribute;
 #[allow(dead_code)]
 pub mod github;

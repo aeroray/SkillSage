@@ -124,8 +124,17 @@ pub fn import_at_with_conflicts(
     }
 
     if target_name != parsed.manifest.name {
-        rewrite_skill_name(&temp_dir.join("SKILL.md"), &target_name)?;
-        parsed = read_skill_md(&temp_dir.join("SKILL.md"))?;
+        if let Err(error) = rewrite_skill_name(&temp_dir.join("SKILL.md"), &target_name) {
+            let _ = atomic::remove_dir(&temp_dir);
+            return Err(error);
+        }
+        parsed = match read_skill_md(&temp_dir.join("SKILL.md")) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                let _ = atomic::remove_dir(&temp_dir);
+                return Err(error);
+            }
+        };
     }
     let destination = layout.local_skill(&parsed.manifest.name)?;
     if destination.exists() {
@@ -139,16 +148,29 @@ pub fn import_at_with_conflicts(
     atomic::commit_dir(&temp_dir, &destination)?;
 
     let mut actual_agents = agents.clone();
+    let mut takeovers = Vec::new();
     for conflict_item in
         distribution_conflict::find_for_skill(layout, &parsed.manifest.name, &actual_agents)?
     {
         match actions.get(&conflict_item.tool_id).map(String::as_str) {
             Some("skip") => actual_agents.retain(|agent| agent != &conflict_item.tool_id),
             Some("takeover") => {
-                distribution_conflict::takeover_at(layout, &conflict_item, &parsed.manifest.name)?;
+                match distribution_conflict::takeover_at_transaction(
+                    layout,
+                    &conflict_item,
+                    &parsed.manifest.name,
+                ) {
+                    Ok(transaction) => takeovers.push(transaction),
+                    Err(error) => {
+                        let _ = atomic::remove_dir(&destination);
+                        distribution_conflict::rollback_takeovers(layout, takeovers);
+                        return Err(error);
+                    }
+                }
             }
             _ => {
                 let _ = atomic::remove_dir(&destination);
+                distribution_conflict::rollback_takeovers(layout, takeovers);
                 return Err(SkillsageError::DistributionConflict(format!(
                     "{} 的目标路径已存在: {}",
                     conflict_item.tool_name, conflict_item.path
@@ -156,7 +178,14 @@ pub fn import_at_with_conflicts(
             }
         }
     }
-    let tools = validate_agents(&actual_agents)?;
+    let tools = match validate_agents(&actual_agents) {
+        Ok(tools) => tools,
+        Err(error) => {
+            let _ = atomic::remove_dir(&destination);
+            distribution_conflict::rollback_takeovers(layout, takeovers);
+            return Err(error);
+        }
+    };
     let mut tracker = LinkTracker::default();
     for tool in tools {
         if let Err(error) = tracker.create(
@@ -165,11 +194,20 @@ pub fn import_at_with_conflicts(
         ) {
             tracker.rollback();
             let _ = atomic::remove_dir(&destination);
+            distribution_conflict::rollback_takeovers(layout, takeovers);
             return Err(error);
         }
     }
 
-    let mut next_lock = lockfile::load(layout)?;
+    let mut next_lock = match lockfile::load(layout) {
+        Ok(lock) => lock,
+        Err(error) => {
+            tracker.rollback();
+            let _ = atomic::remove_dir(&destination);
+            distribution_conflict::rollback_takeovers(layout, takeovers);
+            return Err(error);
+        }
+    };
     let id = format!("local/{}", parsed.manifest.name);
     if next_lock
         .skills
@@ -178,6 +216,7 @@ pub fn import_at_with_conflicts(
     {
         tracker.rollback();
         let _ = atomic::remove_dir(&destination);
+        distribution_conflict::rollback_takeovers(layout, takeovers);
         return Err(SkillsageError::NameConflict(parsed.manifest.name));
     }
     let link_paths = tracker.into_paths();
@@ -203,6 +242,7 @@ pub fn import_at_with_conflicts(
             let _ = link::remove_link(path);
         }
         let _ = atomic::remove_dir(&destination);
+        distribution_conflict::rollback_takeovers(layout, takeovers);
         return Err(error);
     }
 

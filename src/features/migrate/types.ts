@@ -11,6 +11,7 @@ export type MigrateItem = {
   remoteRepo?: string;
   remoteSource?: string;
   remoteVersion?: string;
+  remoteSkillPath?: string;
   canTakeover: boolean;
   warning?: string;
 };

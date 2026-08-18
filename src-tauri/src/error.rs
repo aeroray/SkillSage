@@ -5,14 +5,24 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SkillsageError {
-    #[error("网络请求失败: {0}")]
+    #[error("网络请求失败，请检查网络连接或代理配置: {0}")]
     Network(String),
-    #[error("GitHub API 返回错误状态: {0}")]
+    #[error("GitHub 请求失败（HTTP {0}）")]
     GithubApi(u16),
-    #[error("skills.sh API error status: {0}")]
+    #[error("skills.sh 请求失败（HTTP {0}）")]
     StoreApi(u16),
-    #[error("invalid skills.sh response: {0}")]
+    #[error("skills.sh 返回的数据无法识别: {0}")]
     InvalidStoreData(String),
+    #[error("GitHub API 需要认证，请前往设置配置 GitHub Token")]
+    GithubAuthMissing,
+    #[error("GitHub Token 无效或已过期，请前往设置更新 Token")]
+    GithubAuthInvalid,
+    #[error("请求受到服务端限流，请稍后重试；GitHub 请求可前往设置配置 Token")]
+    RateLimited,
+    #[error("skills.sh 暂时不可达，请检查网络或代理配置后重试")]
+    StoreUnavailable,
+    #[error("GitHub 仓库不存在，或当前 Token 无权访问")]
+    RepositoryNotFound,
     #[error("GitHub 地址无效: {0}")]
     InvalidGithubUrl(String),
     #[error("无效的 SKILL.md: {0}")]
@@ -49,6 +59,8 @@ pub enum SkillsageError {
     LinkRemoval { path: PathBuf, reason: String },
     #[error("后台任务失败: {0}")]
     Task(String),
+    #[error("应用数据清理失败: {0}")]
+    CleanupFailed(String),
 }
 
 impl Serialize for SkillsageError {
@@ -81,5 +93,73 @@ impl From<serde_yaml::Error> for SkillsageError {
 impl From<reqwest::Error> for SkillsageError {
     fn from(value: reqwest::Error) -> Self {
         Self::Network(value.to_string())
+    }
+}
+
+impl SkillsageError {
+    pub fn github_status(status: u16, has_token: bool) -> Self {
+        match status {
+            401 if !has_token => Self::GithubAuthMissing,
+            401 => Self::GithubAuthInvalid,
+            403 | 429 => Self::RateLimited,
+            404 => Self::RepositoryNotFound,
+            _ => Self::GithubApi(status),
+        }
+    }
+
+    pub fn store_status(status: u16) -> Self {
+        match status {
+            429 => Self::RateLimited,
+            500..=599 => Self::StoreUnavailable,
+            _ => Self::StoreApi(status),
+        }
+    }
+
+    pub fn store_network(error: reqwest::Error) -> Self {
+        if error.is_connect() || error.is_timeout() {
+            Self::StoreUnavailable
+        } else {
+            Self::Network(error.to_string())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SkillsageError;
+
+    #[test]
+    fn classifies_github_auth_rate_limit_and_not_found() {
+        assert!(matches!(
+            SkillsageError::github_status(401, false),
+            SkillsageError::GithubAuthMissing
+        ));
+        assert!(matches!(
+            SkillsageError::github_status(401, true),
+            SkillsageError::GithubAuthInvalid
+        ));
+        assert!(matches!(
+            SkillsageError::github_status(403, true),
+            SkillsageError::RateLimited
+        ));
+        assert!(matches!(
+            SkillsageError::github_status(404, true),
+            SkillsageError::RepositoryNotFound
+        ));
+    }
+
+    #[test]
+    fn classifies_store_availability() {
+        assert!(matches!(
+            SkillsageError::store_status(429),
+            SkillsageError::RateLimited
+        ));
+        assert!(matches!(
+            SkillsageError::store_status(503),
+            SkillsageError::StoreUnavailable
+        ));
+        assert!(SkillsageError::StoreUnavailable
+            .to_string()
+            .contains("不可达"));
     }
 }

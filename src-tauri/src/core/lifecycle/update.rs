@@ -79,11 +79,32 @@ pub fn apply_at(
     let snapshot = layout
         .snapshot_skill(&current.owner, &current.name)?
         .join(&current.current_hash);
-    if !snapshot.exists() {
-        if let Some(parent) = snapshot.parent() {
-            std::fs::create_dir_all(parent)?;
+    match std::fs::symlink_metadata(&snapshot) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            let _ = atomic::remove_dir(&temp_dir);
+            return Err(SkillsageError::Io(format!(
+                "快照路径不能是符号链接: {}",
+                snapshot.display()
+            )));
         }
-        copy_dir(&destination, &snapshot)?;
+        Ok(metadata) if !metadata.is_dir() => {
+            let _ = atomic::remove_dir(&temp_dir);
+            return Err(SkillsageError::Io(format!(
+                "快照路径不是目录: {}",
+                snapshot.display()
+            )));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(parent) = snapshot.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            copy_dir(&destination, &snapshot)?;
+        }
+        Err(error) => {
+            let _ = atomic::remove_dir(&temp_dir);
+            return Err(error.into());
+        }
     }
     if let Err(error) = atomic::replace_dir(&temp_dir, &destination) {
         let _ = atomic::remove_dir(&temp_dir);
@@ -123,8 +144,9 @@ pub fn snapshot_files_at(
     let root = layout
         .snapshot_skill(&record.owner, &record.name)?
         .join(hash);
-    if !root.is_dir() {
-        return Err(SkillsageError::PathNotFound(root));
+    match std::fs::symlink_metadata(&root) {
+        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+        _ => return Err(SkillsageError::PathNotFound(root)),
     }
     let mut files = Vec::new();
     collect_snapshot_files(&root, &root, &mut files)?;
@@ -199,14 +221,22 @@ fn safe_relative_path(value: &str) -> Result<std::path::PathBuf, SkillsageError>
 }
 
 fn copy_dir(source: &std::path::Path, destination: &std::path::Path) -> Result<(), SkillsageError> {
-    if !source.exists() {
-        return Err(SkillsageError::PathNotFound(source.to_path_buf()));
+    match std::fs::symlink_metadata(source) {
+        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+        _ => return Err(SkillsageError::PathNotFound(source.to_path_buf())),
     }
     for entry in std::fs::read_dir(source)? {
         let entry = entry?;
         let source_path = entry.path();
+        let metadata = std::fs::symlink_metadata(&source_path)?;
+        if metadata.file_type().is_symlink() {
+            return Err(SkillsageError::Io(format!(
+                "技能快照不能包含符号链接: {}",
+                source_path.display()
+            )));
+        }
         let destination_path = destination.join(entry.file_name());
-        if source_path.is_dir() {
+        if metadata.is_dir() {
             std::fs::create_dir_all(&destination_path)?;
             copy_dir(&source_path, &destination_path)?;
         } else {
@@ -227,9 +257,16 @@ fn collect_snapshot_files(
     for entry in std::fs::read_dir(current)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_dir() {
+        let metadata = std::fs::symlink_metadata(&path)?;
+        if metadata.file_type().is_symlink() {
+            return Err(SkillsageError::Io(format!(
+                "技能快照不能包含符号链接: {}",
+                path.display()
+            )));
+        }
+        if metadata.is_dir() {
             collect_snapshot_files(root, &path, files)?;
-        } else if path.is_file() {
+        } else if metadata.is_file() {
             let relative = path
                 .strip_prefix(root)
                 .map_err(|error| SkillsageError::Io(error.to_string()))?

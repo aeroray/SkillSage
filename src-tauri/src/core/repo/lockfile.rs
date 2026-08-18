@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::SkillsageError;
 
-use super::layout::RepoLayout;
+use super::{atomic, layout::RepoLayout};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,8 +58,12 @@ impl Default for SkillLockFile {
 
 pub fn load(layout: &RepoLayout) -> Result<SkillLockFile, SkillsageError> {
     let path = layout.lock_path();
-    if !path.exists() {
-        return Ok(SkillLockFile::default());
+    match std::fs::symlink_metadata(&path) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(SkillLockFile::default());
+        }
+        Err(error) => return Err(error.into()),
     }
     let content = std::fs::read_to_string(path)?;
     Ok(serde_json::from_str(&content)?)
@@ -68,12 +72,18 @@ pub fn load(layout: &RepoLayout) -> Result<SkillLockFile, SkillsageError> {
 pub fn save(layout: &RepoLayout, lockfile: &SkillLockFile) -> Result<(), SkillsageError> {
     layout.ensure_roots()?;
     let temporary_path = layout.lock_root().join("skill-lock.json.tmp");
+    if let Ok(metadata) = std::fs::symlink_metadata(&temporary_path) {
+        if metadata.file_type().is_symlink() {
+            return Err(SkillsageError::Io(format!(
+                "锁文件临时路径不能是符号链接: {}",
+                temporary_path.display()
+            )));
+        }
+        std::fs::remove_file(&temporary_path)?;
+    }
     let content = serde_json::to_string_pretty(lockfile)?;
     std::fs::write(&temporary_path, format!("{content}\n"))?;
-    if layout.lock_path().exists() {
-        std::fs::remove_file(layout.lock_path())?;
-    }
-    std::fs::rename(temporary_path, layout.lock_path())?;
+    atomic::replace_file(&temporary_path, &layout.lock_path())?;
     Ok(())
 }
 
@@ -114,9 +124,16 @@ fn collect_files(
 ) -> Result<(), SkillsageError> {
     for entry in std::fs::read_dir(current)? {
         let path = entry?.path();
-        if path.is_dir() {
+        let metadata = std::fs::symlink_metadata(&path)?;
+        if metadata.file_type().is_symlink() {
+            return Err(SkillsageError::Io(format!(
+                "技能内容不能包含符号链接: {}",
+                path.display()
+            )));
+        }
+        if metadata.is_dir() {
             collect_files(root, &path, output)?;
-        } else if path.is_file() {
+        } else if metadata.is_file() {
             let relative = path
                 .strip_prefix(root)
                 .map_err(|error| SkillsageError::Io(error.to_string()))?

@@ -20,3 +20,6 @@
 - Distribution conflicts use explicit skip, takeover, or cancel decisions; takeover preserves the external entity as a renamed local skill before the requested skill claims the original tool path.
 - Frontend pages must use the installed shadcn/Radix primitives for controls and overlays; do not reintroduce page-level native selects, details menus, or custom component CSS classes.
 - Tailwind v4 is the active frontend version; use the first-party Vite plugin and CSS-first theme tokens, and do not reintroduce a v3 PostCSS/config pipeline.
+- Phase 7 cleanup offers `all` (remove central data and managed links) and `keep-skills` (preserve central data and links, remove SkillSage metadata); preserving links requires preserving their central target.
+- Phase 7 logs are written to Tauri's platform app log directory; GitHub tokens must never enter settings JSON or logs.
+- Phase 7 cross-platform automation targets Windows and macOS; macOS runtime verification remains CI/manual QA because development runs on Windows.

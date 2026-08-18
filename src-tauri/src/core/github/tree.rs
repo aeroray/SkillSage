@@ -27,6 +27,7 @@ pub async fn find_skill_files(
     commit: &str,
     skill_path: &str,
 ) -> Result<Vec<String>, SkillsageError> {
+    validate_skill_path(skill_path)?;
     let tree = client.get_tree(owner, repo, commit).await?;
     let prefix = skill_path.trim_matches('/');
     let exact_skill_file = if prefix.is_empty() {
@@ -73,4 +74,21 @@ pub async fn find_skill_files(
         })
         .map(|entry| entry.path)
         .collect())
+}
+
+fn validate_skill_path(value: &str) -> Result<(), SkillsageError> {
+    let normalized = value.trim_matches('/');
+    if normalized.is_empty() {
+        return Ok(());
+    }
+    if normalized.contains('\\')
+        || normalized
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err(SkillsageError::InvalidGithubUrl(
+            "技能路径包含不安全片段".into(),
+        ));
+    }
+    Ok(())
 }

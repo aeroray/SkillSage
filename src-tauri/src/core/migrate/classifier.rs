@@ -10,6 +10,7 @@ pub struct LegacyRemoteSource {
     pub repo: String,
     pub source: String,
     pub version: String,
+    pub skill_path: Option<String>,
 }
 
 pub fn find_legacy_remote(home: &Path, name: &str) -> Option<LegacyRemoteSource> {
@@ -75,6 +76,7 @@ fn github_source(value: &Value, name: &str) -> Option<LegacyRemoteSource> {
         repo,
         source: source.to_string(),
         version: parsed.commit,
+        skill_path: parsed.skill_path,
     })
     .filter(|_| !name.is_empty())
 }

@@ -43,10 +43,14 @@ pub async fn download_skill_directory(
     destination: &Path,
 ) -> Result<Vec<String>, SkillsageError> {
     let files = find_skill_files(client, owner, repo, commit, skill_path).await?;
-    let prefix = skill_path.trim_matches('/');
+    let actual_prefix = files
+        .iter()
+        .find_map(|file| file.strip_suffix("/SKILL.md"))
+        .unwrap_or("")
+        .to_string();
     for file in &files {
         let relative_path = file
-            .strip_prefix(prefix)
+            .strip_prefix(&actual_prefix)
             .unwrap_or(file)
             .trim_start_matches('/');
         let target = destination.join(relative_path);

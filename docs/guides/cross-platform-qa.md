@@ -1,0 +1,31 @@
+# 跨平台 QA 清单
+
+SkillSage 是桌面端应用，主窗口默认和最小尺寸均为 1200×800；允许最大化，不以移动端断点作为验收目标。
+
+## 自动验证
+
+在 Windows 和 macOS 上都运行：
+
+```bash
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo test --manifest-path src-tauri/Cargo.toml
+pnpm lint
+pnpm build
+pnpm exec tauri build --debug --no-bundle
+```
+
+仓库中的 `.github/workflows/qa.yml` 会在 `windows-latest` 和 `macos-latest` 上执行同一组检查。
+
+## 手工走查
+
+1. 确认窗口不能缩小到 1200×800 以下，最大化后导航、列表和对话框仍可用。
+2. 走查商店无网络、搜索失败、详情失败、GitHub 限流、未配置 Token、代理错误等错误路径；错误提示应包含重试或设置入口。
+3. 走查管理页首次加载、无技能、筛选无结果、更新失败、分发冲突和卸载失败状态。
+4. 走查本地导入、GitHub URL、同步导入和存量迁移对话框的加载、空结果和错误状态。
+5. 在设置页分别验证“保留技能”和“清理全部”：前者保留技能和链接但移除管理数据，后者删除中央仓库和 SkillSage 创建的链接。
+6. 验证键盘焦点、Escape 关闭对话框、错误区域的 `role=alert` 和 `prefers-reduced-motion` 行为。
+7. 正式卸载前先在设置页执行“准备卸载”；Windows NSIS 与 macOS Finder 的卸载时机不同，不能把自动弹出清理 UI 作为跨平台一致行为。
+
+## 日志反馈
+
+日志位于 Tauri 平台应用日志目录：Windows 通常是 `%LOCALAPPDATA%/com.skillsage.desktop/logs/`，macOS 通常是 `~/Library/Logs/com.skillsage.desktop/`。反馈问题时可附上 `skillsage.log` 和 `skillsage-trace.log`，不要附带 Token 或整个凭据目录。

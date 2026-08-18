@@ -3,6 +3,10 @@ mod core;
 mod error;
 mod state;
 
+use std::fs::{self, OpenOptions};
+
+use tauri::Manager;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -24,6 +28,7 @@ pub fn run() {
             commands::manage::adjust_distribution,
             commands::manage::distribute_skills,
             commands::manage::uninstall_skill,
+            commands::cleanup::cleanup_app,
             commands::store::get_leaderboard,
             commands::store::get_skill_detail,
             commands::store::search_skills,
@@ -37,13 +42,31 @@ pub fn run() {
             commands::url_install::url_install,
         ])
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            let log_dir = app.path().app_log_dir()?;
+            fs::create_dir_all(&log_dir)?;
+            let trace_path = log_dir.join("skillsage-trace.log");
+            let trace_file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(trace_path)?;
+            let subscriber = tracing_subscriber::fmt()
+                .with_ansi(false)
+                .with_writer(trace_file)
+                .with_max_level(tracing::Level::INFO)
+                .finish();
+            let _ = tracing::subscriber::set_global_default(subscriber);
+            tracing::info!("SkillSage logging initialized");
+
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .targets([tauri_plugin_log::Target::new(
+                        tauri_plugin_log::TargetKind::LogDir {
+                            file_name: Some("skillsage.log".into()),
+                        },
+                    )])
+                    .level(log::LevelFilter::Info)
+                    .build(),
+            )?;
             Ok(())
         })
         .run(tauri::generate_context!())

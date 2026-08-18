@@ -1,13 +1,15 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { CheckCircle2, Library, Settings, Sparkles, Store } from "lucide-react";
 import { ThemeControl } from "../components/common/ThemeControl";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { useThemeStore } from "../features/theme/store";
-import { SettingsPage } from "../pages/settings/SettingsPage";
-import { SkillsPage } from "../pages/skills/SkillsPage";
-import { StorePage } from "../pages/store/StorePage";
+import { Skeleton } from "../components/ui/skeleton";
 import { cn } from "../lib/utils";
+
+const SettingsPage = lazy(() => import("../pages/settings/SettingsPage").then(({ SettingsPage: page }) => ({ default: page })));
+const SkillsPage = lazy(() => import("../pages/skills/SkillsPage").then(({ SkillsPage: page }) => ({ default: page })));
+const StorePage = lazy(() => import("../pages/store/StorePage").then(({ StorePage: page }) => ({ default: page })));
 
 const navigation = [
   { icon: Store, label: "技能商店", path: "/store" },
@@ -55,6 +57,10 @@ function Navigation() {
   );
 }
 
+function PageLoadingState() {
+  return <div aria-busy="true" aria-label="正在加载页面" className="flex flex-col gap-6"><Skeleton className="h-9 w-64" /><Skeleton className="h-4 w-96" /><Skeleton className="h-48 w-full" /></div>;
+}
+
 export function AppShell() {
   return (
     <>
@@ -91,13 +97,14 @@ export function AppShell() {
         <main className="min-w-0 flex-1">
           <ScrollArea className="h-screen">
             <div className="mx-auto w-full max-w-6xl px-5 py-6 md:px-8 md:py-8 lg:px-12 lg:py-10">
-              <Routes>
-                <Route element={<StorePage />} path="/store" />
-                <Route element={<StorePage />} path="/store/:skillId" />
-                <Route element={<SkillsPage />} path="/skills" />
-                <Route element={<SettingsPage />} path="/settings" />
-                <Route element={<Navigate replace to="/store" />} path="*" />
-              </Routes>
+              <Suspense fallback={<PageLoadingState />}>
+                <Routes>
+                  <Route element={<StorePage />} path="/store/*" />
+                  <Route element={<SkillsPage />} path="/skills" />
+                  <Route element={<SettingsPage />} path="/settings" />
+                  <Route element={<Navigate replace to="/store" />} path="*" />
+                </Routes>
+              </Suspense>
             </div>
           </ScrollArea>
         </main>

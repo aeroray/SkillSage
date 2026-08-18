@@ -68,13 +68,51 @@ impl RepoLayout {
     }
 
     pub fn ensure_roots(&self) -> Result<(), SkillsageError> {
-        std::fs::create_dir_all(self.remote_root())?;
-        std::fs::create_dir_all(self.local_root())?;
-        std::fs::create_dir_all(self.lock_root())?;
-        std::fs::create_dir_all(self.snapshots_root())?;
-        std::fs::create_dir_all(self.tmp_root())?;
-        std::fs::create_dir_all(self.exports_root())?;
+        ensure_real_directory(&self.root, "中央仓库")?;
+        ensure_real_directory(&self.remote_root(), "remote 仓库")?;
+        ensure_real_directory(&self.local_root(), "local 仓库")?;
+        ensure_real_directory(&self.lock_root(), "lock 目录")?;
+        ensure_real_directory(&self.snapshots_root(), "快照目录")?;
+        ensure_real_directory(&self.tmp_root(), "临时目录")?;
+        ensure_real_directory(&self.exports_root(), "导出目录")?;
         Ok(())
+    }
+}
+
+fn ensure_real_directory(path: &Path, label: &str) -> Result<(), SkillsageError> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(SkillsageError::Io(format!(
+            "{label}路径不能是符号链接: {}",
+            path.display()
+        ))),
+        Ok(metadata) if !metadata.is_dir() => Err(SkillsageError::Io(format!(
+            "{label}路径不是目录: {}",
+            path.display()
+        ))),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            match std::fs::create_dir(path) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    match std::fs::symlink_metadata(path) {
+                        Ok(metadata) if metadata.file_type().is_symlink() => {
+                            Err(SkillsageError::Io(format!(
+                                "{label}路径不能是符号链接: {}",
+                                path.display()
+                            )))
+                        }
+                        Ok(metadata) if metadata.is_dir() => Ok(()),
+                        Ok(_) => Err(SkillsageError::Io(format!(
+                            "{label}路径不是目录: {}",
+                            path.display()
+                        ))),
+                        Err(error) => Err(error.into()),
+                    }
+                }
+                Err(error) => Err(error.into()),
+            }
+        }
+        Err(error) => Err(error.into()),
     }
 }
 

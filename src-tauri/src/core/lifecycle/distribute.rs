@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use crate::core::distribute::{conflict, link, tracker::LinkTracker};
 use crate::core::lifecycle::install::destination_for_record;
@@ -23,12 +24,25 @@ pub fn adjust_at_with_conflicts(
     }
 
     let mut next_agents = agents;
+    let mut takeovers = Vec::new();
     for conflict_item in conflict::find_for_skill(layout, &current.name, &next_agents)? {
         match actions.get(&conflict_item.tool_id).map(String::as_str) {
             Some("skip") => next_agents.retain(|agent| agent != &conflict_item.tool_id),
             Some("takeover") => {
-                conflict::takeover_at(layout, &conflict_item, &current.name)?;
-                lock = lockfile::load(layout)?;
+                match conflict::takeover_at_transaction(layout, &conflict_item, &current.name) {
+                    Ok(transaction) => takeovers.push(transaction),
+                    Err(error) => {
+                        conflict::rollback_takeovers(layout, takeovers);
+                        return Err(error);
+                    }
+                }
+                lock = match lockfile::load(layout) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        conflict::rollback_takeovers(layout, takeovers);
+                        return Err(error);
+                    }
+                };
                 current = lock
                     .skills
                     .get(skill_id)
@@ -36,33 +50,73 @@ pub fn adjust_at_with_conflicts(
                     .ok_or_else(|| SkillsageError::NotInstalled(skill_id.to_string()))?;
             }
             _ => {
+                conflict::rollback_takeovers(layout, takeovers);
                 return Err(SkillsageError::DistributionConflict(format!(
                     "{} 的目标路径已存在: {}",
                     conflict_item.tool_name, conflict_item.path
-                )))
+                )));
             }
         }
     }
     let old: std::collections::HashSet<_> = current.distributed_to.iter().cloned().collect();
     let next: std::collections::HashSet<_> = next_agents.iter().cloned().collect();
+    let destination = match destination_for_record(layout, &current) {
+        Ok(path) => path,
+        Err(error) => {
+            conflict::rollback_takeovers(layout, takeovers);
+            return Err(error);
+        }
+    };
     let mut tracker = LinkTracker::default();
     for agent in next.difference(&old) {
-        let tool = find_tool(agent)?;
-        if let Err(error) = tracker.create(
-            &destination_for_record(layout, &current)?,
-            tool.skills_path()?.join(&current.name),
-        ) {
+        let tool = match find_tool(agent) {
+            Ok(tool) => tool,
+            Err(error) => {
+                conflict::rollback_takeovers(layout, takeovers);
+                return Err(error);
+            }
+        };
+        let target = match tool.skills_path() {
+            Ok(path) => path.join(&current.name),
+            Err(error) => {
+                tracker.rollback();
+                conflict::rollback_takeovers(layout, takeovers);
+                return Err(error);
+            }
+        };
+        if let Err(error) = tracker.create(&destination, target) {
             tracker.rollback();
+            conflict::rollback_takeovers(layout, takeovers);
             return Err(error);
         }
     }
+    let mut removed = Vec::new();
     for agent in old.difference(&next) {
-        let tool = find_tool(agent)?;
-        let path = tool.skills_path()?.join(&current.name);
+        let tool = match find_tool(agent) {
+            Ok(tool) => tool,
+            Err(error) => {
+                tracker.rollback();
+                restore_removed_links(&destination, &removed);
+                conflict::rollback_takeovers(layout, takeovers);
+                return Err(error);
+            }
+        };
+        let path = match tool.skills_path() {
+            Ok(path) => path.join(&current.name),
+            Err(error) => {
+                tracker.rollback();
+                restore_removed_links(&destination, &removed);
+                conflict::rollback_takeovers(layout, takeovers);
+                return Err(error);
+            }
+        };
         if let Err(error) = link::remove_link(&path) {
             tracker.rollback();
+            restore_removed_links(&destination, &removed);
+            conflict::rollback_takeovers(layout, takeovers);
             return Err(error);
         }
+        removed.push(path);
     }
 
     let mut updated = current;
@@ -70,7 +124,15 @@ pub fn adjust_at_with_conflicts(
     lock.skills.insert(skill_id.to_string(), updated.clone());
     if let Err(error) = lockfile::save(layout, &lock) {
         tracker.rollback();
+        restore_removed_links(&destination, &removed);
+        conflict::rollback_takeovers(layout, takeovers);
         return Err(error);
     }
     Ok(updated)
+}
+
+fn restore_removed_links(source: &Path, removed: &[PathBuf]) {
+    for target in removed.iter().rev() {
+        let _ = link::create_link(source, target);
+    }
 }

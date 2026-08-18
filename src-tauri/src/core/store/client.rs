@@ -1,4 +1,5 @@
 use crate::error::SkillsageError;
+use std::time::Duration;
 
 use super::{detail, models::SkillDetail, search};
 
@@ -11,7 +12,10 @@ pub struct StoreClient {
 
 impl StoreClient {
     pub fn new_with_proxy(proxy_url: Option<String>) -> Result<Self, SkillsageError> {
-        let mut builder = reqwest::Client::builder().user_agent("SkillSage/0.1");
+        let mut builder = reqwest::Client::builder()
+            .user_agent("SkillSage/0.1")
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30));
         if let Some(proxy_url) = proxy_url {
             builder = builder.proxy(reqwest::Proxy::all(proxy_url)?);
         }
@@ -38,9 +42,19 @@ impl StoreClient {
     }
 
     pub(crate) async fn get_text(&self, path: &str) -> Result<String, SkillsageError> {
-        let response = self.http.get(format!("{BASE_URL}{path}")).send().await?;
+        let response = self
+            .http
+            .get(format!("{BASE_URL}{path}"))
+            .send()
+            .await
+            .map_err(|error| {
+                tracing::warn!(error = %error, "skills.sh request failed");
+                SkillsageError::store_network(error)
+            })?;
         if !response.status().is_success() {
-            return Err(SkillsageError::StoreApi(response.status().as_u16()));
+            let status = response.status().as_u16();
+            tracing::warn!(status, "skills.sh request returned an error status");
+            return Err(SkillsageError::store_status(status));
         }
         Ok(response.text().await?)
     }
@@ -55,9 +69,15 @@ impl StoreClient {
             .get(format!("{BASE_URL}{path}"))
             .query(query)
             .send()
-            .await?;
+            .await
+            .map_err(|error| {
+                tracing::warn!(error = %error, "skills.sh request failed");
+                SkillsageError::store_network(error)
+            })?;
         if !response.status().is_success() {
-            return Err(SkillsageError::StoreApi(response.status().as_u16()));
+            let status = response.status().as_u16();
+            tracing::warn!(status, "skills.sh request returned an error status");
+            return Err(SkillsageError::store_status(status));
         }
         Ok(response.json().await?)
     }

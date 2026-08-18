@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::core::distribute::tracker::LinkTracker;
+use crate::core::import::source as import_source;
 use crate::core::repo::{layout::RepoLayout, lockfile};
 use crate::core::skill::parser::read_skill_md;
 use crate::core::tools::registry::find_tool;
@@ -75,6 +76,7 @@ fn migrate_item(
     selection: &MigrateSelection,
 ) -> Result<String, SkillsageError> {
     let source = std::path::PathBuf::from(&item.source_path);
+    import_source::validate_tree(&source)?;
     let parsed = read_skill_md(&source.join("SKILL.md"))?;
     let target_name = selection
         .target_name
@@ -165,7 +167,11 @@ fn migrate_item(
         } else {
             "local".into()
         },
-        skill_path: None,
+        skill_path: if is_remote {
+            item.remote_skill_path.clone()
+        } else {
+            None
+        },
         source: if is_remote {
             item.remote_source.clone().unwrap_or_else(|| {
                 format!(

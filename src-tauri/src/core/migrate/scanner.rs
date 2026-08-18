@@ -25,6 +25,7 @@ pub struct MigrateItem {
     pub remote_repo: Option<String>,
     pub remote_source: Option<String>,
     pub remote_version: Option<String>,
+    pub remote_skill_path: Option<String>,
     pub can_takeover: bool,
     pub warning: Option<String>,
 }
@@ -125,6 +126,7 @@ fn build_result(
             remote_repo: legacy.as_ref().map(|source| source.repo.clone()),
             remote_source: legacy.as_ref().map(|source| source.source.clone()),
             remote_version: legacy.as_ref().map(|source| source.version.clone()),
+            remote_skill_path: legacy.as_ref().and_then(|source| source.skill_path.clone()),
             can_takeover: resolved_kind != "unknown-link" && !description.is_empty(),
             warning: if resolved_kind == "unknown-link" {
                 Some("未知来源链接不会自动接管，可手动处理。".into())
