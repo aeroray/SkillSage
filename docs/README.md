@@ -1,5 +1,11 @@
 # SkillSage 文档
 
+<p align="center">
+  <img src="../skillsage-logo.png" alt="SkillSage Logo" width="96" height="96" />
+</p>
+
+产品 Logo 的唯一源文件是仓库根目录的 [`skillsage-logo.png`](../skillsage-logo.png)。替换后运行 `pnpm sync:branding`，即可重新生成产品内 Logo、favicon 和桌面端图标。
+
 ## 规范
 
 - [`specs/01-需求文档.md`](specs/01-需求文档.md)：产品范围、安装来源和卸载策略

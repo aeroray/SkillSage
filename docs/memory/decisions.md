@@ -109,3 +109,8 @@ Reason: A failed multi-step install must not leave a skill orphaned in the centr
 
 Decision: Leaderboard results are cached only for the current application session and can be invalidated by an explicit refresh.
 Reason: This reduces repeated store requests without persisting potentially stale third-party data.
+
+## 2026-08-18 - Canonical product logo
+
+Decision: The repository-root `skillsage-logo.png` is SkillSage's single Logo source; public assets, frontend branding, favicon, and Tauri icons are derived from it by `pnpm sync:branding`.
+Reason: Replacing one source file and rerunning one command keeps product documentation, UI, and desktop packaging consistent.

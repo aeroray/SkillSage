@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# The shipped product is desktop-only; Tauri's generated mobile icon sets are not tracked.
+src-tauri/icons/android/
+src-tauri/icons/ios/

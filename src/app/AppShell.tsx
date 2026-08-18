@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import { CheckCircle2, FolderSync, Library, Settings, Sparkles, Store } from "lucide-react";
+import { CheckCircle2, FolderSync, Library, Settings, Store } from "lucide-react";
 import { ThemeControl } from "../components/common/ThemeControl";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { useThemeStore } from "../features/theme/store";
@@ -70,9 +70,11 @@ export function AppShell() {
       <div className="flex min-h-screen bg-background text-foreground">
         <aside className="flex min-h-screen w-64 shrink-0 flex-col border-r border-border bg-sidebar p-4 text-sidebar-foreground">
           <div className="flex items-center gap-3 px-1">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
-              <Sparkles aria-hidden="true" className="h-4 w-4" />
-            </div>
+            <img
+              alt="SkillSage"
+              className="size-9 shrink-0 rounded-md object-cover shadow-sm"
+              src="/skillsage-logo.png"
+            />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold tracking-tight text-foreground">SkillSage</p>
               <p className="mt-0.5 text-xs text-muted-foreground">AI 技能管理器</p>
