@@ -14,9 +14,9 @@ export function PageHeader({
   title,
 }: PageHeaderProps) {
   return (
-    <header className="mb-8 flex items-end justify-between gap-6 max-md:items-start max-md:flex-col">
+    <header className="mb-8 flex items-end justify-between gap-6">
       <div className="max-w-2xl">
-        <p className="eyebrow mb-3">{eyebrow}</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{eyebrow}</p>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
       </div>

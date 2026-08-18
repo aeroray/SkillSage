@@ -1,5 +1,5 @@
 import { Laptop, Moon, Sun } from "lucide-react";
-import { Button } from "../ui/button";
+import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { useThemeStore, type ThemeMode } from "../../features/theme/store";
 
 const themeOptions: Array<{ icon: typeof Sun; label: string; value: ThemeMode }> = [
@@ -13,21 +13,17 @@ export function ThemeControl() {
   const setMode = useThemeStore((state) => state.setMode);
 
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-muted p-1" role="group" aria-label="外观模式">
+    <ToggleGroup
+      aria-label="外观模式"
+      onValueChange={(value) => value && setMode(value as ThemeMode)}
+      type="single"
+      value={mode}
+    >
       {themeOptions.map(({ icon: Icon, label, value }) => (
-        <Button
-          aria-pressed={mode === value}
-          className={mode === value ? "bg-card text-foreground shadow-sm" : ""}
-          key={value}
-          onClick={() => setMode(value)}
-          size="icon"
-          title={label}
-          variant="ghost"
-        >
-          <Icon aria-hidden="true" className="h-4 w-4" />
-          <span className="sr-only">{label}</span>
-        </Button>
+        <ToggleGroupItem aria-label={label} key={value} title={label} value={value}>
+          <Icon aria-hidden="true" />
+        </ToggleGroupItem>
       ))}
-    </div>
+    </ToggleGroup>
   );
 }

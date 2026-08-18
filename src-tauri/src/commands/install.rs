@@ -73,7 +73,9 @@ pub async fn install_skill(
     })?;
     let github = GitHubClient::new(None)?;
     let default_branch = github.get_default_branch(owner, repo).await?;
-    detail.files = fetch_skill_files(&github, owner, repo, &default_branch, &detail.slug).await?;
+    let current_version = github.get_commit_sha(owner, repo, &default_branch).await?;
+    detail.version = Some(current_version.clone());
+    detail.files = fetch_skill_files(&github, owner, repo, &current_version, &detail.slug).await?;
     emit_progress(
         &app,
         &skill_id,

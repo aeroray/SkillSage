@@ -40,6 +40,13 @@ impl RepoLayout {
         self.lock_root().join("snapshots")
     }
 
+    pub fn snapshot_skill(&self, owner: &str, skill: &str) -> Result<PathBuf, SkillsageError> {
+        Ok(self
+            .snapshots_root()
+            .join(safe_component(owner)?)
+            .join(safe_component(skill)?))
+    }
+
     pub fn tmp_root(&self) -> PathBuf {
         self.root.join("tmp")
     }

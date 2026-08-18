@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { installSkill, installTestSkill, listInstalled, uninstallSkill } from "./api";
-import type { InstallResult, InstalledSkill, SkillProgress } from "./types";
+import {
+  adjustDistribution,
+  checkUpdates,
+  distributeSkills,
+  installSkill,
+  installTestSkill,
+  refreshInstalled,
+  rollbackSkill,
+  uninstallSkill,
+  updateSkill,
+} from "./api";
+import type { InstallResult, InstalledSkill, SkillProgress, UpdateInfo } from "./types";
 import { normalizeTauriError } from "../../lib/tauri";
 
 export function useInstalledSkills() {
@@ -13,7 +23,7 @@ export function useInstalledSkills() {
     setLoading(true);
     setError(undefined);
     try {
-      const result = await listInstalled();
+      const result = await refreshInstalled();
       setSkills(result.skills);
     } catch (reason) {
       setError(normalizeTauriError(reason));
@@ -139,4 +149,67 @@ export function useUninstallSkill(onCompleted: () => void) {
   );
 
   return { error, uninstall, uninstalling };
+}
+
+export function useSkillUpdates() {
+  const [updates, setUpdates] = useState<UpdateInfo[]>([]);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const check = useCallback(async (skillId?: string) => {
+    setChecking(true);
+    setError(undefined);
+    try {
+      const result = await checkUpdates(skillId);
+      setUpdates(result.updates);
+      return result.updates;
+    } catch (reason) {
+      setError(normalizeTauriError(reason));
+      return [];
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  return { check, checking, error, updates };
+}
+
+export function useSkillManagement(onCompleted: () => void) {
+  const [pending, setPending] = useState<string>();
+  const [error, setError] = useState<string>();
+
+  const run = useCallback(
+    async <T,>(skillId: string, action: () => Promise<T>) => {
+      setPending(skillId);
+      setError(undefined);
+      try {
+        const result = await action();
+        onCompleted();
+        return result;
+      } catch (reason) {
+        setError(normalizeTauriError(reason));
+        return undefined;
+      } finally {
+        setPending(undefined);
+      }
+    },
+    [onCompleted],
+  );
+
+  return {
+    adjust: (skillId: string, agents: string[]) =>
+      run(skillId, () => adjustDistribution(skillId, agents)),
+    distribute: (skillIds: string[], agents: string[]) =>
+      run("batch", () => distributeSkills(skillIds, agents)),
+    error,
+    pending,
+    rollback: (skillId: string, version: string) =>
+      run(skillId, () => rollbackSkill(skillId, version)),
+    uninstall: (skillId: string) =>
+      run(skillId, async () => {
+        await uninstallSkill(skillId);
+        return true;
+      }),
+    update: (skillId: string) => run(skillId, () => updateSkill(skillId)),
+  };
 }

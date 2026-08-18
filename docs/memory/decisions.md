@@ -12,6 +12,11 @@ This keeps project context local, inspectable, portable, and consistent across s
 Decision: SkillSage uses Tauri 2 with a React/TypeScript frontend and a Rust backend; backend commands stay thin while domain logic lives in Tauri-independent Rust core modules.
 Reason: This preserves testability and keeps desktop integration separate from reusable skill-management logic.
 
+## Desktop window baseline
+
+Decision: SkillSage is a desktop-only application with a default main window of 1200×800 and a hard minimum of 1200×800; the window remains resizable and maximizable.
+Reason: The product's information-dense desktop layout does not require mobile adaptation, and the minimum size prevents the navigation rail and management surfaces from collapsing.
+
 ## Central repository
 
 Decision: The private `~/.skillsage/` repository is the single source of truth; supported AI tool directories receive symlinks on macOS or junctions on Windows, never copied skill contents.
@@ -46,3 +51,23 @@ Reason: Forward slashes can be parsed as `mklink` switches, while manually embed
 
 Decision: The desktop store uses the public legacy `/api/search` endpoint and skills.sh HTML pages, then retrieves install files from the linked GitHub repository.
 Reason: The newer `/api/v1` endpoints require Vercel OIDC authentication, which is not available to a standalone desktop app before Phase 5 settings support.
+
+## Phase 4 version and rollback strategy
+
+Decision: A live store install resolves the repository default branch to a Git commit SHA before downloading files; updates record the previous commit/hash in `versionHistory`, snapshot the central skill directory, and atomically replace it. Rollback first fetches the requested commit and falls back to the matching local snapshot when the remote is unavailable.
+Reason: Commit SHAs make update checks deterministic, while snapshots keep rollback usable during transient network failures.
+
+## Phase 4 management writes
+
+Decision: Update, rollback, uninstall, distribution adjustment, and batch distribution remain Rust-owned commands behind the shared `AppState` async write lock; read-only listing and update checks do not take that lock.
+Reason: Centralizing filesystem mutation preserves the single-source-of-truth and prevents concurrent lockfile/link races.
+
+## Frontend component baseline
+
+Decision: Frontend controls and overlays use source-owned shadcn/Radix components configured in `components.json`; page-level styling stays in Tailwind utility classes, while `App.css` only retains Tailwind directives.
+Reason: This keeps keyboard behavior, focus states, and semantic interaction consistent across the desktop UI without retaining parallel hand-rolled controls.
+
+## shadcn and Tailwind version baseline
+
+Decision: The project uses Tailwind CSS v4 with the first-party Vite plugin and CSS-first `@theme inline` tokens; shadcn components should follow v4 syntax when updated.
+Reason: This keeps the Vite build chain current and makes the source-owned component theme compatible with the current shadcn registry.

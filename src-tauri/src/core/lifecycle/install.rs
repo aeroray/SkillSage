@@ -139,7 +139,10 @@ pub fn install_skill_from_store_at(
     }
 
     let link_paths = tracker.into_paths();
-    let current_version = "skills.sh".to_string();
+    let current_version = detail
+        .version
+        .clone()
+        .unwrap_or_else(|| "skills.sh".to_string());
     let record = lockfile::SkillLockRecord {
         id: detail.id.clone(),
         name: parsed.manifest.name.clone(),
@@ -152,6 +155,7 @@ pub fn install_skill_from_store_at(
         distributed_to: agents.clone(),
         installed_at: lockfile::unix_timestamp(),
         version_history: Vec::new(),
+        description: detail.description,
     };
     lock.skills.insert(detail.id.clone(), record);
 
@@ -255,6 +259,7 @@ pub fn install_test_skill_at(
         distributed_to: agents.clone(),
         installed_at: lockfile::unix_timestamp(),
         version_history: Vec::new(),
+        description: parsed.manifest.description.clone(),
     };
     lock.skills.insert(TEST_SKILL_ID.to_string(), record);
 
@@ -281,11 +286,6 @@ pub fn install_test_skill_at(
     })
 }
 
-pub fn uninstall_skill(skill_id: &str) -> Result<(), SkillsageError> {
-    let layout = RepoLayout::from_user_home()?;
-    uninstall_skill_at(&layout, skill_id)
-}
-
 pub fn uninstall_skill_at(layout: &RepoLayout, skill_id: &str) -> Result<(), SkillsageError> {
     let mut lock = lockfile::load(layout)?;
     let record = lock
@@ -301,7 +301,9 @@ pub fn uninstall_skill_at(layout: &RepoLayout, skill_id: &str) -> Result<(), Ski
     }
 
     let destination = layout.remote_skill(&record.owner, &record.name)?;
+    let snapshots = layout.snapshot_skill(&record.owner, &record.name)?;
     atomic::remove_dir(&destination)?;
+    atomic::remove_dir(&snapshots)?;
     lock.skills.remove(skill_id);
     lockfile::save(layout, &lock)?;
     Ok(())
@@ -355,7 +357,9 @@ mod tests {
     use std::fs;
 
     use super::{install_test_skill_at, test_skill_path, uninstall_skill_at, TEST_SKILL_ID};
+    use crate::core::lifecycle::update::apply_at;
     use crate::core::repo::layout::RepoLayout;
+    use crate::core::store::models::SkillFile;
 
     #[test]
     fn installs_and_uninstalls_fixture_without_distribution() {
@@ -374,6 +378,50 @@ mod tests {
         assert!(!test_skill_path(&layout)
             .expect("path should resolve")
             .exists());
+        fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[test]
+    fn uninstall_removes_version_snapshots() {
+        let root = std::env::temp_dir().join(format!(
+            "skillsage-uninstall-snapshots-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let layout = RepoLayout::new(root.clone());
+
+        install_test_skill_at(&layout, Vec::new()).expect("fixture should install");
+        apply_at(
+            &layout,
+            TEST_SKILL_ID,
+            "commit-v2".to_string(),
+            vec![SkillFile {
+                path: "SKILL.md".to_string(),
+                contents:
+                    "---\nname: skillsage-phase2-test\ndescription: Updated.\n---\n\n# Updated\n"
+                        .to_string(),
+            }],
+        )
+        .expect("fixture should update");
+
+        let record = crate::core::repo::lockfile::load(&layout)
+            .expect("lock should load")
+            .skills
+            .get(TEST_SKILL_ID)
+            .cloned()
+            .expect("fixture should be recorded");
+        let snapshots = layout
+            .snapshot_skill(&record.owner, &record.name)
+            .expect("snapshot path should resolve");
+        assert!(snapshots.is_dir());
+
+        uninstall_skill_at(&layout, TEST_SKILL_ID).expect("fixture should uninstall");
+        assert!(!snapshots.exists());
+        assert!(!crate::core::repo::lockfile::load(&layout)
+            .expect("lock should load after uninstall")
+            .skills
+            .contains_key(TEST_SKILL_ID));
+
         fs::remove_dir_all(root).expect("remove test root");
     }
 }

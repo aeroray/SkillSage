@@ -1,43 +1,37 @@
-import type { ButtonHTMLAttributes } from "react";
-import { cn } from "../../lib/utils";
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { Slot } from "radix-ui";
+import { cn } from "@/lib/utils";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "outline";
-type ButtonSize = "default" | "icon";
+const buttonVariants = cva(
+  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-colors outline-none select-none focus-visible:ring-2 focus-visible:ring-primary/40 active:translate-y-px disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        primary: "bg-primary text-primary-foreground hover:bg-primary/90",
+        outline: "border-border bg-background text-foreground hover:bg-muted",
+        secondary: "bg-muted text-foreground hover:bg-border",
+        ghost: "text-muted-foreground hover:bg-muted hover:text-foreground",
+        destructive: "bg-destructive/10 text-destructive hover:bg-destructive/20",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-9 gap-2 px-4",
+        sm: "h-8 gap-1.5 px-3 text-xs",
+        icon: "size-9",
+      },
+    },
+    defaultVariants: { variant: "default", size: "default" },
+  },
+);
 
-export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  size?: ButtonSize;
-  variant?: ButtonVariant;
-};
+export type ButtonProps = React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & { asChild?: boolean };
 
-const variantClasses: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-primary-foreground hover:opacity-90",
-  secondary: "bg-muted text-foreground hover:bg-border",
-  ghost: "text-muted-foreground hover:bg-muted hover:text-foreground",
-  outline: "border border-border bg-transparent text-foreground hover:bg-muted",
-};
-
-const sizeClasses: Record<ButtonSize, string> = {
-  default: "h-9 px-4",
-  icon: "h-9 w-9",
-};
-
-export function Button({
-  className,
-  size = "default",
-  variant = "primary",
-  type = "button",
-  ...props
-}: ButtonProps) {
-  return (
-    <button
-      className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50",
-        variantClasses[variant],
-        sizeClasses[size],
-        className,
-      )}
-      type={type}
-      {...props}
-    />
-  );
+export function Button({ className, variant, size, asChild = false, ...props }: ButtonProps) {
+  const Comp = asChild ? Slot.Root : "button";
+  return <Comp className={cn(buttonVariants({ variant, size, className }))} data-slot="button" {...props} />;
 }
+
+export { buttonVariants };

@@ -1,141 +1,37 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer components {
-  .eyebrow {
-    @apply text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground;
-  }
+@custom-variant dark (&:is(.dark *));
 
-  .surface-card {
-    @apply rounded-lg border border-border bg-card shadow-sm;
-  }
-
-  .interactive-card {
-    @apply transition-all duration-150 ease-out hover:-translate-y-0.5 hover:shadow-lg;
-  }
-}
-
-.app-shell {
-  min-height: 100vh;
-}
-
-.app-sidebar {
-  min-height: 100vh;
-}
-
-.app-main {
-  min-width: 0;
-  flex: 1;
-}
-
-.app-scroll-area {
-  height: 100vh;
-}
-
-.app-content {
-  width: 100%;
-  max-width: 1152px;
-  margin: 0 auto;
-  padding: 40px 48px 64px;
-}
-
-.brand-mark {
-  box-shadow: var(--shadow-sm);
-}
-
-.store-hero {
-  position: relative;
-  overflow: hidden;
-  min-height: 300px;
-  background:
-    radial-gradient(circle at 88% 16%, rgba(96, 165, 250, 0.16), transparent 34%),
-    linear-gradient(135deg, var(--color-card) 0%, var(--color-primary-soft) 100%);
-}
-
-.store-hero::after {
-  position: absolute;
-  right: -72px;
-  bottom: -96px;
-  width: 280px;
-  height: 280px;
-  border: 1px solid var(--color-primary-border);
-  border-radius: 50%;
-  content: "";
-  opacity: 0.7;
-}
-
-.store-hero-grid {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
-  gap: 40px;
-  align-items: center;
-}
-
-.preview-window {
-  border: 1px solid var(--color-primary-border);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.74);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(12px);
-}
-
-.dark .preview-window {
-  background: rgba(15, 23, 42, 0.72);
-}
-
-.preview-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-primary);
-}
-
-.preview-line {
-  height: 8px;
-  border-radius: var(--radius-none);
-  background: var(--color-border);
-}
-
-.preview-line-primary {
-  width: 72%;
-  background: var(--color-primary);
-  opacity: 0.76;
-}
-
-.preview-line-short {
-  width: 46%;
-}
-
-.settings-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
-  gap: 24px;
-}
-
-@media (max-width: 1024px) {
-  .app-content {
-    padding: 32px 32px 48px;
-  }
-
-  .store-hero-grid,
-  .settings-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 767px) {
-  .app-content {
-    padding: 24px 20px 40px;
-  }
-
-  .store-hero {
-    min-height: 0;
-  }
-
-  .store-hero-grid {
-    gap: 24px;
-  }
+@theme inline {
+  --color-background: var(--app-color-background);
+  --color-foreground: var(--app-color-foreground);
+  --color-card: var(--app-color-card);
+  --color-card-foreground: var(--app-color-card-foreground);
+  --color-muted: var(--app-color-muted);
+  --color-muted-foreground: var(--app-color-muted-foreground);
+  --color-secondary: var(--app-color-secondary);
+  --color-secondary-foreground: var(--app-color-secondary-foreground);
+  --color-border: var(--app-color-border);
+  --color-input: var(--app-color-input);
+  --color-ring: var(--app-color-ring);
+  --color-accent: var(--app-color-accent);
+  --color-accent-foreground: var(--app-color-accent-foreground);
+  --color-popover: var(--app-color-popover);
+  --color-popover-foreground: var(--app-color-popover-foreground);
+  --color-primary: var(--app-color-primary);
+  --color-primary-foreground: var(--app-color-primary-foreground);
+  --color-primary-soft: var(--app-color-primary-soft);
+  --color-primary-border: var(--app-color-primary-border);
+  --color-sidebar: var(--app-color-sidebar);
+  --color-sidebar-foreground: var(--app-color-sidebar-foreground);
+  --color-success: var(--app-color-success);
+  --color-warning: var(--app-color-warning);
+  --color-destructive: var(--app-color-destructive);
+  --radius-sm: calc(var(--app-radius) - 2px);
+  --radius-md: var(--app-radius);
+  --radius-lg: var(--app-radius-lg);
+  --radius-none: var(--app-radius-none);
+  --shadow-sm: var(--app-shadow-sm);
+  --shadow-lg: var(--app-shadow-lg);
+  --font-sans: var(--app-font-sans);
 }

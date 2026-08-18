@@ -1,28 +1,36 @@
 :root {
   color-scheme: light;
-  --color-background: #f8fafc;
-  --color-foreground: #0f172a;
-  --color-card: #ffffff;
-  --color-card-foreground: #0f172a;
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #64748b;
-  --color-border: #e2e8f0;
-  --color-primary: #3b82f6;
-  --color-primary-foreground: #ffffff;
-  --color-primary-soft: #eff6ff;
-  --color-primary-border: #bfdbfe;
-  --color-sidebar: #f8fafc;
-  --color-sidebar-foreground: #334155;
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-  --color-destructive: #dc2626;
-  --radius: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-none: 0;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-lg: 0 10px 15px rgba(15, 23, 42, 0.1);
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
-  font-family: var(--font-sans);
+  --app-color-background: #f8fafc;
+  --app-color-foreground: #0f172a;
+  --app-color-card: #ffffff;
+  --app-color-card-foreground: #0f172a;
+  --app-color-muted: #f1f5f9;
+  --app-color-muted-foreground: #64748b;
+  --app-color-secondary: #f1f5f9;
+  --app-color-secondary-foreground: #0f172a;
+  --app-color-border: #e2e8f0;
+  --app-color-input: #e2e8f0;
+  --app-color-ring: #93c5fd;
+  --app-color-accent: #f1f5f9;
+  --app-color-accent-foreground: #0f172a;
+  --app-color-popover: #ffffff;
+  --app-color-popover-foreground: #0f172a;
+  --app-color-primary: #3b82f6;
+  --app-color-primary-foreground: #ffffff;
+  --app-color-primary-soft: #eff6ff;
+  --app-color-primary-border: #bfdbfe;
+  --app-color-sidebar: #f8fafc;
+  --app-color-sidebar-foreground: #334155;
+  --app-color-success: #16a34a;
+  --app-color-warning: #d97706;
+  --app-color-destructive: #dc2626;
+  --app-radius: 0.5rem;
+  --app-radius-lg: 0.75rem;
+  --app-radius-none: 0;
+  --app-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --app-shadow-lg: 0 10px 15px rgba(15, 23, 42, 0.1);
+  --app-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  font-family: var(--app-font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -31,24 +39,32 @@
 
 .dark {
   color-scheme: dark;
-  --color-background: #0f172a;
-  --color-foreground: #f8fafc;
-  --color-card: #111c31;
-  --color-card-foreground: #f8fafc;
-  --color-muted: #172338;
-  --color-muted-foreground: #94a3b8;
-  --color-border: #26344a;
-  --color-primary: #60a5fa;
-  --color-primary-foreground: #0f172a;
-  --color-primary-soft: rgba(96, 165, 250, 0.1);
-  --color-primary-border: rgba(96, 165, 250, 0.34);
-  --color-sidebar: #0b1324;
-  --color-sidebar-foreground: #cbd5e1;
-  --color-success: #4ade80;
-  --color-warning: #fbbf24;
-  --color-destructive: #f87171;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.28);
+  --app-color-background: #0f172a;
+  --app-color-foreground: #f8fafc;
+  --app-color-card: #111c31;
+  --app-color-card-foreground: #f8fafc;
+  --app-color-muted: #172338;
+  --app-color-muted-foreground: #94a3b8;
+  --app-color-secondary: #172338;
+  --app-color-secondary-foreground: #f8fafc;
+  --app-color-border: #26344a;
+  --app-color-input: #26344a;
+  --app-color-ring: #60a5fa;
+  --app-color-accent: #172338;
+  --app-color-accent-foreground: #f8fafc;
+  --app-color-popover: #111c31;
+  --app-color-popover-foreground: #f8fafc;
+  --app-color-primary: #60a5fa;
+  --app-color-primary-foreground: #0f172a;
+  --app-color-primary-soft: rgba(96, 165, 250, 0.1);
+  --app-color-primary-border: rgba(96, 165, 250, 0.34);
+  --app-color-sidebar: #0b1324;
+  --app-color-sidebar-foreground: #cbd5e1;
+  --app-color-success: #4ade80;
+  --app-color-warning: #fbbf24;
+  --app-color-destructive: #f87171;
+  --app-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --app-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.28);
 }
 
 * {
@@ -65,8 +81,8 @@ body,
 
 body {
   overflow: hidden;
-  background: var(--color-background);
-  color: var(--color-foreground);
+  background: var(--app-color-background);
+  color: var(--app-color-foreground);
 }
 
 button,
@@ -79,8 +95,8 @@ button {
 }
 
 ::selection {
-  background: var(--color-primary);
-  color: var(--color-primary-foreground);
+  background: var(--app-color-primary);
+  color: var(--app-color-primary-foreground);
 }
 
 @media (prefers-reduced-motion: reduce) {

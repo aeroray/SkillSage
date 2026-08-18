@@ -9,6 +9,7 @@ use crate::error::SkillsageError;
 use super::layout::RepoLayout;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VersionRecord {
     pub commit: String,
     pub hash: String,
@@ -16,23 +17,27 @@ pub struct VersionRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SkillLockRecord {
     pub id: String,
     pub name: String,
     pub owner: String,
     pub repo: String,
-    #[serde(default)]
+    #[serde(default, alias = "skill_path")]
     pub skill_path: Option<String>,
     pub source: String,
-    #[serde(rename = "currentVersion")]
+    #[serde(alias = "current_version")]
     pub current_version: String,
-    #[serde(rename = "currentHash")]
+    #[serde(alias = "current_hash")]
     pub current_hash: String,
-    #[serde(rename = "distributedTo", default)]
+    #[serde(alias = "distributed_to", default)]
     pub distributed_to: Vec<String>,
+    #[serde(alias = "installed_at")]
     pub installed_at: String,
-    #[serde(default)]
+    #[serde(default, alias = "version_history")]
     pub version_history: Vec<VersionRecord>,
+    #[serde(default)]
+    pub description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,12 +84,27 @@ pub fn content_hash(root: &Path) -> Result<String, SkillsageError> {
 
     let mut hasher = blake3::Hasher::new();
     for relative_path in files {
-        hasher.update(relative_path.to_string_lossy().as_bytes());
+        let normalized_path = relative_path.to_string_lossy().replace('\\', "/");
+        hasher.update(normalized_path.as_bytes());
         hasher.update(&[0]);
         hasher.update(&std::fs::read(root.join(&relative_path))?);
         hasher.update(&[0]);
     }
     Ok(hasher.finalize().to_hex().to_string())
+}
+
+pub fn content_hash_files(files: &[(String, String)]) -> String {
+    let mut sorted = files.to_vec();
+    sorted.sort_by(|left, right| left.0.cmp(&right.0));
+
+    let mut hasher = blake3::Hasher::new();
+    for (relative_path, contents) in sorted {
+        hasher.update(relative_path.replace('\\', "/").as_bytes());
+        hasher.update(&[0]);
+        hasher.update(contents.as_bytes());
+        hasher.update(&[0]);
+    }
+    hasher.finalize().to_hex().to_string()
 }
 
 fn collect_files(

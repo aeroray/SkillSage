@@ -68,6 +68,7 @@ fn parse_detail(skill_id: &str, html: &str) -> Result<SkillDetail, SkillsageErro
         github_stars,
         url: format!("https://www.skills.sh/{skill_id}"),
         audits,
+        version: None,
         files: Vec::new(),
     })
 }

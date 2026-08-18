@@ -9,6 +9,11 @@ struct GitHubRepository {
     default_branch: String,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct GitHubCommit {
+    sha: String,
+}
+
 #[derive(Clone)]
 pub struct GitHubClient {
     http: reqwest::Client,
@@ -50,6 +55,17 @@ impl GitHubClient {
         let url = format!("https://api.github.com/repos/{owner}/{repo}");
         let response: GitHubRepository = self.get_json(&url).await?;
         Ok(response.default_branch)
+    }
+
+    pub async fn get_commit_sha(
+        &self,
+        owner: &str,
+        repo: &str,
+        reference: &str,
+    ) -> Result<String, SkillsageError> {
+        let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{reference}");
+        let response: GitHubCommit = self.get_json(&url).await?;
+        Ok(response.sha)
     }
 
     async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T, SkillsageError> {

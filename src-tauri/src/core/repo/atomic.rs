@@ -31,6 +31,33 @@ pub fn commit_dir(temp_dir: &Path, destination: &Path) -> Result<(), SkillsageEr
     Ok(())
 }
 
+pub fn replace_dir(temp_dir: &Path, destination: &Path) -> Result<(), SkillsageError> {
+    let backup = destination.with_extension(format!("backup-{}", std::process::id()));
+    if backup.exists() {
+        remove_dir(&backup)?;
+    }
+    if destination.exists() {
+        std::fs::rename(destination, &backup)?;
+    }
+    match std::fs::rename(temp_dir, destination) {
+        Ok(()) => {
+            if backup.exists() {
+                remove_dir(&backup)?;
+            }
+            Ok(())
+        }
+        Err(error) => {
+            if destination.exists() {
+                let _ = remove_dir(destination);
+            }
+            if backup.exists() {
+                let _ = std::fs::rename(&backup, destination);
+            }
+            Err(error.into())
+        }
+    }
+}
+
 pub fn remove_dir(path: &Path) -> Result<(), SkillsageError> {
     if path.exists() {
         std::fs::remove_dir_all(path)?;
