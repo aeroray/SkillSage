@@ -79,3 +79,14 @@ Reason: This keeps all filesystem mutation, conflict handling, hashing, and dist
 
 Decision: Proxy configuration is persisted as local JSON and the GitHub token is stored through the OS keyring; Rust loads both at request time and injects them into Store and GitHub clients.
 Reason: Secrets do not enter the project settings file, while proxy changes take effect without putting network configuration in frontend code.
+
+## Phase 6 sync and migration boundary
+
+Decision: Sync packages contain only remote lock metadata and never skill contents or local records; import previews let users select skills and per-skill detected-tool targets before the standard GitHub install pipeline runs.
+Reason: Export files remain portable and small while a new device reconstructs content from the recorded remote commit.
+
+Decision: Migration scans registered tool roots and `~/.agents/skills/`, skips links into `~/.skillsage/`, and adopts valid external entities into central local or remote records; unknown links stay untouched.
+Reason: The scanner preserves the single-source-of-truth and avoids silently deleting entries whose ownership cannot be established.
+
+Decision: External distribution conflicts require an explicit skip, takeover, or cancel action; takeover preserves the old entity under a renamed local record before the requested skill occupies the original tool path.
+Reason: Conflict resolution must be reversible enough to avoid silently destroying pre-existing skills.

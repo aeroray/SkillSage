@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
@@ -57,6 +59,7 @@ pub async fn install_test_skill(
 pub async fn install_skill(
     skill_id: String,
     agents: Vec<String>,
+    conflicts: Option<BTreeMap<String, String>>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<InstallResult, SkillsageError> {
@@ -90,10 +93,15 @@ pub async fn install_skill(
         "distributing",
         "Creating tool distribution links",
     )?;
-    let result =
-        tokio::task::spawn_blocking(move || install::install_skill_from_store(detail, agents))
-            .await
-            .map_err(|error| SkillsageError::Task(error.to_string()))??;
+    let result = tokio::task::spawn_blocking(move || {
+        install::install_skill_from_store_with_conflicts(
+            detail,
+            agents,
+            conflicts.unwrap_or_default(),
+        )
+    })
+    .await
+    .map_err(|error| SkillsageError::Task(error.to_string()))??;
     emit_progress(&app, &skill_id, "done", "Skill stored and distributed")?;
     Ok(result)
 }

@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { normalizeTauriError } from "../../lib/tauri";
 import { importLocal, previewLocalImport } from "./api";
 import type { ImportPreview, ImportResult } from "./types";
+import type { DistributionActions } from "../skills/types";
 
 export function useImport(onCompleted: () => void) {
   const [preview, setPreview] = useState<ImportPreview>();
@@ -26,11 +27,11 @@ export function useImport(onCompleted: () => void) {
     }
   }, []);
 
-  const runImport = useCallback(async (path: string, agents: string[], conflict: string, renameTo?: string): Promise<ImportResult | undefined> => {
+  const runImport = useCallback(async (path: string, agents: string[], conflict: string, renameTo?: string, distributionConflicts?: DistributionActions): Promise<ImportResult | undefined> => {
     setImporting(true);
     setError(undefined);
     try {
-      const result = await importLocal(path.trim(), agents, conflict, renameTo?.trim() || undefined);
+      const result = await importLocal(path.trim(), agents, conflict, renameTo?.trim() || undefined, distributionConflicts);
       onCompleted();
       return result;
     } catch (reason) {

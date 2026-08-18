@@ -1,12 +1,12 @@
 import { invokeCommand } from "../../lib/tauri";
-import type { InstallResult, InstalledSkillsList, UpdateCheckList, InstalledSkill } from "./types";
+import type { DistributionActions, DistributionConflict, InstallResult, InstalledSkillsList, UpdateCheckList, InstalledSkill } from "./types";
 
 export function installTestSkill(agents: string[]) {
   return invokeCommand<InstallResult>("install_test_skill", { agents });
 }
 
-export function installSkill(skillId: string, agents: string[]) {
-  return invokeCommand<InstallResult>("install_skill", { skillId, agents });
+export function installSkill(skillId: string, agents: string[], conflicts?: DistributionActions) {
+  return invokeCommand<InstallResult>("install_skill", { skillId, agents, conflicts });
 }
 
 export function listInstalled() {
@@ -33,10 +33,14 @@ export function rollbackSkill(skillId: string, version: string) {
   return invokeCommand<InstalledSkill>("rollback_skill", { skillId, version });
 }
 
-export function adjustDistribution(skillId: string, agents: string[]) {
-  return invokeCommand<InstalledSkill>("adjust_distribution", { skillId, agents });
+export function adjustDistribution(skillId: string, agents: string[], conflicts?: DistributionActions) {
+  return invokeCommand<InstalledSkill>("adjust_distribution", { skillId, agents, conflicts });
 }
 
-export function distributeSkills(skillIds: string[], agents: string[]) {
-  return invokeCommand<InstalledSkillsList>("distribute_skills", { skillIds, agents });
+export function distributeSkills(skillIds: string[], agents: string[], conflicts?: DistributionActions) {
+  return invokeCommand<InstalledSkillsList>("distribute_skills", { skillIds, agents, conflicts });
+}
+
+export function checkDistributionConflicts(skillName: string, agents: string[]) {
+  return invokeCommand<DistributionConflict[]>("check_distribution_conflicts", { skillName, agents });
 }

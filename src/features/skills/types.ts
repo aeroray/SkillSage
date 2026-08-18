@@ -52,3 +52,12 @@ export type UpdateInfo = {
 export type UpdateCheckList = {
   updates: UpdateInfo[];
 };
+
+export type DistributionConflict = {
+  toolId: string;
+  toolName: string;
+  path: string;
+  kind: string;
+};
+
+export type DistributionActions = Record<string, "skip" | "takeover">;

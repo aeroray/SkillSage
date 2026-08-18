@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 use tauri::State;
 
@@ -28,6 +30,7 @@ pub async fn url_install(
     url: String,
     skill_path: Option<String>,
     agents: Vec<String>,
+    conflicts: Option<BTreeMap<String, String>>,
     state: State<'_, AppState>,
 ) -> Result<InstallResult, SkillsageError> {
     let _write_guard = state.write_lock.lock().await;
@@ -35,7 +38,11 @@ pub async fn url_install(
     let client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
     let detail = url_install::resolve_detail(&client, &url, skill_path).await?;
     tokio::task::spawn_blocking(move || {
-        crate::core::lifecycle::install::install_skill_from_store(detail, agents)
+        crate::core::lifecycle::install::install_skill_from_store_with_conflicts(
+            detail,
+            agents,
+            conflicts.unwrap_or_default(),
+        )
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))?

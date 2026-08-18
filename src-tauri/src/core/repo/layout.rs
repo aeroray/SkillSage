@@ -48,6 +48,10 @@ impl RepoLayout {
         self.root.join("settings.json")
     }
 
+    pub fn exports_root(&self) -> PathBuf {
+        self.root.join("exports")
+    }
+
     pub fn snapshots_root(&self) -> PathBuf {
         self.lock_root().join("snapshots")
     }
@@ -69,6 +73,7 @@ impl RepoLayout {
         std::fs::create_dir_all(self.lock_root())?;
         std::fs::create_dir_all(self.snapshots_root())?;
         std::fs::create_dir_all(self.tmp_root())?;
+        std::fs::create_dir_all(self.exports_root())?;
         Ok(())
     }
 }

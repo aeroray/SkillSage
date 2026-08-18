@@ -11,7 +11,8 @@ import {
   uninstallSkill,
   updateSkill,
 } from "./api";
-import type { InstallResult, InstalledSkill, SkillProgress, UpdateInfo } from "./types";
+import { checkDistributionConflicts } from "./api";
+import type { DistributionActions, DistributionConflict, InstallResult, InstalledSkill, SkillProgress, UpdateInfo } from "./types";
 import { normalizeTauriError } from "../../lib/tauri";
 
 export function useInstalledSkills() {
@@ -90,7 +91,7 @@ export function useSkillInstall(onCompleted: () => void) {
   const [error, setError] = useState<string>();
 
   const install = useCallback(
-    async (skillId: string, agents: string[]) => {
+    async (skillId: string, agents: string[], conflicts?: DistributionActions) => {
       setInstalling(true);
       setStage("downloading");
       setMessage("准备下载技能文件");
@@ -108,7 +109,7 @@ export function useSkillInstall(onCompleted: () => void) {
         } catch {
           // Browser preview does not expose Tauri events.
         }
-        const result = await installSkill(skillId, agents);
+        const result = await installSkill(skillId, agents, conflicts);
         setStage("done");
         setMessage("已完成落库、校验和分发");
         onCompleted();
@@ -197,10 +198,10 @@ export function useSkillManagement(onCompleted: () => void) {
   );
 
   return {
-    adjust: (skillId: string, agents: string[]) =>
-      run(skillId, () => adjustDistribution(skillId, agents)),
-    distribute: (skillIds: string[], agents: string[]) =>
-      run("batch", () => distributeSkills(skillIds, agents)),
+    adjust: (skillId: string, agents: string[], conflicts?: DistributionActions) =>
+      run(skillId, () => adjustDistribution(skillId, agents, conflicts)),
+    distribute: (skillIds: string[], agents: string[], conflicts?: DistributionActions) =>
+      run("batch", () => distributeSkills(skillIds, agents, conflicts)),
     error,
     pending,
     rollback: (skillId: string, version: string) =>
@@ -212,4 +213,22 @@ export function useSkillManagement(onCompleted: () => void) {
       }),
     update: (skillId: string) => run(skillId, () => updateSkill(skillId)),
   };
+}
+
+export function useDistributionConflicts() {
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string>();
+  const check = useCallback(async (skillName: string, agents: string[]): Promise<DistributionConflict[]> => {
+    setChecking(true);
+    setError(undefined);
+    try {
+      return await checkDistributionConflicts(skillName, agents);
+    } catch (reason) {
+      setError(normalizeTauriError(reason));
+      return [];
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+  return { check, checking, error };
 }

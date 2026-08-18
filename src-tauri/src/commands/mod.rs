@@ -1,7 +1,10 @@
+pub mod distribution;
 pub mod import;
 pub mod install;
 pub mod manage;
+pub mod migrate;
 pub mod settings;
 pub mod store;
+pub mod sync;
 pub mod tools;
 pub mod url_install;

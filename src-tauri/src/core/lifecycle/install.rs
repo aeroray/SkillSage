@@ -1,8 +1,9 @@
+use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::core::distribute::{link, tracker::LinkTracker};
+use crate::core::distribute::{conflict, link, tracker::LinkTracker};
 use crate::core::repo::{atomic, layout::RepoLayout, lockfile};
 use crate::core::skill::parser::read_skill_md;
 use crate::core::store::models::SkillDetail;
@@ -41,12 +42,13 @@ pub struct InstallResult {
     pub link_paths: Vec<String>,
 }
 
-pub fn install_skill_from_store(
+pub fn install_skill_from_store_with_conflicts(
     detail: SkillDetail,
     agents: Vec<String>,
+    actions: BTreeMap<String, String>,
 ) -> Result<InstallResult, SkillsageError> {
     let layout = RepoLayout::from_user_home()?;
-    install_skill_from_store_at(&layout, detail, agents)
+    install_skill_from_store_at_with_conflicts(&layout, detail, agents, &actions)
 }
 
 pub fn install_skill_from_store_at(
@@ -54,7 +56,16 @@ pub fn install_skill_from_store_at(
     detail: SkillDetail,
     agents: Vec<String>,
 ) -> Result<InstallResult, SkillsageError> {
-    let tools = validate_agents(&agents)?;
+    install_skill_from_store_at_with_conflicts(layout, detail, agents, &BTreeMap::new())
+}
+
+pub fn install_skill_from_store_at_with_conflicts(
+    layout: &RepoLayout,
+    detail: SkillDetail,
+    agents: Vec<String>,
+    actions: &BTreeMap<String, String>,
+) -> Result<InstallResult, SkillsageError> {
+    validate_agents(&agents)?;
     let (owner, repo) = detail.source.split_once('/').ok_or_else(|| {
         SkillsageError::InvalidSkill("only GitHub-backed store skills are supported".into())
     })?;
@@ -114,6 +125,23 @@ pub fn install_skill_from_store_at(
         return Err(error);
     }
 
+    let mut actual_agents = agents.clone();
+    for conflict_item in conflict::find_for_skill(layout, &parsed.manifest.name, &actual_agents)? {
+        match actions.get(&conflict_item.tool_id).map(String::as_str) {
+            Some("skip") => actual_agents.retain(|agent| agent != &conflict_item.tool_id),
+            Some("takeover") => {
+                conflict::takeover_at(layout, &conflict_item, &parsed.manifest.name)?;
+            }
+            _ => {
+                let _ = atomic::remove_dir(&destination);
+                return Err(SkillsageError::DistributionConflict(format!(
+                    "{} 的目标路径已存在: {}",
+                    conflict_item.tool_name, conflict_item.path
+                )));
+            }
+        }
+    }
+    let tools = validate_agents(&actual_agents)?;
     let mut tracker = LinkTracker::default();
     for tool in tools {
         let target = tool.skills_path()?.join(&parsed.manifest.name);
@@ -155,7 +183,7 @@ pub fn install_skill_from_store_at(
         source: detail.url,
         current_version: current_version.clone(),
         current_hash: current_hash.clone(),
-        distributed_to: agents.clone(),
+        distributed_to: actual_agents.clone(),
         installed_at: lockfile::unix_timestamp(),
         version_history: Vec::new(),
         description: detail.description,
@@ -176,7 +204,7 @@ pub fn install_skill_from_store_at(
         owner: owner.to_string(),
         current_version,
         current_hash,
-        distributed_to: agents,
+        distributed_to: actual_agents,
         central_path: destination.display().to_string(),
         link_paths: link_paths
             .into_iter()

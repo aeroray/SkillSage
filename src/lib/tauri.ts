@@ -66,6 +66,7 @@ const previewSkills = [
 const previewTools = [
   { id: "claude-code", name: "Claude Code", skillsPath: "~/.claude/skills", detected: true },
   { id: "cursor", name: "Cursor", skillsPath: "~/.cursor/skills", detected: true },
+  { id: "github-copilot", name: "GitHub Copilot", skillsPath: "~/.github/skills", detected: false },
   { id: "codex", name: "OpenAI Codex CLI", skillsPath: "~/.codex/skills", detected: false },
   { id: "opencode", name: "OpenCode", skillsPath: "~/.config/opencode/skills", detected: false },
 ];
@@ -148,6 +149,50 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
   if (command === "url_install") {
     return { id: "vercel-labs/agent-skills/frontend-design", name: "frontend-design", owner: "vercel-labs", currentVersion: "preview", currentHash: "preview", distributedTo: args?.agents ?? [], centralPath: "~/.skillsage/remote/vercel-labs/frontend-design", linkPaths: [] } as T;
   }
+  if (command === "export_package") return "C:\\Users\\PC\\.skillsage\\exports\\skillsage-sync-preview.json" as T;
+  if (command === "preview_import_package") {
+    return {
+      path: String(args?.path ?? "C:\\Users\\PC\\skillsage-sync.json"),
+      exportedAt: "2026-08-18T08:00:00Z",
+      skills: [
+        {
+          id: "vercel-labs/agent-skills/frontend-design",
+          name: "frontend-design",
+          description: "用于验证跨设备同步预览的示例技能。",
+          source: "https://skills.sh/vercel-labs/agent-skills/frontend-design",
+          currentVersion: "a1b2c3d",
+          distributedTo: ["claude-code", "cursor"],
+          installed: false,
+          tools: previewTools.map((tool) => ({ id: tool.id, name: tool.name, detected: tool.detected, requested: ["claude-code", "cursor"].includes(tool.id) })),
+        },
+      ],
+    } as T;
+  }
+  if (command === "import_package") {
+    const options = (args?.options as { selectedIds?: string[] } | undefined) ?? {};
+    return { imported: (options.selectedIds ?? []).map((id) => ({ id, name: id.split("/").at(-1) ?? id })), skipped: [], failed: [] } as T;
+  }
+  if (command === "scan_migrate") {
+    return {
+      items: [
+        {
+          id: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
+          name: "legacy-research",
+          description: "用于验证存量迁移向导的示例技能。",
+          sourcePath: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
+          location: "public",
+          kind: "external-directory",
+          classification: "local",
+          toolIds: ["claude-code", "cursor"],
+          canTakeover: true,
+          warning: "接管后将由 SkillSage 管理此技能。",
+        },
+      ],
+      scannedRoots: ["C:\\Users\\PC\\.agents\\skills"],
+    } as T;
+  }
+  if (command === "execute_migrate") return { migrated: ["legacy-research"], skipped: [], failed: [] } as T;
+  if (command === "check_distribution_conflicts") return [] as T;
   if (command === "check_updates") return { updates: [] } as T;
   return {} as T;
 }

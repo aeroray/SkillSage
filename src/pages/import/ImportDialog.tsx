@@ -10,6 +10,8 @@ import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { ToolSelection, type ToolOption } from "../../components/common/ToolSelection";
 import { useImport } from "../../features/import/hooks";
+import { useDistributionConflicts } from "../../features/skills/hooks";
+import type { DistributionConflict } from "../../features/skills/types";
 
 type ImportDialogProps = {
   onClose: () => void;
@@ -23,12 +25,14 @@ export function ImportDialog({ onClose, onCompleted, open, tools }: ImportDialog
   const [agents, setAgents] = useState<string[]>([]);
   const [conflict, setConflict] = useState("reject");
   const [renameTo, setRenameTo] = useState("");
+  const [distributionConflicts, setDistributionConflicts] = useState<DistributionConflict[]>();
   const initializedAgents = useRef(false);
   const handleCompleted = useCallback(() => {
     onCompleted();
     onClose();
   }, [onClose, onCompleted]);
   const { error, importing, loading, preview, previewPath, reset, runImport } = useImport(handleCompleted);
+  const conflictCheck = useDistributionConflicts();
 
   useEffect(() => {
     if (open && !initializedAgents.current && tools.length > 0) {
@@ -40,6 +44,7 @@ export function ImportDialog({ onClose, onCompleted, open, tools }: ImportDialog
       setAgents([]);
       setConflict("reject");
       setRenameTo("");
+      setDistributionConflicts(undefined);
       initializedAgents.current = false;
       reset();
     }
@@ -63,9 +68,31 @@ export function ImportDialog({ onClose, onCompleted, open, tools }: ImportDialog
   };
 
   const canImport = Boolean(preview) && !preview?.remoteConflict && agents.length > 0 && (!preview?.existingLocal || conflict !== "reject") && (conflict !== "rename" || renameTo.trim().length > 0);
+  const startImport = async () => {
+    if (!preview) return;
+    const conflicts = await conflictCheck.check(preview.name, agents);
+    if (conflicts.length > 0) {
+      setDistributionConflicts(conflicts);
+      return;
+    }
+    await runImport(path, agents, conflict, renameTo);
+  };
+  const importSkippingConflicts = async () => {
+    if (!preview || !distributionConflicts) return;
+    const blocked = new Set(distributionConflicts.map((item) => item.toolId));
+    setDistributionConflicts(undefined);
+    await runImport(path, agents.filter((agent) => !blocked.has(agent)), conflict, renameTo);
+  };
+  const importTakingOverConflicts = async () => {
+    if (!preview || !distributionConflicts) return;
+    const actions = Object.fromEntries(distributionConflicts.map((item) => [item.toolId, "takeover" as const]));
+    setDistributionConflicts(undefined);
+    await runImport(path, agents, conflict, renameTo, actions);
+  };
 
   return (
-    <Dialog description="支持选择技能目录，或直接选择其中的 SKILL.md 文件。" onClose={onClose} open={open} title="导入本地技能">
+    <>
+      <Dialog description="支持选择技能目录，或直接选择其中的 SKILL.md 文件。" onClose={onClose} open={open} title="导入本地技能">
       <div className="flex flex-col gap-6">
         <FieldGroup>
           <Field>
@@ -88,8 +115,10 @@ export function ImportDialog({ onClose, onCompleted, open, tools }: ImportDialog
         </div> : null}
 
         <ToolSelection agents={agents} disabled={importing} onToggle={(id, checked) => setAgents((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))} tools={tools} />
-        <div className="flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{agents.length > 0 ? `将分发到 ${agents.length} 个工具` : "至少选择一个分发目标"}</p><Button disabled={!canImport || importing} onClick={() => { if (preview) void runImport(path, agents, conflict, renameTo); }}>{importing ? "导入中…" : "确认导入"}</Button></div>
+        <div className="flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{agents.length > 0 ? `将分发到 ${agents.length} 个工具` : "至少选择一个分发目标"}</p><Button disabled={!canImport || importing || conflictCheck.checking} onClick={() => void startImport()}>{importing ? "导入中…" : conflictCheck.checking ? "检查冲突…" : "确认导入"}</Button></div>
       </div>
-    </Dialog>
+      </Dialog>
+    <Dialog description="目标工具目录中已有非 SkillSage 条目。" onClose={() => setDistributionConflicts(undefined)} open={Boolean(distributionConflicts)} title="处理导入冲突"><div className="flex flex-col gap-4"><Alert variant="destructive"><CircleAlert /><AlertDescription>{distributionConflicts?.map((item) => `${item.toolName}: ${item.path}`).join("；")}</AlertDescription></Alert><p className="text-sm leading-6 text-muted-foreground">跳过会忽略冲突工具；接管会先把原实体迁入中央仓库本地区并改名保存；取消则返回导入流程。</p><div className="flex flex-wrap justify-end gap-2"><Button onClick={() => setDistributionConflicts(undefined)} variant="ghost">取消</Button><Button disabled={importing} onClick={() => void importSkippingConflicts()} variant="outline">跳过冲突项</Button><Button disabled={importing} onClick={() => void importTakingOverConflicts()}>接管并导入</Button></div></div></Dialog>
+    </>
   );
 }

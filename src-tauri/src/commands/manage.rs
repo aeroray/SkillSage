@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 use tauri::State;
 
@@ -126,12 +128,18 @@ pub async fn rollback_skill(
 pub async fn adjust_distribution(
     skill_id: String,
     agents: Vec<String>,
+    conflicts: Option<BTreeMap<String, String>>,
     state: State<'_, AppState>,
 ) -> Result<SkillLockRecord, SkillsageError> {
     let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
-        distribute::adjust_at(&layout, &skill_id, agents)
+        distribute::adjust_at_with_conflicts(
+            &layout,
+            &skill_id,
+            agents,
+            &conflicts.unwrap_or_default(),
+        )
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))?
@@ -141,13 +149,19 @@ pub async fn adjust_distribution(
 pub async fn distribute_skills(
     skill_ids: Vec<String>,
     agents: Vec<String>,
+    conflicts: Option<BTreeMap<String, String>>,
     state: State<'_, AppState>,
 ) -> Result<InstalledSkillsList, SkillsageError> {
     let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
         for skill_id in &skill_ids {
-            distribute::adjust_at(&layout, skill_id, agents.clone())?;
+            distribute::adjust_at_with_conflicts(
+                &layout,
+                skill_id,
+                agents.clone(),
+                &conflicts.clone().unwrap_or_default(),
+            )?;
         }
         let lock = crate::core::repo::lockfile::load(&layout)?;
         Ok(InstalledSkillsList {

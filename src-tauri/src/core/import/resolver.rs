@@ -1,8 +1,9 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::core::distribute::{link, tracker::LinkTracker};
+use crate::core::distribute::{conflict as distribution_conflict, link, tracker::LinkTracker};
 use crate::core::lifecycle::install::{uninstall_skill_at, InstallResult};
 use crate::core::repo::{atomic, layout::RepoLayout, lockfile};
 use crate::core::skill::parser::{is_valid_skill_name, read_skill_md};
@@ -48,12 +49,24 @@ pub fn preview_at(layout: &RepoLayout, path: &str) -> Result<ImportPreview, Skil
     })
 }
 
+#[allow(dead_code)]
 pub fn import_at(
     layout: &RepoLayout,
     path: &str,
     agents: Vec<String>,
     conflict: &str,
     rename_to: Option<String>,
+) -> Result<InstallResult, SkillsageError> {
+    import_at_with_conflicts(layout, path, agents, conflict, rename_to, &BTreeMap::new())
+}
+
+pub fn import_at_with_conflicts(
+    layout: &RepoLayout,
+    path: &str,
+    agents: Vec<String>,
+    conflict: &str,
+    rename_to: Option<String>,
+    actions: &BTreeMap<String, String>,
 ) -> Result<InstallResult, SkillsageError> {
     let source_path = PathBuf::from(path);
     let resolved = source::resolve(&source_path)?;
@@ -89,7 +102,7 @@ pub fn import_at(
         target_name = validate_rename(rename_to)?;
     }
 
-    let tools = validate_agents(&agents)?;
+    validate_agents(&agents)?;
     layout.ensure_roots()?;
     let temp_dir = atomic::create_temp_dir(layout)?;
     let files = match source::collect_resolved_files(&resolved) {
@@ -125,6 +138,25 @@ pub fn import_at(
     let current_hash = lockfile::content_hash(&temp_dir)?;
     atomic::commit_dir(&temp_dir, &destination)?;
 
+    let mut actual_agents = agents.clone();
+    for conflict_item in
+        distribution_conflict::find_for_skill(layout, &parsed.manifest.name, &actual_agents)?
+    {
+        match actions.get(&conflict_item.tool_id).map(String::as_str) {
+            Some("skip") => actual_agents.retain(|agent| agent != &conflict_item.tool_id),
+            Some("takeover") => {
+                distribution_conflict::takeover_at(layout, &conflict_item, &parsed.manifest.name)?;
+            }
+            _ => {
+                let _ = atomic::remove_dir(&destination);
+                return Err(SkillsageError::DistributionConflict(format!(
+                    "{} 的目标路径已存在: {}",
+                    conflict_item.tool_name, conflict_item.path
+                )));
+            }
+        }
+    }
+    let tools = validate_agents(&actual_agents)?;
     let mut tracker = LinkTracker::default();
     for tool in tools {
         if let Err(error) = tracker.create(
@@ -160,7 +192,7 @@ pub fn import_at(
             source: format!("local://{}", parsed.manifest.name),
             current_version: "local".into(),
             current_hash: current_hash.clone(),
-            distributed_to: agents.clone(),
+            distributed_to: actual_agents.clone(),
             installed_at: lockfile::unix_timestamp(),
             version_history: Vec::new(),
             description: parsed.manifest.description.clone(),
@@ -180,7 +212,7 @@ pub fn import_at(
         owner: "local".into(),
         current_version: "local".into(),
         current_hash,
-        distributed_to: agents,
+        distributed_to: actual_agents,
         central_path: destination.display().to_string(),
         link_paths: link_paths
             .into_iter()

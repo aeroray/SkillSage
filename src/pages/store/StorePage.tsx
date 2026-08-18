@@ -25,11 +25,12 @@ import { Input } from "../../components/ui/input";
 import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
-import { useSkillInstall } from "../../features/skills/hooks";
+import { useDistributionConflicts, useSkillInstall } from "../../features/skills/hooks";
 import { GithubUrlInstallDialog } from "./GithubUrlInstallDialog";
 import { useDetectedTools } from "../../features/tools/hooks";
 import { groupByRepository } from "../../features/store/selectors";
 import { useLeaderboard, useSkillDetail, useSkillSearch } from "../../features/store/hooks";
+import type { DistributionConflict } from "../../features/skills/types";
 import type { LeaderboardRange, SkillDetail, SkillGroup } from "../../features/store/types";
 
 const leaderboardTabs: Array<{ label: string; value: LeaderboardRange }> = [
@@ -157,6 +158,7 @@ export function StorePage() {
   const [range, setRange] = useState<LeaderboardRange>("all-time");
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [githubUrlOpen, setGithubUrlOpen] = useState(false);
+  const [installConflicts, setInstallConflicts] = useState<DistributionConflict[]>();
   const initializedDetail = useRef<string | undefined>(undefined);
   const selectedSkillId = searchParams.get("skill");
   const { error: leaderboardError, loading: leaderboardLoading, skills: leaderboardSkills } = useLeaderboard(range);
@@ -165,6 +167,7 @@ export function StorePage() {
   const { error: toolsError, loading: toolsLoading, refresh: refreshTools, tools } = useDetectedTools();
   const closeDetail = useCallback(() => { const next = new URLSearchParams(searchParams); next.delete("skill"); setSearchParams(next); }, [searchParams, setSearchParams]);
   const installState = useSkillInstall(closeDetail);
+  const conflictCheck = useDistributionConflicts();
 
   useEffect(() => {
     if (detail && tools.length > 0 && initializedDetail.current !== detail.id) {
@@ -179,6 +182,27 @@ export function StorePage() {
   const displayError = isSearching ? searchError : leaderboardError;
   const groups = useMemo(() => groupByRepository(displaySkills), [displaySkills]);
   const openDetail = (skillId: string) => { const next = new URLSearchParams(searchParams); next.set("skill", skillId); setSearchParams(next); };
+  const startStoreInstall = async () => {
+    if (!detail) return;
+    const conflicts = await conflictCheck.check(detail.name, selectedAgents);
+    if (conflicts.length > 0) {
+      setInstallConflicts(conflicts);
+      return;
+    }
+    await installState.install(detail.id, selectedAgents);
+  };
+  const installSkippingConflicts = async () => {
+    if (!detail || !installConflicts) return;
+    const blocked = new Set(installConflicts.map((item) => item.toolId));
+    setInstallConflicts(undefined);
+    await installState.install(detail.id, selectedAgents.filter((agent) => !blocked.has(agent)));
+  };
+  const installTakingOverConflicts = async () => {
+    if (!detail || !installConflicts) return;
+    const actions = Object.fromEntries(installConflicts.map((item) => [item.toolId, "takeover" as const]));
+    setInstallConflicts(undefined);
+    await installState.install(detail.id, selectedAgents, actions);
+  };
 
   return (
     <div>
@@ -198,10 +222,11 @@ export function StorePage() {
       <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground"><CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-success" />同一仓库的技能会聚合展示，安装时仍可单独打开详情并选择工具。</div>
 
       <Dialog description={detail?.source ?? "加载技能详情"} onClose={closeDetail} open={Boolean(selectedSkillId)} title={detail?.name ?? "技能详情"}>
-        {detailLoading ? <div aria-busy="true" className="flex flex-col gap-4"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-20" /><Skeleton className="h-24" /></div> : detailError ? <Alert variant="destructive"><CircleAlert /><AlertDescription>{detailError}</AlertDescription></Alert> : detail ? <DetailContent detail={detail} installError={installState.error} installMessage={installState.message} installing={installState.installing} onInstall={() => void installState.install(detail.id, selectedAgents)} selectedAgents={selectedAgents} setSelectedAgents={setSelectedAgents} stage={installState.stage} tools={tools} toolsLoading={toolsLoading} /> : <p className="text-sm text-muted-foreground">无法加载技能详情。</p>}
+        {detailLoading ? <div aria-busy="true" className="flex flex-col gap-4"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-20" /><Skeleton className="h-24" /></div> : detailError ? <Alert variant="destructive"><CircleAlert /><AlertDescription>{detailError}</AlertDescription></Alert> : detail ? <DetailContent detail={detail} installError={installState.error ?? conflictCheck.error} installMessage={installState.message} installing={installState.installing || conflictCheck.checking} onInstall={() => void startStoreInstall()} selectedAgents={selectedAgents} setSelectedAgents={setSelectedAgents} stage={installState.stage} tools={tools} toolsLoading={toolsLoading} /> : <p className="text-sm text-muted-foreground">无法加载技能详情。</p>}
         {toolsError ? <p className="mt-4 text-xs text-muted-foreground">工具检测提示：{toolsError}</p> : null}
         {selectedSkillId && !toolsLoading ? <Button className="mt-4" onClick={() => void refreshTools()} size="sm" variant="ghost"><Star data-icon="inline-start" />刷新工具检测</Button> : null}
       </Dialog>
+      <Dialog description="目标工具目录中已有非 SkillSage 条目。" onClose={() => setInstallConflicts(undefined)} open={Boolean(installConflicts)} title="处理安装冲突"><div className="flex flex-col gap-4"><Alert variant="destructive"><CircleAlert /><AlertDescription>{installConflicts?.map((item) => `${item.toolName}: ${item.path}`).join("；")}</AlertDescription></Alert><p className="text-sm leading-6 text-muted-foreground">跳过会忽略冲突工具；接管会先把原实体迁入中央仓库本地区并改名保存；取消则返回安装流程。</p><div className="flex flex-wrap justify-end gap-2"><Button onClick={() => setInstallConflicts(undefined)} variant="ghost">取消</Button><Button disabled={installState.installing} onClick={() => void installSkippingConflicts()} variant="outline">跳过冲突项</Button><Button disabled={installState.installing} onClick={() => void installTakingOverConflicts()}>接管并安装</Button></div></div></Dialog>
       <GithubUrlInstallDialog onClose={() => setGithubUrlOpen(false)} onCompleted={() => undefined} open={githubUrlOpen} tools={tools} />
     </div>
   );

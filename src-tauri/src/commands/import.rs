@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use tauri::State;
 
 use crate::core::import::{self, ImportPreview};
@@ -22,12 +24,20 @@ pub async fn import_local(
     agents: Vec<String>,
     conflict: String,
     rename_to: Option<String>,
+    distribution_conflicts: Option<BTreeMap<String, String>>,
     state: State<'_, AppState>,
 ) -> Result<InstallResult, SkillsageError> {
     let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
-        import::import_at(&layout, &path, agents, &conflict, rename_to)
+        import::import_at_with_conflicts(
+            &layout,
+            &path,
+            agents,
+            &conflict,
+            rename_to,
+            &distribution_conflicts.unwrap_or_default(),
+        )
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))?

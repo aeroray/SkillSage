@@ -23,6 +23,14 @@ pub enum SkillsageError {
     Settings(String),
     #[error("本地导入失败: {0}")]
     ImportFailed(String),
+    #[error("同步清单无效: {0}")]
+    SyncInvalid(String),
+    #[error("同步导出失败: {0}")]
+    ExportFailed(String),
+    #[error("存量迁移失败: {0}")]
+    MigrateFailed(String),
+    #[error("分发冲突: {0}")]
+    DistributionConflict(String),
     #[error("技能已安装: {0}")]
     AlreadyInstalled(String),
     #[error("技能未安装: {0}")]

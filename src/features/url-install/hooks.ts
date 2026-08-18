@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { normalizeTauriError } from "../../lib/tauri";
 import { inspectGithubUrl, installFromGithubUrl } from "./api";
 import type { GithubUrlInspection, UrlInstallResult } from "./types";
+import type { DistributionActions } from "../skills/types";
 
 export function useGithubUrlInstall(onCompleted: () => void) {
   const [inspection, setInspection] = useState<GithubUrlInspection>();
@@ -25,11 +26,11 @@ export function useGithubUrlInstall(onCompleted: () => void) {
     }
   }, []);
 
-  const install = useCallback(async (url: string, skillPath: string | undefined, agents: string[]): Promise<UrlInstallResult | undefined> => {
+  const install = useCallback(async (url: string, skillPath: string | undefined, agents: string[], conflicts?: DistributionActions): Promise<UrlInstallResult | undefined> => {
     setInstalling(true);
     setError(undefined);
     try {
-      const result = await installFromGithubUrl(url.trim(), skillPath, agents);
+      const result = await installFromGithubUrl(url.trim(), skillPath, agents, conflicts);
       onCompleted();
       return result;
     } catch (reason) {

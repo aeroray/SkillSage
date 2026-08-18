@@ -14,5 +14,9 @@
 - Phase 5 local import accepts a `SKILL.md` file, a skill directory, or a directory containing exactly one immediate skill directory; symlinks are rejected and same-name remote records cannot be overwritten by local import.
 - Phase 5 GitHub URL installation supports repository, tree, blob, and raw `SKILL.md` URLs; repository URLs enumerate candidate skills from the resolved Git tree.
 - Phase 5 settings persist proxy configuration in `~/.skillsage/settings.json` and store the GitHub token in the OS keyring; request clients must receive both through the Rust settings layer.
+- Phase 6 sync exports only HTTPS-backed remote lock records; local and built-in fixture skills are excluded because they cannot be reconstructed on another device.
+- Phase 6 sync import is metadata-only: each selected entry is fetched again at its recorded commit and installed through the existing Rust lifecycle, with detected-tool defaults and per-skill agent choices.
+- Phase 6 migration scans the five registered tool directories plus `~/.agents/skills/`; managed links are skipped, unknown links are not auto-taken over, and accepted entities move or are copied into the central repository before links are rebuilt.
+- Distribution conflicts use explicit skip, takeover, or cancel decisions; takeover preserves the external entity as a renamed local skill before the requested skill claims the original tool path.
 - Frontend pages must use the installed shadcn/Radix primitives for controls and overlays; do not reintroduce page-level native selects, details menus, or custom component CSS classes.
 - Tailwind v4 is the active frontend version; use the first-party Vite plugin and CSS-first theme tokens, and do not reintroduce a v3 PostCSS/config pipeline.
