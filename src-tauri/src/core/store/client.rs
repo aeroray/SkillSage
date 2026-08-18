@@ -10,10 +10,12 @@ pub struct StoreClient {
 }
 
 impl StoreClient {
-    pub fn new() -> Result<Self, SkillsageError> {
-        let http = reqwest::Client::builder()
-            .user_agent("SkillSage/0.1")
-            .build()?;
+    pub fn new_with_proxy(proxy_url: Option<String>) -> Result<Self, SkillsageError> {
+        let mut builder = reqwest::Client::builder().user_agent("SkillSage/0.1");
+        if let Some(proxy_url) = proxy_url {
+            builder = builder.proxy(reqwest::Proxy::all(proxy_url)?);
+        }
+        let http = builder.build()?;
         Ok(Self { http })
     }
 

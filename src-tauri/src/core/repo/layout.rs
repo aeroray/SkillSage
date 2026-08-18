@@ -21,11 +21,19 @@ impl RepoLayout {
         self.root.join("remote")
     }
 
+    pub fn local_root(&self) -> PathBuf {
+        self.root.join("local")
+    }
+
     pub fn remote_skill(&self, owner: &str, skill: &str) -> Result<PathBuf, SkillsageError> {
         Ok(self
             .remote_root()
             .join(safe_component(owner)?)
             .join(safe_component(skill)?))
+    }
+
+    pub fn local_skill(&self, skill: &str) -> Result<PathBuf, SkillsageError> {
+        Ok(self.local_root().join(safe_component(skill)?))
     }
 
     pub fn lock_root(&self) -> PathBuf {
@@ -34,6 +42,10 @@ impl RepoLayout {
 
     pub fn lock_path(&self) -> PathBuf {
         self.lock_root().join("skill-lock.json")
+    }
+
+    pub fn settings_path(&self) -> PathBuf {
+        self.root.join("settings.json")
     }
 
     pub fn snapshots_root(&self) -> PathBuf {
@@ -53,6 +65,7 @@ impl RepoLayout {
 
     pub fn ensure_roots(&self) -> Result<(), SkillsageError> {
         std::fs::create_dir_all(self.remote_root())?;
+        std::fs::create_dir_all(self.local_root())?;
         std::fs::create_dir_all(self.lock_root())?;
         std::fs::create_dir_all(self.snapshots_root())?;
         std::fs::create_dir_all(self.tmp_root())?;

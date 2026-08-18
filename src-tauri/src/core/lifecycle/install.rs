@@ -148,7 +148,10 @@ pub fn install_skill_from_store_at(
         name: parsed.manifest.name.clone(),
         owner: owner.to_string(),
         repo: repo.to_string(),
-        skill_path: Some(detail.slug),
+        skill_path: detail
+            .skill_path
+            .clone()
+            .or_else(|| Some(detail.slug.clone())),
         source: detail.url,
         current_version: current_version.clone(),
         current_hash: current_hash.clone(),
@@ -300,13 +303,30 @@ pub fn uninstall_skill_at(layout: &RepoLayout, skill_id: &str) -> Result<(), Ski
         link::remove_link(&link_path)?;
     }
 
-    let destination = layout.remote_skill(&record.owner, &record.name)?;
-    let snapshots = layout.snapshot_skill(&record.owner, &record.name)?;
+    let destination = destination_for_record(layout, &record)?;
+    let snapshots = if record.source.starts_with("local://") {
+        None
+    } else {
+        Some(layout.snapshot_skill(&record.owner, &record.name)?)
+    };
     atomic::remove_dir(&destination)?;
-    atomic::remove_dir(&snapshots)?;
+    if let Some(snapshots) = snapshots {
+        atomic::remove_dir(&snapshots)?;
+    }
     lock.skills.remove(skill_id);
     lockfile::save(layout, &lock)?;
     Ok(())
+}
+
+pub fn destination_for_record(
+    layout: &RepoLayout,
+    record: &lockfile::SkillLockRecord,
+) -> Result<PathBuf, SkillsageError> {
+    if record.source.starts_with("local://") {
+        layout.local_skill(&record.name)
+    } else {
+        layout.remote_skill(&record.owner, &record.name)
+    }
 }
 
 fn validate_agents(

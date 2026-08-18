@@ -13,8 +13,16 @@ pub enum SkillsageError {
     StoreApi(u16),
     #[error("invalid skills.sh response: {0}")]
     InvalidStoreData(String),
+    #[error("GitHub 地址无效: {0}")]
+    InvalidGithubUrl(String),
     #[error("无效的 SKILL.md: {0}")]
     InvalidSkill(String),
+    #[error("技能名称冲突: {0}")]
+    NameConflict(String),
+    #[error("设置保存失败: {0}")]
+    Settings(String),
+    #[error("本地导入失败: {0}")]
+    ImportFailed(String),
     #[error("技能已安装: {0}")]
     AlreadyInstalled(String),
     #[error("技能未安装: {0}")]

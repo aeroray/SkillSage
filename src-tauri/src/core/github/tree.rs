@@ -29,7 +29,11 @@ pub async fn find_skill_files(
 ) -> Result<Vec<String>, SkillsageError> {
     let tree = client.get_tree(owner, repo, commit).await?;
     let prefix = skill_path.trim_matches('/');
-    let exact_skill_file = format!("{prefix}/SKILL.md");
+    let exact_skill_file = if prefix.is_empty() {
+        "SKILL.md".to_string()
+    } else {
+        format!("{prefix}/SKILL.md")
+    };
     let skill_file = if tree
         .tree
         .iter()

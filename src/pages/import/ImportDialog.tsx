@@ -1,0 +1,95 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { CircleAlert, FolderOpen, SearchCheck } from "lucide-react";
+import { Alert, AlertDescription } from "../../components/ui/alert";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import { Dialog } from "../../components/ui/dialog";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "../../components/ui/field";
+import { Input } from "../../components/ui/input";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { ToolSelection, type ToolOption } from "../../components/common/ToolSelection";
+import { useImport } from "../../features/import/hooks";
+
+type ImportDialogProps = {
+  onClose: () => void;
+  onCompleted: () => void;
+  open: boolean;
+  tools: ToolOption[];
+};
+
+export function ImportDialog({ onClose, onCompleted, open, tools }: ImportDialogProps) {
+  const [path, setPath] = useState("");
+  const [agents, setAgents] = useState<string[]>([]);
+  const [conflict, setConflict] = useState("reject");
+  const [renameTo, setRenameTo] = useState("");
+  const initializedAgents = useRef(false);
+  const handleCompleted = useCallback(() => {
+    onCompleted();
+    onClose();
+  }, [onClose, onCompleted]);
+  const { error, importing, loading, preview, previewPath, reset, runImport } = useImport(handleCompleted);
+
+  useEffect(() => {
+    if (open && !initializedAgents.current && tools.length > 0) {
+      setAgents(tools.filter((tool) => tool.detected).map((tool) => tool.id));
+      initializedAgents.current = true;
+    }
+    if (!open) {
+      setPath("");
+      setAgents([]);
+      setConflict("reject");
+      setRenameTo("");
+      initializedAgents.current = false;
+      reset();
+    }
+  }, [open, reset, tools]);
+
+  const choosePath = async (directory: boolean) => {
+    try {
+      const selected = await openFileDialog({
+        directory,
+        multiple: false,
+        title: directory ? "选择技能目录" : "选择 SKILL.md",
+        ...(directory ? {} : { filters: [{ name: "SKILL.md", extensions: ["md"] }] }),
+      });
+      if (typeof selected === "string") {
+        setPath(selected);
+        await previewPath(selected);
+      }
+    } catch {
+      // Browser preview and cancelled native dialogs both leave the current path unchanged.
+    }
+  };
+
+  const canImport = Boolean(preview) && !preview?.remoteConflict && agents.length > 0 && (!preview?.existingLocal || conflict !== "reject") && (conflict !== "rename" || renameTo.trim().length > 0);
+
+  return (
+    <Dialog description="支持选择技能目录，或直接选择其中的 SKILL.md 文件。" onClose={onClose} open={open} title="导入本地技能">
+      <div className="flex flex-col gap-6">
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="import-path">来源路径</FieldLabel>
+            <FieldDescription id="import-path-help">导入前会校验 frontmatter，并拒绝符号链接内容。</FieldDescription>
+            <div className="flex items-center gap-2">
+              <Input aria-describedby="import-path-help" id="import-path" onChange={(event) => { setPath(event.target.value); reset(); }} placeholder="选择目录或 SKILL.md" value={path} />
+              <Button aria-label="选择技能目录" onClick={() => void choosePath(true)} size="icon" variant="outline"><FolderOpen /></Button>
+              <Button aria-label="选择 SKILL.md 文件" onClick={() => void choosePath(false)} size="icon" variant="outline"><SearchCheck /></Button>
+            </div>
+          </Field>
+          <Button className="self-start" disabled={!path.trim() || loading || importing} onClick={() => void previewPath(path)} variant="secondary">{loading ? "解析中…" : "解析预览"}</Button>
+        </FieldGroup>
+
+        {error ? <Alert variant="destructive"><CircleAlert /><AlertDescription>{error}</AlertDescription></Alert> : null}
+        {preview ? <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/40 p-4">
+          <div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-sm font-semibold text-foreground">{preview.name}</h3><Badge variant="muted">{preview.sourceKind === "file" ? "单文件" : "目录"}</Badge></div><p className="mt-2 text-sm leading-6 text-muted-foreground">{preview.description}</p></div><Badge variant="success">{preview.fileCount} 个文件</Badge></div>
+          {preview.remoteConflict ? <Alert variant="destructive"><CircleAlert /><AlertDescription>同名远程技能已存在，不能覆盖远程仓库内容。</AlertDescription></Alert> : null}
+          {preview.existingLocal ? <Field><FieldLabel htmlFor="import-conflict">同名本地技能处理</FieldLabel><Select onValueChange={setConflict} value={conflict}><SelectTrigger id="import-conflict"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="reject">保留现有技能</SelectItem><SelectItem value="overwrite">覆盖现有技能</SelectItem><SelectItem value="rename">导入为新名称</SelectItem></SelectGroup></SelectContent></Select>{conflict === "rename" ? <Input aria-label="新的技能名称" className="mt-2" onChange={(event) => setRenameTo(event.target.value)} placeholder="例如 local-research-copy" value={renameTo} /> : null}</Field> : null}
+        </div> : null}
+
+        <ToolSelection agents={agents} disabled={importing} onToggle={(id, checked) => setAgents((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))} tools={tools} />
+        <div className="flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{agents.length > 0 ? `将分发到 ${agents.length} 个工具` : "至少选择一个分发目标"}</p><Button disabled={!canImport || importing} onClick={() => { if (preview) void runImport(path, agents, conflict, renameTo); }}>{importing ? "导入中…" : "确认导入"}</Button></div>
+      </div>
+    </Dialog>
+  );
+}

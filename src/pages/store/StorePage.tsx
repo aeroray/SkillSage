@@ -26,6 +26,7 @@ import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useSkillInstall } from "../../features/skills/hooks";
+import { GithubUrlInstallDialog } from "./GithubUrlInstallDialog";
 import { useDetectedTools } from "../../features/tools/hooks";
 import { groupByRepository } from "../../features/store/selectors";
 import { useLeaderboard, useSkillDetail, useSkillSearch } from "../../features/store/hooks";
@@ -155,6 +156,7 @@ export function StorePage() {
   const [query, setQuery] = useState("");
   const [range, setRange] = useState<LeaderboardRange>("all-time");
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+  const [githubUrlOpen, setGithubUrlOpen] = useState(false);
   const initializedDetail = useRef<string | undefined>(undefined);
   const selectedSkillId = searchParams.get("skill");
   const { error: leaderboardError, loading: leaderboardLoading, skills: leaderboardSkills } = useLeaderboard(range);
@@ -180,7 +182,7 @@ export function StorePage() {
 
   return (
     <div>
-      <PageHeader actions={<Button onClick={() => navigate("/skills")} variant="outline">我的技能<ArrowRight data-icon="inline-end" /></Button>} description="从 skills.sh 发现、搜索并安装面向 AI Agent 的能力模块。" eyebrow="01 / STORE" title="技能商店" />
+      <PageHeader actions={<><Button onClick={() => setGithubUrlOpen(true)} variant="outline"><GitBranch data-icon="inline-start" />GitHub URL</Button><Button onClick={() => navigate("/skills")} variant="outline">我的技能<ArrowRight data-icon="inline-end" /></Button></>} description="从 skills.sh 发现、搜索并安装面向 AI Agent 的能力模块。" eyebrow="01 / STORE" title="技能商店" />
 
       <section aria-labelledby="store-search-title" className="rounded-lg border border-border bg-card p-5 shadow-sm">
         <div className="flex items-center justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">DISCOVER</p><h2 className="mt-2 text-base font-semibold text-foreground" id="store-search-title">找到下一项能力</h2></div><GitBranch aria-hidden="true" className="h-5 w-5 text-muted-foreground" /></div>
@@ -200,6 +202,7 @@ export function StorePage() {
         {toolsError ? <p className="mt-4 text-xs text-muted-foreground">工具检测提示：{toolsError}</p> : null}
         {selectedSkillId && !toolsLoading ? <Button className="mt-4" onClick={() => void refreshTools()} size="sm" variant="ghost"><Star data-icon="inline-start" />刷新工具检测</Button> : null}
       </Dialog>
+      <GithubUrlInstallDialog onClose={() => setGithubUrlOpen(false)} onCompleted={() => undefined} open={githubUrlOpen} tools={tools} />
     </div>
   );
 }

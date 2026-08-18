@@ -1,12 +1,14 @@
 use crate::core::github::{client::GitHubClient, download::fetch_skill_files};
 use crate::core::repo::lockfile::SkillLockRecord;
 use crate::core::store::models::SkillFile;
+use crate::core::{repo::layout::RepoLayout, settings};
 use crate::error::SkillsageError;
 
 pub async fn fetch_latest(
     record: &SkillLockRecord,
 ) -> Result<(String, Vec<SkillFile>), SkillsageError> {
-    let client = GitHubClient::new(None)?;
+    let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
+    let client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
     let branch = client
         .get_default_branch(&record.owner, &record.repo)
         .await?;
@@ -21,7 +23,8 @@ pub async fn fetch_at(
     record: &SkillLockRecord,
     commit: &str,
 ) -> Result<Vec<SkillFile>, SkillsageError> {
-    let client = GitHubClient::new(None)?;
+    let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
+    let client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
     fetch_at_commit(record, &client, commit).await
 }
 

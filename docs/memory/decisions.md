@@ -71,3 +71,11 @@ Reason: This keeps keyboard behavior, focus states, and semantic interaction con
 
 Decision: The project uses Tailwind CSS v4 with the first-party Vite plugin and CSS-first `@theme inline` tokens; shadcn components should follow v4 syntax when updated.
 Reason: This keeps the Vite build chain current and makes the source-owned component theme compatible with the current shadcn registry.
+
+## Phase 5 source and settings boundary
+
+Decision: Local imports are stored under `~/.skillsage/local/<name>` with `local://` lock records, while GitHub URL installs resolve a repository/tree/blob/raw URL into a manifest-backed skill detail and reuse the existing Rust store install pipeline.
+Reason: This keeps all filesystem mutation, conflict handling, hashing, and distribution behind the same lifecycle boundaries as store installs.
+
+Decision: Proxy configuration is persisted as local JSON and the GitHub token is stored through the OS keyring; Rust loads both at request time and injects them into Store and GitHub clients.
+Reason: Secrets do not enter the project settings file, while proxy changes take effect without putting network configuration in frontend code.

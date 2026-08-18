@@ -4,6 +4,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::core::github::{client::GitHubClient, download::fetch_skill_files};
 use crate::core::lifecycle::install::{self, InstallResult};
 use crate::core::store::client::StoreClient;
+use crate::core::{repo::layout::RepoLayout, settings};
 use crate::error::SkillsageError;
 use crate::state::AppState;
 
@@ -66,12 +67,13 @@ pub async fn install_skill(
         "downloading",
         "Fetching skill files from skills.sh",
     )?;
-    let client = StoreClient::new()?;
+    let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
+    let client = StoreClient::new_with_proxy(runtime.proxy_url.clone())?;
     let mut detail = client.detail(&skill_id).await?;
     let (owner, repo) = detail.source.split_once('/').ok_or_else(|| {
         SkillsageError::InvalidSkill("store skill is not backed by a GitHub repository".into())
     })?;
-    let github = GitHubClient::new(None)?;
+    let github = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
     let default_branch = github.get_default_branch(owner, repo).await?;
     let current_version = github.get_commit_sha(owner, repo, &default_branch).await?;
     detail.version = Some(current_version.clone());

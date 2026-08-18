@@ -1,4 +1,5 @@
 use crate::core::distribute::{link, tracker::LinkTracker};
+use crate::core::lifecycle::install::destination_for_record;
 use crate::core::repo::{layout::RepoLayout, lockfile};
 use crate::core::tools::registry::find_tool;
 use crate::error::SkillsageError;
@@ -24,7 +25,7 @@ pub fn adjust_at(
     for agent in next.difference(&old) {
         let tool = find_tool(agent)?;
         if let Err(error) = tracker.create(
-            &layout.remote_skill(&current.owner, &current.name)?,
+            &destination_for_record(layout, &current)?,
             tool.skills_path()?.join(&current.name),
         ) {
             tracker.rollback();

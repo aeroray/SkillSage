@@ -67,6 +67,7 @@ fn parse_detail(skill_id: &str, html: &str) -> Result<SkillDetail, SkillsageErro
         installs,
         github_stars,
         url: format!("https://www.skills.sh/{skill_id}"),
+        skill_path: None,
         audits,
         version: None,
         files: Vec::new(),

@@ -11,6 +11,8 @@
 - Phase 2's built-in fixture is intentionally offline; live skills.sh/GitHub installation belongs to the next store phase.
 - Until token/settings support exists, do not depend on skills.sh `/api/v1`; it requires Vercel OIDC. Use the public legacy search and HTML store pages for Phase 3.
 - Phase 4 remote update/rollback currently supports GitHub-backed skills.sh records only; the offline Phase 2 fixture is intentionally not updateable.
-- Phase 4 exposes a local-import entry point, but actual directory import remains deferred until the Phase 5 import protocol and security validation are implemented.
+- Phase 5 local import accepts a `SKILL.md` file, a skill directory, or a directory containing exactly one immediate skill directory; symlinks are rejected and same-name remote records cannot be overwritten by local import.
+- Phase 5 GitHub URL installation supports repository, tree, blob, and raw `SKILL.md` URLs; repository URLs enumerate candidate skills from the resolved Git tree.
+- Phase 5 settings persist proxy configuration in `~/.skillsage/settings.json` and store the GitHub token in the OS keyring; request clients must receive both through the Rust settings layer.
 - Frontend pages must use the installed shadcn/Radix primitives for controls and overlays; do not reintroduce page-level native selects, details menus, or custom component CSS classes.
 - Tailwind v4 is the active frontend version; use the first-party Vite plugin and CSS-first theme tokens, and do not reintroduce a v3 PostCSS/config pipeline.

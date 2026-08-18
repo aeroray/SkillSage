@@ -68,6 +68,8 @@ pub struct SkillDetail {
     #[serde(default)]
     pub github_stars: Option<u64>,
     pub url: String,
+    #[serde(default, skip_serializing)]
+    pub skill_path: Option<String>,
     pub audits: Vec<AuditEntry>,
     #[serde(default, skip_serializing)]
     pub version: Option<String>,

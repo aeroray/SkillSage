@@ -70,6 +70,8 @@ const previewTools = [
   { id: "opencode", name: "OpenCode", skillsPath: "~/.config/opencode/skills", detected: false },
 ];
 
+let previewSettings = { proxyUrl: "", githubTokenConfigured: false };
+
 function isBrowserPreview() {
   return import.meta.env.DEV && typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window);
 }
@@ -96,7 +98,7 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
     } as T;
   }
   if (command === "detect_tools") return { tools: previewTools } as T;
-  if (command === "list_installed") {
+  if (command === "list_installed" || command === "refresh_installed") {
     return {
       skills: previewSkills.slice(0, 3).map((skill, index) => ({
         id: skill.id,
@@ -112,6 +114,39 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
         versionHistory: [],
       })),
     } as T;
+  }
+  if (command === "get_settings") return previewSettings as T;
+  if (command === "set_settings") {
+    const next = (args?.update as Record<string, unknown> | undefined) ?? {};
+    previewSettings = {
+      proxyUrl: String(next.proxyUrl ?? ""),
+      githubTokenConfigured: Boolean(next.githubToken) || (previewSettings.githubTokenConfigured && !next.clearGithubToken),
+    };
+    return previewSettings as T;
+  }
+  if (command === "preview_local_import") {
+    return {
+      sourcePath: String(args?.path ?? "C:\\Skills\\local-research"),
+      sourceKind: "directory",
+      skillRoot: String(args?.path ?? "C:\\Skills\\local-research"),
+      name: "local-research",
+      description: "用于验证本地导入流程的示例技能。",
+      fileCount: 3,
+      existingLocal: false,
+      remoteConflict: false,
+    } as T;
+  }
+  if (command === "import_local") {
+    return { id: "local/local-research", name: "local-research", owner: "local", currentVersion: "local", currentHash: "preview", distributedTo: args?.agents ?? [], centralPath: "~/.skillsage/local/local-research", linkPaths: [] } as T;
+  }
+  if (command === "inspect_github_url") {
+    return {
+      parsed: { owner: "vercel-labs", repo: "agent-skills", skillPath: undefined, commit: "main", canonicalUrl: String(args?.url ?? "https://github.com/vercel-labs/agent-skills") },
+      skills: [{ name: "frontend-design", description: "用于验证 GitHub URL 安装流程的示例技能。", skillPath: "skills/frontend-design", url: "https://github.com/vercel-labs/agent-skills/tree/main/skills/frontend-design" }],
+    } as T;
+  }
+  if (command === "url_install") {
+    return { id: "vercel-labs/agent-skills/frontend-design", name: "frontend-design", owner: "vercel-labs", currentVersion: "preview", currentHash: "preview", distributedTo: args?.agents ?? [], centralPath: "~/.skillsage/remote/vercel-labs/frontend-design", linkPaths: [] } as T;
   }
   if (command === "check_updates") return { updates: [] } as T;
   return {} as T;

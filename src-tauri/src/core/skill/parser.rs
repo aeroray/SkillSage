@@ -38,7 +38,7 @@ pub fn read_skill_md(path: &Path) -> Result<ParsedSkill, SkillsageError> {
 }
 
 fn validate_manifest(manifest: &SkillManifest) -> Result<(), SkillsageError> {
-    if !is_kebab_case(&manifest.name) {
+    if !is_valid_skill_name(&manifest.name) {
         return Err(SkillsageError::InvalidSkill(
             "name 必须是 kebab-case（例如 web-research）".to_string(),
         ));
@@ -56,7 +56,7 @@ fn validate_manifest(manifest: &SkillManifest) -> Result<(), SkillsageError> {
     Ok(())
 }
 
-fn is_kebab_case(value: &str) -> bool {
+pub fn is_valid_skill_name(value: &str) -> bool {
     if value.is_empty() || value.starts_with('-') || value.ends_with('-') {
         return false;
     }
