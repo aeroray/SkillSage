@@ -11,34 +11,72 @@ import {
   updateSkill,
 } from "./api";
 import { checkDistributionConflicts } from "./api";
-import type { DistributionActions, DistributionConflict, InstalledSkill, SkillProgress, UpdateInfo } from "./types";
+import type {
+  DistributionActions,
+  DistributionConflict,
+  InstalledSkill,
+  InstalledSkillsList,
+  SkillProgress,
+  UpdateInfo,
+} from "./types";
 import { normalizeTauriError } from "../../lib/tauri";
 
+let cachedInstalledSkills: InstalledSkillsList | undefined;
+let installedSkillsPromise: Promise<InstalledSkillsList> | undefined;
+
+function loadInstalledSkills(force = false) {
+  if (!force && cachedInstalledSkills)
+    return Promise.resolve(cachedInstalledSkills);
+  if (installedSkillsPromise) return installedSkillsPromise;
+  installedSkillsPromise = refreshInstalled()
+    .then((result) => {
+      cachedInstalledSkills = result;
+      return result;
+    })
+    .finally(() => {
+      installedSkillsPromise = undefined;
+    });
+  return installedSkillsPromise;
+}
+
 export function useInstalledSkills() {
-  const [skills, setSkills] = useState<InstalledSkill[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [skills, setSkills] = useState<InstalledSkill[]>(
+    () => cachedInstalledSkills?.skills ?? [],
+  );
+  const [remoteRoot, setRemoteRoot] = useState(
+    () => cachedInstalledSkills?.remoteRoot,
+  );
+  const [localRoot, setLocalRoot] = useState(
+    () => cachedInstalledSkills?.localRoot,
+  );
+  const [loading, setLoading] = useState(() => !cachedInstalledSkills);
   const [error, setError] = useState<string>();
   const requestId = useRef(0);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force = true) => {
     const currentRequest = ++requestId.current;
     setLoading(true);
     setError(undefined);
     try {
-      const result = await refreshInstalled();
-      if (currentRequest === requestId.current) setSkills(result.skills);
+      const result = await loadInstalledSkills(force);
+      if (currentRequest === requestId.current) {
+        setRemoteRoot(result.remoteRoot);
+        setLocalRoot(result.localRoot);
+        setSkills(result.skills);
+      }
     } catch (reason) {
-      if (currentRequest === requestId.current) setError(normalizeTauriError(reason));
+      if (currentRequest === requestId.current)
+        setError(normalizeTauriError(reason));
     } finally {
       if (currentRequest === requestId.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void refresh();
+    void refresh(false);
   }, [refresh]);
 
-  return { error, loading, refresh, setSkills, skills };
+  return { error, loading, localRoot, refresh, remoteRoot, setSkills, skills };
 }
 
 export function useSkillInstall(onCompleted: () => void) {
@@ -48,7 +86,11 @@ export function useSkillInstall(onCompleted: () => void) {
   const [error, setError] = useState<string>();
 
   const install = useCallback(
-    async (skillId: string, agents: string[], conflicts?: DistributionActions) => {
+    async (
+      skillId: string,
+      agents: string[],
+      conflicts?: DistributionActions,
+    ) => {
       setInstalling(true);
       setStage("downloading");
       setMessage("准备下载");
@@ -124,7 +166,8 @@ export function useSkillUpdates() {
       if (currentRequest === requestId.current) setUpdates(result.updates);
       return result.updates;
     } catch (reason) {
-      if (currentRequest === requestId.current) setError(normalizeTauriError(reason));
+      if (currentRequest === requestId.current)
+        setError(normalizeTauriError(reason));
       return [];
     } finally {
       if (currentRequest === requestId.current) setChecking(false);
@@ -139,7 +182,7 @@ export function useSkillManagement(onCompleted: () => void) {
   const [error, setError] = useState<string>();
 
   const run = useCallback(
-    async <T,>(skillId: string, action: () => Promise<T>) => {
+    async <T>(skillId: string, action: () => Promise<T>) => {
       setPending(skillId);
       setError(undefined);
       try {
@@ -157,10 +200,16 @@ export function useSkillManagement(onCompleted: () => void) {
   );
 
   return {
-    adjust: (skillId: string, agents: string[], conflicts?: DistributionActions) =>
-      run(skillId, () => adjustDistribution(skillId, agents, conflicts)),
-    distribute: (skillIds: string[], agents: string[], conflicts?: DistributionActions) =>
-      run("batch", () => distributeSkills(skillIds, agents, conflicts)),
+    adjust: (
+      skillId: string,
+      agents: string[],
+      conflicts?: DistributionActions,
+    ) => run(skillId, () => adjustDistribution(skillId, agents, conflicts)),
+    distribute: (
+      skillIds: string[],
+      agents: string[],
+      conflicts?: DistributionActions,
+    ) => run("batch", () => distributeSkills(skillIds, agents, conflicts)),
     error,
     pending,
     rollback: (skillId: string, version: string) =>
@@ -177,17 +226,23 @@ export function useSkillManagement(onCompleted: () => void) {
 export function useDistributionConflicts() {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string>();
-  const check = useCallback(async (skillName: string, agents: string[]): Promise<DistributionConflict[]> => {
-    setChecking(true);
-    setError(undefined);
-    try {
-      return await checkDistributionConflicts(skillName, agents);
-    } catch (reason) {
-      setError(normalizeTauriError(reason));
-      return [];
-    } finally {
-      setChecking(false);
-    }
-  }, []);
+  const check = useCallback(
+    async (
+      skillName: string,
+      agents: string[],
+    ): Promise<DistributionConflict[]> => {
+      setChecking(true);
+      setError(undefined);
+      try {
+        return await checkDistributionConflicts(skillName, agents);
+      } catch (reason) {
+        setError(normalizeTauriError(reason));
+        return [];
+      } finally {
+        setChecking(false);
+      }
+    },
+    [],
+  );
   return { check, checking, error };
 }

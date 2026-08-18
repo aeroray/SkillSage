@@ -20,6 +20,8 @@ export type VersionRecord = {
 };
 
 export type InstalledSkillsList = {
+  remoteRoot: string;
+  localRoot: string;
   skills: InstalledSkill[];
 };
 

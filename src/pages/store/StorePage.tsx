@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
   CircleAlert,
+  Check,
   ChevronDown,
   Download,
   ExternalLink,
@@ -11,6 +12,7 @@ import {
   Search,
   ShieldCheck,
   TrendingUp,
+  X,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -46,6 +48,7 @@ import {
 } from "../../components/ui/tooltip";
 import {
   useDistributionConflicts,
+  useInstalledSkills,
   useSkillInstall,
 } from "../../features/skills/hooks";
 import { useDetectedTools } from "../../features/tools/hooks";
@@ -60,6 +63,7 @@ import type {
   LeaderboardRange,
   SkillDetail,
   SkillGroup,
+  SkillSearchResult,
 } from "../../features/store/types";
 import { displayPath } from "../../lib/paths";
 
@@ -92,6 +96,12 @@ const stageLabels: Record<string, string> = {
   failed: "失败",
 };
 
+type PendingInstall = {
+  agents: string[];
+  conflicts: DistributionConflict[];
+  skillId: string;
+};
+
 function auditStatusLabel(status: string) {
   const normalized = status.toLowerCase();
   if (normalized === "pass") return "通过";
@@ -121,13 +131,23 @@ function LoadingCards() {
 }
 
 function SkillCard({
+  installedSkillIds,
   group,
   onOpen,
+  onQuickInstall,
+  quickInstallDisabled,
+  quickInstallingSkillId,
 }: {
   group: SkillGroup;
+  installedSkillIds: ReadonlySet<string>;
   onOpen: (skillId: string) => void;
+  onQuickInstall: (skill: SkillSearchResult) => void;
+  quickInstallDisabled: boolean;
+  quickInstallingSkillId?: string;
 }) {
   const { primary, additional, source } = group;
+  const installed = installedSkillIds.has(primary.id);
+  const quickInstalling = quickInstallingSkillId === primary.id;
   return (
     <Card
       className="cursor-pointer shadow-sm transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
@@ -149,9 +169,34 @@ function SkillCard({
             {source}
           </CardDescription>
         </div>
-        <Badge className="shrink-0" variant="muted">
-          {primary.sourceType === "github" ? "GitHub" : primary.sourceType}
-        </Badge>
+        {installed ? (
+          <Button
+            aria-label={`${primary.name} 已安装`}
+            className="shrink-0"
+            disabled
+            size="sm"
+            variant="secondary"
+          >
+            <Check data-icon="inline-start" />
+            已安装
+          </Button>
+        ) : (
+          <Button
+            aria-label={`快速安装 ${primary.name}`}
+            className="shrink-0"
+            disabled={quickInstallDisabled}
+            onClick={(event) => {
+              event.stopPropagation();
+              void onQuickInstall(primary);
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+            size="sm"
+            variant="outline"
+          >
+            <Download data-icon="inline-start" />
+            {quickInstalling ? "安装中…" : "快速安装"}
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="pb-4 pt-0">
         <div className="flex min-h-8 items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -410,10 +455,12 @@ export function StorePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [query, setQuery] = useState("");
+  const [isSearchComposing, setIsSearchComposing] = useState(false);
   const [range, setRange] = useState<LeaderboardRange>("all-time");
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
-  const [installConflicts, setInstallConflicts] =
-    useState<DistributionConflict[]>();
+  const [installConflicts, setInstallConflicts] = useState<PendingInstall>();
+  const [quickInstallingSkillId, setQuickInstallingSkillId] =
+    useState<string>();
   const initializedDetail = useRef<string | undefined>(undefined);
   const routeSkillId = location.pathname.startsWith("/store/")
     ? decodeRouteSkillId(location.pathname.slice("/store/".length))
@@ -430,7 +477,7 @@ export function StorePage() {
     loading: searchLoading,
     refresh: refreshSearch,
     skills: searchResults,
-  } = useSkillSearch(query);
+  } = useSkillSearch(query, isSearchComposing);
   const {
     detail,
     error: detailError,
@@ -443,10 +490,19 @@ export function StorePage() {
     refresh: refreshTools,
     tools,
   } = useDetectedTools();
+  const {
+    loading: installedLoading,
+    refresh: refreshInstalledSkills,
+    skills: installedSkills,
+  } = useInstalledSkills();
   const closeDetail = useCallback(() => {
     navigate("/store");
   }, [navigate]);
-  const installState = useSkillInstall(closeDetail);
+  const handleInstallCompleted = useCallback(() => {
+    void refreshInstalledSkills();
+    closeDetail();
+  }, [closeDetail, refreshInstalledSkills]);
+  const installState = useSkillInstall(handleInstallCompleted);
   const conflictCheck = useDistributionConflicts();
 
   useEffect(() => {
@@ -458,13 +514,21 @@ export function StorePage() {
     }
   }, [detail, tools]);
 
-  const isSearching = query.trim().length >= 2;
+  const isSearching = !isSearchComposing && query.trim().length >= 2;
   const displaySkills = isSearching ? searchResults : leaderboardSkills;
   const displayLoading = isSearching ? searchLoading : leaderboardLoading;
   const displayError = isSearching ? searchError : leaderboardError;
   const groups = useMemo(
     () => groupByRepository(displaySkills),
     [displaySkills],
+  );
+  const defaultAgents = useMemo(
+    () => tools.filter((tool) => tool.detected).map((tool) => tool.id),
+    [tools],
+  );
+  const installedSkillIds = useMemo(
+    () => new Set(installedSkills.map((skill) => skill.id)),
+    [installedSkills],
   );
   const openDetail = (skillId: string) => {
     navigate(`/store/${skillId.split("/").map(encodeURIComponent).join("/")}`);
@@ -473,27 +537,54 @@ export function StorePage() {
     if (!detail) return;
     const conflicts = await conflictCheck.check(detail.name, selectedAgents);
     if (conflicts.length > 0) {
-      setInstallConflicts(conflicts);
+      setInstallConflicts({
+        agents: [...selectedAgents],
+        conflicts,
+        skillId: detail.id,
+      });
       return;
     }
     await installState.install(detail.id, selectedAgents);
   };
+  const quickInstall = async (skill: SkillSearchResult) => {
+    if (
+      installedSkillIds.has(skill.id) ||
+      installState.installing ||
+      defaultAgents.length === 0
+    ) {
+      return;
+    }
+    const agents = [...defaultAgents];
+    const conflicts = await conflictCheck.check(skill.name, agents);
+    if (conflicts.length > 0) {
+      setInstallConflicts({ agents, conflicts, skillId: skill.id });
+      return;
+    }
+    setQuickInstallingSkillId(skill.id);
+    try {
+      await installState.install(skill.id, agents);
+    } finally {
+      setQuickInstallingSkillId(undefined);
+    }
+  };
   const installSkippingConflicts = async () => {
-    if (!detail || !installConflicts) return;
-    const blocked = new Set(installConflicts.map((item) => item.toolId));
+    if (!installConflicts) return;
+    const pending = installConflicts;
+    const blocked = new Set(pending.conflicts.map((item) => item.toolId));
     setInstallConflicts(undefined);
     await installState.install(
-      detail.id,
-      selectedAgents.filter((agent) => !blocked.has(agent)),
+      pending.skillId,
+      pending.agents.filter((agent) => !blocked.has(agent)),
     );
   };
   const installTakingOverConflicts = async () => {
-    if (!detail || !installConflicts) return;
+    if (!installConflicts) return;
+    const pending = installConflicts;
     const actions = Object.fromEntries(
-      installConflicts.map((item) => [item.toolId, "takeover" as const]),
+      pending.conflicts.map((item) => [item.toolId, "takeover" as const]),
     );
     setInstallConflicts(undefined);
-    await installState.install(detail.id, selectedAgents, actions);
+    await installState.install(pending.skillId, pending.agents, actions);
   };
 
   return (
@@ -513,12 +604,12 @@ export function StorePage() {
             >
               <TabsList
                 aria-label="排行榜范围"
-                className="gap-0.5 rounded-lg border border-border bg-muted/60 p-1"
+                className="gap-1 rounded-lg border border-border bg-muted/60 p-1"
               >
                 {leaderboardTabs.map(
                   ({ icon: Icon, iconClassName, label, value }) => (
                     <TabsTrigger
-                      className="items-center gap-1 px-2 text-xs data-[state=active]:bg-background data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
+                      className="items-center gap-1 px-2 text-sm data-[state=active]:bg-background data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
                       key={value}
                       value={value}
                     >
@@ -534,24 +625,41 @@ export function StorePage() {
               </TabsList>
             </Tabs>
           ) : null}
-          <label
-            className="relative ml-auto min-w-0 flex-1"
-            htmlFor="skill-search"
-          >
-            <span className="sr-only">搜索技能</span>
+          <div className="relative ml-auto min-w-0 flex-1">
+            <label className="sr-only" htmlFor="skill-search">
+              搜索技能
+            </label>
             <Search
               aria-hidden="true"
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             />
             <Input
-              className="py-0 pl-9 pr-3 font-normal text-sm leading-5 placeholder:font-normal placeholder:text-sm placeholder:leading-5 placeholder:opacity-100"
+              className="search-input appearance-none py-0 pl-9 pr-11 font-normal !text-sm !leading-5 placeholder:text-sm placeholder:opacity-80"
+              autoComplete="off"
               id="skill-search"
               onChange={(event) => setQuery(event.target.value)}
+              onCompositionEnd={() => setIsSearchComposing(false)}
+              onCompositionStart={() => setIsSearchComposing(true)}
               placeholder="搜索技能"
               type="search"
               value={query}
             />
-          </label>
+            {query ? (
+              <Button
+                aria-label="清除搜索"
+                className="absolute right-0 top-1/2 size-9 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setIsSearchComposing(false);
+                  setQuery("");
+                }}
+                title="清除搜索"
+                type="button"
+                variant="ghost"
+              >
+                <X aria-hidden="true" />
+              </Button>
+            ) : null}
+          </div>
         </div>
         {displayError ? (
           <ErrorBanner
@@ -567,7 +675,21 @@ export function StorePage() {
         ) : groups.length > 0 ? (
           <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {groups.map((group) => (
-              <SkillCard group={group} key={group.source} onOpen={openDetail} />
+              <SkillCard
+                group={group}
+                installedSkillIds={installedSkillIds}
+                key={group.source}
+                onOpen={openDetail}
+                onQuickInstall={quickInstall}
+                quickInstallDisabled={
+                  installedLoading ||
+                  toolsLoading ||
+                  defaultAgents.length === 0 ||
+                  installState.installing ||
+                  conflictCheck.checking
+                }
+                quickInstallingSkillId={quickInstallingSkillId}
+              />
             ))}
           </div>
         ) : (
@@ -592,7 +714,7 @@ export function StorePage() {
             <Button
               aria-label="在 skills.sh 打开详情"
               asChild
-              className="size-6"
+              className="size-4"
               size="icon"
               title="在 skills.sh 打开详情"
               variant="ghost"
@@ -655,8 +777,8 @@ export function StorePage() {
           <Alert variant="destructive">
             <CircleAlert />
             <AlertDescription>
-              {installConflicts
-                ?.map((item) => `${item.toolName}: ${displayPath(item.path)}`)
+              {installConflicts?.conflicts
+                .map((item) => `${item.toolName}: ${displayPath(item.path)}`)
                 .join("；")}
             </AlertDescription>
           </Alert>

@@ -4,6 +4,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::core::lifecycle::{distribute, remote, rollback, uninstall, update};
+use crate::core::paths;
 use crate::core::repo::{layout::RepoLayout, lockfile::SkillLockRecord};
 use crate::error::SkillsageError;
 use crate::state::AppState;
@@ -11,6 +12,8 @@ use crate::state::AppState;
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstalledSkillsList {
+    pub remote_root: String,
+    pub local_root: String,
     pub skills: Vec<SkillLockRecord>,
 }
 
@@ -20,6 +23,8 @@ pub async fn list_installed() -> Result<InstalledSkillsList, SkillsageError> {
         let layout = RepoLayout::from_user_home()?;
         let lock = crate::core::repo::lockfile::load(&layout)?;
         Ok(InstalledSkillsList {
+            remote_root: paths::display(&layout.remote_root()),
+            local_root: paths::display(&layout.local_root()),
             skills: lock.skills.into_values().collect(),
         })
     })
@@ -177,6 +182,8 @@ pub async fn distribute_skills(
         }
         let lock = crate::core::repo::lockfile::load(&layout)?;
         Ok(InstalledSkillsList {
+            remote_root: paths::display(&layout.remote_root()),
+            local_root: paths::display(&layout.local_root()),
             skills: lock.skills.into_values().collect(),
         })
     })

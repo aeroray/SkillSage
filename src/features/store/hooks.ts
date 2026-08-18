@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getLeaderboard, getSkillDetail, searchSkills } from "./api";
-import { clearCachedLeaderboard, getCachedLeaderboard, setCachedLeaderboard } from "./cache";
+import {
+  clearCachedLeaderboard,
+  getCachedLeaderboard,
+  setCachedLeaderboard,
+} from "./cache";
 import type { LeaderboardRange, SkillDetail, SkillSearchResult } from "./types";
 import { normalizeTauriError } from "../../lib/tauri";
 
 export function useLeaderboard(range: LeaderboardRange) {
-  const [skills, setSkills] = useState<SkillSearchResult[]>(() => getCachedLeaderboard(range) ?? []);
+  const [skills, setSkills] = useState<SkillSearchResult[]>(
+    () => getCachedLeaderboard(range) ?? [],
+  );
   const [loading, setLoading] = useState(() => !getCachedLeaderboard(range));
   const [error, setError] = useState<string>();
   const [reloadToken, setReloadToken] = useState(0);
@@ -49,13 +55,18 @@ export function useLeaderboard(range: LeaderboardRange) {
   return { error, loading, refresh, skills };
 }
 
-export function useSkillSearch(query: string) {
+export function useSkillSearch(query: string, isComposing = false) {
   const [skills, setSkills] = useState<SkillSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
+    if (isComposing) {
+      setLoading(false);
+      return;
+    }
+
     const normalized = query.trim();
     if (normalized.length < 2) {
       setSkills([]);
@@ -78,14 +89,19 @@ export function useSkillSearch(query: string) {
         .finally(() => {
           if (active) setLoading(false);
         });
-    }, 320);
+    }, 500);
     return () => {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [query, reloadToken]);
+  }, [isComposing, query, reloadToken]);
 
-  return { error, loading, refresh: () => setReloadToken((value) => value + 1), skills };
+  return {
+    error,
+    loading,
+    refresh: () => setReloadToken((value) => value + 1),
+    skills,
+  };
 }
 
 export function useSkillDetail(skillId: string | null) {
@@ -120,5 +136,10 @@ export function useSkillDetail(skillId: string | null) {
     };
   }, [skillId, reloadToken]);
 
-  return { detail, error, loading, refresh: () => setReloadToken((value) => value + 1) };
+  return {
+    detail,
+    error,
+    loading,
+    refresh: () => setReloadToken((value) => value + 1),
+  };
 }
