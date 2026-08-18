@@ -1,8 +1,10 @@
 import { lazy, Suspense, useEffect } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import { CheckCircle2, FolderSync, Library, Settings, Store } from "lucide-react";
+import { Download, FolderSync, Library, Settings, Store } from "lucide-react";
+import { Button } from "../components/ui/button";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { useThemeStore } from "../features/theme/store";
+import { useAppUpdateStore } from "../features/update/store";
 import { Skeleton } from "../components/ui/skeleton";
 import { cn } from "../lib/utils";
 
@@ -64,7 +66,44 @@ function PageLoadingState() {
   return <div aria-busy="true" aria-label="正在加载页面" className="flex flex-col gap-6"><Skeleton className="h-9 w-64" /><Skeleton className="h-4 w-96" /><Skeleton className="h-48 w-full" /></div>;
 }
 
+function SidebarUpdateCard() {
+  const available = useAppUpdateStore((state) => state.available);
+  const error = useAppUpdateStore((state) => state.error);
+  const install = useAppUpdateStore((state) => state.install);
+  const phase = useAppUpdateStore((state) => state.phase);
+  const progress = useAppUpdateStore((state) => state.progress);
+  const busy = phase === "downloading" || phase === "installing";
+
+  if (!available) return null;
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary-soft/50 p-3">
+      <div className="flex items-start gap-3">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Download aria-hidden="true" className="size-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-foreground">发现应用更新</p>
+          <p className="mt-1 text-xs text-muted-foreground" role="status">
+            {busy ? `${phase === "installing" ? "正在安装" : "正在下载"}${progress === null ? "…" : ` ${progress}%`}` : error ? "安装失败，请重试" : `v${available.version} 可用`}
+          </p>
+        </div>
+      </div>
+      <Button className="w-full" disabled={busy} onClick={() => void install()} size="sm">
+        {busy ? (phase === "installing" ? "正在安装…" : "正在下载…") : phase === "error" ? "重试安装" : "立即安装"}
+      </Button>
+    </div>
+  );
+}
+
 export function AppShell() {
+  const checkOnStartup = useAppUpdateStore((state) => state.checkOnStartup);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void checkOnStartup(), 1200);
+    return () => window.clearTimeout(timer);
+  }, [checkOnStartup]);
+
   return (
     <>
       <ThemeSync />
@@ -85,10 +124,7 @@ export function AppShell() {
           <Navigation ariaLabel="主导航" className="mt-12" items={navigation} />
 
           <div className="mt-auto flex flex-col gap-5">
-            <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
-              <CheckCircle2 aria-hidden="true" className="h-4 w-4 shrink-0 text-success" />
-              <p className="text-xs font-medium text-foreground">仓库已就绪</p>
-            </div>
+            <SidebarUpdateCard />
             <Navigation ariaLabel="应用设置" items={settingsNavigation} />
           </div>
         </aside>

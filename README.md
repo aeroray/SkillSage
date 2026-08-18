@@ -137,6 +137,24 @@ cargo audit
 - 滚动内容使用共享 `ScrollArea`，不要重新引入页面级原生滚动容器。
 - 保持桌面端信息密度，不新增移动端适配要求。
 
+### GitHub Release
+
+发布 workflow 位于 [`release.yml`](./.github/workflows/release.yml)。推送 `v` 开头的 SemVer 标签（例如 `v0.1.0`）后，GitHub Actions 会：
+
+- 构建 Windows NSIS 安装包，安装器支持简体中文和 English。
+- 构建 Apple Silicon macOS DMG，并同时生成应用内更新所需的签名产物。
+- 创建 GitHub Release、上传 `latest.json`，让 Windows 和 macOS 客户端都能检查并安装更新。
+
+在仓库的 Actions secrets 中配置 `TAURI_SIGNING_PRIVATE_KEY`。本地生成的私钥位于用户目录下的 `.tauri/skillsage.key`，只复制内容到 GitHub Secret，不能提交到仓库。`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 只有在私钥设置了密码时才需要配置。
+
+SkillSage 不发布到 Mac App Store，而是直接通过 GitHub Release 提供 Apple Silicon DMG。macOS 签名和公证不是 Tauri 自动更新签名的替代品，而是用于减少 Gatekeeper 的首次启动拦截；它们通过 workflow 中的 `APPLE_*` secrets 可选配置。未配置时仍可生成未签名 DMG，但用户首次打开可能需要在 Finder 中右键选择“打开”，或执行：
+
+```bash
+xattr -rd com.apple.quarantine /Applications/SkillSage.app
+```
+
+`xattr` 只会移除当前电脑上的隔离标记，不能证明应用来源，也不能替代 Apple 签名和公证，适合作为开源测试包的启动说明。Tauri 的 `TAURI_SIGNING_PRIVATE_KEY` 仍会保护应用内更新包的完整性。
+
 ## 项目文档
 
 - [需求文档](./docs/specs/01-需求文档.md)

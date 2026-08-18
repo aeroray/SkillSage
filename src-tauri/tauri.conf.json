@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "SkillSage",
-  "version": "0.1.0",
+  "version": "../package.json",
   "identifier": "com.skillsage.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -30,7 +30,15 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis",
+      "dmg"
+    ],
+    "createUpdaterArtifacts": true,
+    "category": "Utility",
+    "shortDescription": "SkillSage AI Agent 技能管理器",
+    "longDescription": "SkillSage 是一款面向 Windows 和 macOS 的 AI Agent 技能管理器，支持技能商店、本地导入、GitHub 安装、版本管理和多工具分发。",
+    "copyright": "Copyright © 2026 SkillSage contributors. MIT License.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,8 +46,28 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "nsis": {
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
+        "displayLanguageSelector": false
+      }
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ1NzlCQzdERjhGNjNFQUMKUldTc1B2YjRmYng1UmFzMXF1cVpJdXJobDJLSUJEeit0ZXdSeEpCK1NpcWZxRE1HYjlrWGR6RE0K",
+      "endpoints": [
+        "https://github.com/REPLACE_WITH_GITHUB_OWNER/SkillSage/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "quiet"
+      }
     }
   }
 }

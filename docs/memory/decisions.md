@@ -134,3 +134,28 @@ Reason: Users can personalize the interface without fragmenting page-level styli
 
 Decision: Device sync is managed from Settings and exports a user-selected JSON destination containing remote skill records, distribution targets, display mode, theme accent, and proxy settings. GitHub Tokens are excluded; importing preferences is explicit.
 Reason: A sync file should move a usable workspace between devices without embedding credentials or silently overwriting local preferences.
+
+## 2026-08-18 - GitHub Release distribution
+
+Decision: GitHub Actions publishes Windows NSIS and Apple Silicon macOS DMG artifacts from `v*` tags. Both platforms also receive signed Tauri updater artifacts and `latest.json`; the release workflow derives the updater endpoint from `GITHUB_REPOSITORY` at build time.
+Reason: Release metadata must follow the eventual GitHub repository without hardcoding an owner before the project has a remote, while signed artifacts are required for safe in-app updates.
+
+## 2026-08-18 - Minimal GitHub Actions scope
+
+Decision: Keep only the GitHub Release workflow in the repository; cross-platform QA remains available through local validation rather than a push/PR workflow.
+Reason: The project currently needs release distribution automation without adding continuous checks the maintainer did not request.
+
+## 2026-08-18 - Manual update cadence and sidebar entry
+
+Decision: Check for application updates once asynchronously after startup, then only when the user manually requests a check. Persist the last check time locally, show update details and a silent install/relaunch action in the sidebar, and keep the detailed status in Settings.
+Reason: Updates should stay quiet during normal use while remaining easy to discover and install when available.
+
+## 2026-08-18 - Compact settings layout
+
+Decision: Settings uses a fixed desktop two-column card grid at the 1200px minimum, grouping security/appearance and about/update/device sync; the stop-management flow remains a separated full-width section.
+Reason: This reduces unused vertical space while keeping related settings scannable and isolating destructive actions.
+
+## 2026-08-18 - Stop-management flow wording
+
+Decision: The Settings cleanup module is presented as “停止管理”, not app uninstall. It explains the handoff use case: keep current skill files and links while removing SkillSage management records, or explicitly clean up SkillSage-created skill data and links.
+Reason: The action controls SkillSage’s ownership of managed skills; the operating-system uninstaller remains a separate product lifecycle action.

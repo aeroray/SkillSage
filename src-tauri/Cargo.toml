@@ -24,6 +24,8 @@ serde_yaml = "0.9"
 log = "0.4"
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = { version = "2", features = ["tracing"] }
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
 blake3 = "1"
 dirs = "6"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

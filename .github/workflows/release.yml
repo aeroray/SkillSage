@@ -1,0 +1,98 @@
+name: Release
+
+# Push a SemVer tag (for example v0.1.0) to build and publish the desktop
+# installers. The same release also contains signed updater artifacts and
+# latest.json for in-app updates on Windows and macOS.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing SemVer tag to release, for example v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: "--config .github/tauri-release.conf.json --bundles nsis"
+          - platform: macos-latest
+            args: "--config .github/tauri-release.conf.json --target aarch64-apple-darwin --bundles app,dmg"
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Apple Silicon target
+        if: matrix.platform == 'macos-latest'
+        run: rustup target add aarch64-apple-darwin
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set release version
+        run: node scripts/set-release-version.mjs "${{ inputs.tag || github.ref_name }}"
+
+      - name: Configure updater endpoint
+        run: node scripts/prepare-release-config.mjs
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Optional macOS signing and notarization secrets. Without these,
+          # the workflow still creates unsigned artifacts for testing.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: "SkillSage ${{ inputs.tag || github.ref_name }}"
+          generateReleaseNotes: true
+          releaseBody: |
+            ## 下载
+
+            - **Windows**：NSIS 安装包，支持简体中文和 English。
+            - **macOS（Apple Silicon）**：DMG 安装包。
+            - 已安装用户可在应用内检查更新并自动安装。
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
