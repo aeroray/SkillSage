@@ -40,12 +40,12 @@ function ThemeSync() {
 
 function Navigation() {
   return (
-    <nav aria-label="主导航" className="mt-10 flex flex-col gap-1">
-      <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">工作区</p>
+    <nav aria-label="主导航" className="mt-12 flex flex-col gap-1">
+      <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">工作区</p>
       {navigation.map(({ icon: Icon, label, path }) => (
         <NavLink
           className={({ isActive }) => cn(
-            "group flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors",
+            "group flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
             isActive ? "bg-primary-soft text-primary" : "text-sidebar-foreground hover:bg-muted hover:text-foreground",
           )}
           key={path}
@@ -68,11 +68,11 @@ export function AppShell() {
     <>
       <ThemeSync />
       <div className="flex min-h-screen bg-background text-foreground">
-        <aside className="flex min-h-screen w-64 shrink-0 flex-col border-r border-border bg-sidebar p-4 text-sidebar-foreground">
+        <aside className="flex min-h-screen w-[228px] shrink-0 flex-col border-r border-border bg-sidebar px-5 py-6 text-sidebar-foreground">
           <div className="flex items-center gap-3 px-1">
             <img
               alt="SkillSage"
-              className="size-9 shrink-0 rounded-md object-cover shadow-sm"
+              className="size-9 shrink-0 rounded-md object-cover"
               src="/skillsage-logo.png"
             />
             <div className="min-w-0">
@@ -83,8 +83,8 @@ export function AppShell() {
 
           <Navigation />
 
-          <div className="mt-auto flex flex-col gap-4">
-            <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-3 shadow-sm">
+          <div className="mt-auto flex flex-col gap-5">
+            <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-3">
               <CheckCircle2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-success" />
               <div>
                 <p className="text-xs font-medium text-foreground">中央仓库已就绪</p>
@@ -92,7 +92,7 @@ export function AppShell() {
               </div>
             </div>
             <div className="flex items-center justify-between gap-2 px-1">
-              <span className="text-xs text-muted-foreground">外观</span>
+              <span className="text-xs font-medium text-muted-foreground">外观</span>
               <ThemeControl />
             </div>
           </div>
@@ -100,7 +100,7 @@ export function AppShell() {
 
         <main className="min-w-0 flex-1">
           <ScrollArea className="h-screen">
-            <div className="mx-auto w-full max-w-6xl px-5 py-6 md:px-8 md:py-8 lg:px-12 lg:py-10">
+            <div className="mx-auto w-full max-w-[1280px] px-8 py-8 lg:px-12 lg:py-10">
               <Suspense fallback={<PageLoadingState />}>
                 <Routes>
                   <Route element={<StorePage />} path="/store/*" />

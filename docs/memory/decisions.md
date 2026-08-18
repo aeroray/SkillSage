@@ -114,3 +114,8 @@ Reason: This reduces repeated store requests without persisting potentially stal
 
 Decision: The repository-root `skillsage-logo.png` is SkillSage's single Logo source; public assets, frontend branding, favicon, and Tauri icons are derived from it by `pnpm sync:branding`.
 Reason: Replacing one source file and rerunning one command keeps product documentation, UI, and desktop packaging consistent.
+
+## 2026-08-18 - Confirmed light and dark visual direction
+
+Decision: Preview 01 is the product light mode and preview 03 is the product dark mode; both modes share the same semantic Tailwind/shadcn tokens, with teal for active/status states and restrained borders and shadows.
+Reason: The desktop UI should feel like a quiet native utility in light mode and an OLED workbench in dark mode without duplicating page-specific themes.

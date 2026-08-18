@@ -7,13 +7,13 @@
 ---
 
 **Project:** SkillSage
-**Generated:** 2026-08-17 23:09:37
+**Generated:** 2026-08-18 00:00:00
 **Category:** Productivity Tool
-**Design Dials:** Variance 3/10 (Centered / Minimal) | Motion 3/10 (Subtle) | Density 4/10 (Standard)
+**Design Dials:** Variance 2/10 (Native / Minimal) | Motion 2/10 (Subtle) | Density 4/10 (Standard)
 
 ## Project Specification Overrides
 
-The attached project specification at `docs/specs/02-设计规范.md` is authoritative for implementation. Use Slate Blue (`#3B82F6` light / `#60A5FA` dark) as the primary, system fonts, CSS radius variables, 4px spacing increments, and only `shadow-sm` / `shadow-lg`; the generated recommendations below are secondary guidance.
+The attached project specifications remain authoritative for product behavior and desktop constraints. The confirmed visual direction is now: preview 01 as light mode and preview 03 as dark mode. Use system fonts, CSS radius variables, 4px spacing increments, semantic Tailwind tokens, and only `shadow-sm` / `shadow-lg`; the generated recommendations below are secondary guidance.
 
 ---
 
@@ -23,24 +23,24 @@ The attached project specification at `docs/specs/02-设计规范.md` is authori
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#3B82F6` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#60A5FA` | `--color-secondary` |
-| On Secondary | `#0F172A` | `--color-on-secondary` |
-| Accent/CTA | `#3B82F6` | `--color-accent` |
-| On Accent/CTA | `#FFFFFF` | `--color-on-accent` |
-| Background | `#F8FAFC` | `--color-background` |
-| Foreground | `#0F172A` | `--color-foreground` |
-| Card | `#FFFFFF` | `--color-card` |
-| Card Foreground | `#0F172A` | `--color-card-foreground` |
-| Muted | `#F1F5F9` | `--color-muted` |
-| Muted Foreground | `#64748B` | `--color-muted-foreground` |
-| Border | `#E2E8F0` | `--color-border` |
-| Destructive | `#DC2626` | `--color-destructive` |
+| Primary | `#0D9488` light / `#75E6D7` dark | `--app-color-primary` |
+| On Primary | `#FFFFFF` light / `#0B0D11` dark | `--color-on-primary` |
+| Secondary | `#EEF1F4` light / `#171D25` dark | `--app-color-secondary` |
+| On Secondary | `#27313C` light / `#E6ECEE` dark | `--color-on-secondary` |
+| Accent/CTA | Teal active states; white dark-mode primary buttons | `--app-color-accent` |
+| On Accent/CTA | `#FFFFFF` light / `#0B0D11` dark | `--color-on-accent` |
+| Background | `#F5F6F8` light / `#0B0D11` dark | `--app-color-background` |
+| Foreground | `#17202A` light / `#F1F5F6` dark | `--app-color-foreground` |
+| Card | `#FFFFFF` light / `#11161D` dark | `--app-color-card` |
+| Card Foreground | `#17202A` light / `#F1F5F6` dark | `--app-color-card-foreground` |
+| Muted | `#EEF1F4` light / `#171D25` dark | `--app-color-muted` |
+| Muted Foreground | `#718096` light / `#8B96A3` dark | `--app-color-muted-foreground` |
+| Border | `#E1E6EB` light / `#29313B` dark | `--app-color-border` |
+| Destructive | `#C2413D` light / `#F08078` dark | `--app-color-destructive` |
 | On Destructive | `#FFFFFF` | `--color-on-destructive` |
-| Ring | `#3B82F6` | `--color-ring` |
+| Ring | `#16A39A` light / `#75E6D7` dark | `--app-color-ring` |
 
-**Color Notes:** Slate Blue focus and action color, with neutral surfaces and semantic status colors.
+**Color Notes:** Light mode uses a near-white Swiss utility canvas; dark mode uses an OLED workbench canvas. Teal is reserved for active navigation, status, links, and focus, while dark-mode primary action buttons use the foreground color for a quiet high-contrast treatment.
 
 ### Typography
 
@@ -79,7 +79,7 @@ The attached project specification at `docs/specs/02-设计规范.md` is authori
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #3B82F6;
+  background: #0D9488;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -96,8 +96,8 @@ The attached project specification at `docs/specs/02-设计规范.md` is authori
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #3B82F6;
-  border: 1px solid #E2E8F0;
+  color: #0D9488;
+  border: 1px solid #E1E6EB;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -129,7 +129,7 @@ The attached project specification at `docs/specs/02-设计规范.md` is authori
 ```css
 .input {
   padding: 12px 16px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid #E1E6EB;
   border-radius: 8px;
   font-size: 16px;
   transition: border-color 200ms ease;
@@ -146,8 +146,8 @@ The attached project specification at `docs/specs/02-设计规范.md` is authori
 
 ```css
 .modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
 }
 
 .modal {
@@ -225,6 +225,6 @@ Before delivering any UI code, verify:
 - [ ] Light mode: text contrast 4.5:1 minimum
 - [ ] Focus states visible for keyboard navigation
 - [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
+- [ ] Desktop baseline: minimum 1200×800; resizable and maximizable
 - [ ] No content hidden behind fixed navbars
-- [ ] No horizontal scroll on mobile
+- [ ] No mobile-specific layout branch is required
