@@ -11,7 +11,7 @@ function timestamp(value: string) {
 
 export function sourceLabel(source: string) {
   if (source.startsWith("local://")) return "本地导入";
-  if (source.startsWith("builtin://")) return "内置 fixture";
+  if (source.startsWith("builtin://")) return "内置来源";
   if (source.includes("skills.sh")) return "skills.sh";
   return source.replace(/^https?:\/\//, "").split("/").slice(0, 2).join("/");
 }

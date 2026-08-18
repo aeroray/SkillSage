@@ -5,6 +5,7 @@ use tauri::State;
 
 use crate::core::lifecycle::install::{self, InstallResult};
 use crate::core::lifecycle::remote;
+use crate::core::paths;
 use crate::core::repo::{layout::RepoLayout, lockfile};
 use crate::core::store::models::SkillDetail;
 use crate::core::sync::{export, import};
@@ -40,7 +41,7 @@ pub struct SyncImportOptions {
 pub async fn export_package() -> Result<String, SkillsageError> {
     tokio::task::spawn_blocking(|| {
         let layout = RepoLayout::from_user_home()?;
-        export::export_at(&layout).map(|path| path.display().to_string())
+        export::export_at(&layout).map(|path| paths::display(&path))
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))?

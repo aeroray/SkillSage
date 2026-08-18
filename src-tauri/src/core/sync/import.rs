@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+use crate::core::paths;
 use crate::core::repo::{layout::RepoLayout, lockfile};
 use crate::core::skill::parser::is_valid_skill_name;
 use crate::core::tools::detection::detect_tools;
@@ -92,7 +93,7 @@ pub fn preview_at(layout: &RepoLayout, path: &str) -> Result<SyncImportPreview, 
         })
         .collect();
     Ok(SyncImportPreview {
-        path: PathBuf::from(path).display().to_string(),
+        path: paths::display(&PathBuf::from(path)),
         exported_at: package.exported_at,
         skills,
     })

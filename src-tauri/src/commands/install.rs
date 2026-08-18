@@ -19,43 +19,6 @@ pub struct SkillProgress {
 }
 
 #[tauri::command]
-pub async fn install_test_skill(
-    agents: Vec<String>,
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<InstallResult, SkillsageError> {
-    let _write_guard = state.write_lock.lock().await;
-    emit_progress(
-        &app,
-        install::TEST_SKILL_ID,
-        "downloading",
-        "Preparing the Phase 2 test skill",
-    )?;
-    emit_progress(
-        &app,
-        install::TEST_SKILL_ID,
-        "parsing",
-        "Parsing and validating SKILL.md",
-    )?;
-    emit_progress(
-        &app,
-        install::TEST_SKILL_ID,
-        "distributing",
-        "Creating tool distribution links",
-    )?;
-    let result = tokio::task::spawn_blocking(move || install::install_test_skill(agents))
-        .await
-        .map_err(|error| SkillsageError::Task(error.to_string()))??;
-    emit_progress(
-        &app,
-        install::TEST_SKILL_ID,
-        "done",
-        "Skill stored and distributed",
-    )?;
-    Ok(result)
-}
-
-#[tauri::command]
 pub async fn install_skill(
     skill_id: String,
     agents: Vec<String>,

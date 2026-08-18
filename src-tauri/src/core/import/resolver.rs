@@ -5,6 +5,7 @@ use serde::Serialize;
 
 use crate::core::distribute::{conflict as distribution_conflict, link, tracker::LinkTracker};
 use crate::core::lifecycle::install::{uninstall_skill_at, InstallResult};
+use crate::core::paths;
 use crate::core::repo::{atomic, layout::RepoLayout, lockfile};
 use crate::core::skill::parser::{is_valid_skill_name, read_skill_md};
 use crate::core::tools::registry::find_tool;
@@ -37,9 +38,9 @@ pub fn preview_at(layout: &RepoLayout, path: &str) -> Result<ImportPreview, Skil
         .values()
         .find(|record| record.name == parsed.manifest.name);
     Ok(ImportPreview {
-        source_path: source_path.display().to_string(),
+        source_path: paths::display(&source_path),
         source_kind: resolved.kind.to_string(),
-        skill_root: resolved.root.display().to_string(),
+        skill_root: paths::display(&resolved.root),
         name: parsed.manifest.name,
         description: parsed.manifest.description,
         file_count: files.len(),
@@ -253,10 +254,10 @@ pub fn import_at_with_conflicts(
         current_version: "local".into(),
         current_hash,
         distributed_to: actual_agents,
-        central_path: destination.display().to_string(),
+        central_path: paths::display(&destination),
         link_paths: link_paths
             .into_iter()
-            .map(|path| path.display().to_string())
+            .map(|path| paths::display(&path))
             .collect(),
     })
 }

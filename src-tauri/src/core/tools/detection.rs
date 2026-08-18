@@ -3,6 +3,7 @@ use serde::Serialize;
 use crate::error::SkillsageError;
 
 use super::registry::TOOLS;
+use crate::core::paths;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,7 +28,7 @@ pub fn detect_tools() -> Result<DetectedTools, SkillsageError> {
             id: definition.id.to_string(),
             name: definition.name.to_string(),
             detected: skills_path.is_dir(),
-            skills_path: skills_path.display().to_string(),
+            skills_path: paths::display(&skills_path),
         });
     }
     Ok(DetectedTools { tools })

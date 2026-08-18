@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::core::distribute::tracker::LinkTracker;
+use crate::core::distribute::{link, tracker::LinkTracker};
 use crate::core::import::source as import_source;
 use crate::core::repo::{layout::RepoLayout, lockfile};
 use crate::core::skill::parser::read_skill_md;
@@ -15,6 +15,8 @@ pub struct MigrateSelection {
     pub source_path: String,
     #[serde(default)]
     pub agents: Vec<String>,
+    #[serde(default)]
+    pub manual: bool,
     pub target_name: Option<String>,
 }
 
@@ -55,7 +57,7 @@ pub fn execute_at(
             });
             continue;
         };
-        if !item.can_takeover {
+        if !(item.can_takeover || selection.manual && item.can_manual_handle) {
             result.skipped.push(item.name.clone());
             continue;
         }
@@ -128,7 +130,16 @@ fn migrate_item(
     }
     let current_hash = lockfile::content_hash(&source)?;
     layout.ensure_roots()?;
+    let mut removed_links = Vec::new();
+    for link_path in &item.link_paths {
+        if let Err(error) = link::remove_link(link_path) {
+            restore_links(&source, &removed_links);
+            return Err(error);
+        }
+        removed_links.push(link_path.clone());
+    }
     if let Err(error) = std::fs::rename(&source, &destination) {
+        restore_links(&source, &removed_links);
         return Err(SkillsageError::MigrateFailed(format!(
             "无法移动 {}: {}",
             source.display(),
@@ -142,6 +153,7 @@ fn migrate_item(
         if let Err(error) = tracker.create(&destination, tool.skills_path()?.join(&target_name)) {
             tracker.rollback();
             let _ = std::fs::rename(&destination, &source);
+            restore_links(&source, &removed_links);
             return Err(error);
         }
     }
@@ -200,7 +212,37 @@ fn migrate_item(
     if let Err(error) = lockfile::save(layout, &lock) {
         tracker.rollback();
         let _ = std::fs::rename(&destination, &source);
+        restore_links(&source, &removed_links);
         return Err(error);
     }
     Ok(target_name)
+}
+
+pub fn remove_unknown_link_at(
+    layout: &RepoLayout,
+    source_path: &str,
+) -> Result<(), SkillsageError> {
+    let scan = scan(layout)?;
+    let item = scan
+        .items
+        .iter()
+        .find(|item| item.source_path == source_path)
+        .ok_or_else(|| {
+            SkillsageError::MigrateFailed("扫描结果中不存在该链接，可能已被移除".into())
+        })?;
+    if !item.can_remove {
+        return Err(SkillsageError::MigrateFailed(
+            "只有无效的未知来源链接可以直接移除".into(),
+        ));
+    }
+    for link_path in &item.link_paths {
+        link::remove_link(link_path)?;
+    }
+    Ok(())
+}
+
+fn restore_links(source: &std::path::Path, paths: &[std::path::PathBuf]) {
+    for path in paths {
+        let _ = link::create_link(source, path);
+    }
 }

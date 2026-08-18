@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import { CheckCircle2, Library, Settings, Sparkles, Store } from "lucide-react";
+import { CheckCircle2, FolderSync, Library, Settings, Sparkles, Store } from "lucide-react";
 import { ThemeControl } from "../components/common/ThemeControl";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { useThemeStore } from "../features/theme/store";
@@ -10,10 +10,12 @@ import { cn } from "../lib/utils";
 const SettingsPage = lazy(() => import("../pages/settings/SettingsPage").then(({ SettingsPage: page }) => ({ default: page })));
 const SkillsPage = lazy(() => import("../pages/skills/SkillsPage").then(({ SkillsPage: page }) => ({ default: page })));
 const StorePage = lazy(() => import("../pages/store/StorePage").then(({ StorePage: page }) => ({ default: page })));
+const MigrationPage = lazy(() => import("../pages/migrate/MigrationPage").then(({ MigrationPage: page }) => ({ default: page })));
 
 const navigation = [
-  { icon: Store, label: "技能商店", path: "/store" },
   { icon: Library, label: "我的技能", path: "/skills" },
+  { icon: Store, label: "技能商店", path: "/store" },
+  { icon: FolderSync, label: "迁移存量", path: "/migrate" },
   { icon: Settings, label: "设置", path: "/settings" },
 ];
 
@@ -39,7 +41,7 @@ function ThemeSync() {
 function Navigation() {
   return (
     <nav aria-label="主导航" className="mt-10 flex flex-col gap-1">
-      <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workspace</p>
+      <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">工作区</p>
       {navigation.map(({ icon: Icon, label, path }) => (
         <NavLink
           className={({ isActive }) => cn(
@@ -83,8 +85,8 @@ export function AppShell() {
             <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-3 shadow-sm">
               <CheckCircle2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-success" />
               <div>
-                <p className="text-xs font-medium text-foreground">基础层已就绪</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">Phase 1 · foundation</p>
+                <p className="text-xs font-medium text-foreground">中央仓库已就绪</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">技能安装、迁移与分发统一管理</p>
               </div>
             </div>
             <div className="flex items-center justify-between gap-2 px-1">
@@ -101,8 +103,9 @@ export function AppShell() {
                 <Routes>
                   <Route element={<StorePage />} path="/store/*" />
                   <Route element={<SkillsPage />} path="/skills" />
+                  <Route element={<MigrationPage />} path="/migrate" />
                   <Route element={<SettingsPage />} path="/settings" />
-                  <Route element={<Navigate replace to="/store" />} path="*" />
+                  <Route element={<Navigate replace to="/skills" />} path="*" />
                 </Routes>
               </Suspense>
             </div>

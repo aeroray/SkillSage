@@ -7,6 +7,7 @@ use crate::core::tools::registry::find_tool;
 use crate::core::{
     distribute::link,
     import::source as import_source,
+    paths,
     repo::{atomic, layout::RepoLayout, lockfile},
 };
 use crate::error::SkillsageError;
@@ -88,7 +89,7 @@ pub fn find_for_skill(
         conflicts.push(DistributionConflict {
             tool_id: tool.id.to_string(),
             tool_name: tool.name.to_string(),
-            path: path.display().to_string(),
+            path: paths::display(&path),
             kind: if is_link_like(&path) {
                 "link"
             } else {

@@ -24,8 +24,8 @@ Reason: Updates become immediate and permissions remain scoped to explicitly sel
 
 ## Phase 1 shell
 
-Decision: The initial UI exposes `/store`, `/skills`, and `/settings` behind a persistent left navigation rail, with `/` redirecting to `/store`.
-Reason: This matches the product's core information architecture while leaving domain features for later phases.
+Decision: The shipped UI exposes `/skills`, `/store`, `/migrate`, and `/settings` behind a persistent left navigation rail, with `/` redirecting to `/skills`.
+Reason: Installed-skill management is the primary desktop workspace, while migration is an explicit opt-in scan rather than a hidden management-page dialog.
 
 ## Supported tools
 
@@ -39,8 +39,8 @@ Reason: Windows can lock Rust build executables under `src-tauri/target`, causin
 
 ## Phase 2 verification fixture
 
-Decision: Phase 2 validates the install pipeline with an offline built-in skill fixture; the GitHub tree/download client is implemented for later live sources.
-Reason: Local acceptance remains deterministic while preserving the same parse, hash, atomic write, distribute, and lock boundaries used by remote installs.
+Decision: The offline built-in skill fixture remains available only to Rust unit tests; it is not exposed as a user-facing install path.
+Reason: Local acceptance stays deterministic without carrying intermediate validation controls into the finished desktop product.
 
 ## Windows link invocation
 
@@ -85,8 +85,8 @@ Reason: Secrets do not enter the project settings file, while proxy changes take
 Decision: Sync packages contain only remote lock metadata and never skill contents or local records; import previews let users select skills and per-skill detected-tool targets before the standard GitHub install pipeline runs.
 Reason: Export files remain portable and small while a new device reconstructs content from the recorded remote commit.
 
-Decision: Migration scans registered tool roots and `~/.agents/skills/`, skips links into `~/.skillsage/`, and adopts valid external entities into central local or remote records; unknown links stay untouched.
-Reason: The scanner preserves the single-source-of-truth and avoids silently deleting entries whose ownership cannot be established.
+Decision: Migration scans registered tool roots and `~/.agents/skills/`, skips links into `~/.skillsage/`, adopts confirmed entities, offers manual takeover for valid unknown links, and allows removal only for invalid links.
+Reason: The scanner preserves the single-source-of-truth while giving users an explicit recovery path for unmanaged or broken entries.
 
 Decision: External distribution conflicts require an explicit skip, takeover, or cancel action; takeover preserves the old entity under a renamed local record before the requested skill occupies the original tool path.
 Reason: Conflict resolution must be reversible enough to avoid silently destroying pre-existing skills.

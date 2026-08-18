@@ -1,10 +1,6 @@
 import { invokeCommand } from "../../lib/tauri";
 import type { DistributionActions, DistributionConflict, InstallResult, InstalledSkillsList, UpdateCheckList, InstalledSkill } from "./types";
 
-export function installTestSkill(agents: string[]) {
-  return invokeCommand<InstallResult>("install_test_skill", { agents });
-}
-
 export function installSkill(skillId: string, agents: string[], conflicts?: DistributionActions) {
   return invokeCommand<InstallResult>("install_skill", { skillId, agents, conflicts });
 }

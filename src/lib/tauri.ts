@@ -180,18 +180,52 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
           name: "legacy-research",
           description: "用于验证存量迁移向导的示例技能。",
           sourcePath: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
+          displayPath: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
           location: "public",
           kind: "external-directory",
           classification: "local",
           toolIds: ["claude-code", "cursor"],
           canTakeover: true,
+          canManualHandle: false,
+          canRemove: false,
           warning: "接管后将由 SkillSage 管理此技能。",
+        },
+        {
+          id: "C:\\Users\\PC\\.agents\\skills\\code-review-pro",
+          name: "code-review-pro",
+          description: "来源无法从现有记录中确认的技能链接。",
+          sourcePath: "C:\\Users\\PC\\.agents\\skills\\code-review-pro",
+          displayPath: "C:\\Users\\PC\\.agents\\skills\\code-review-pro",
+          location: "tool",
+          kind: "unknown-link",
+          classification: "unknown",
+          toolIds: ["claude-code"],
+          canTakeover: false,
+          canManualHandle: true,
+          canRemove: false,
+          warning: "来源未知，请手动选择工具后接管。",
+        },
+        {
+          id: "C:\\Users\\PC\\.agents\\skills\\missing-skill",
+          name: "missing-skill",
+          description: "",
+          sourcePath: "C:\\Users\\PC\\.agents\\skills\\missing-skill",
+          displayPath: "C:\\Users\\PC\\.agents\\skills\\missing-skill",
+          location: "public",
+          kind: "unknown-link",
+          classification: "unknown",
+          toolIds: [],
+          canTakeover: false,
+          canManualHandle: false,
+          canRemove: true,
+          warning: "链接目标不存在或不是有效技能，可以直接移除。",
         },
       ],
       scannedRoots: ["C:\\Users\\PC\\.agents\\skills"],
     } as T;
   }
   if (command === "execute_migrate") return { migrated: ["legacy-research"], skipped: [], failed: [] } as T;
+  if (command === "remove_migrate_link") return undefined as T;
   if (command === "check_distribution_conflicts") return [] as T;
   if (command === "check_updates") return { updates: [] } as T;
   if (command === "cleanup_app") return { mode: args?.mode ?? "all", removedLinks: 2, centralRemoved: args?.mode !== "keep-skills", managementDataRemoved: true } as T;

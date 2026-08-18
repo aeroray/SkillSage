@@ -24,7 +24,7 @@ export function Dialog({ children, description, onClose, open, title }: DialogPr
           <DialogTitle className="text-lg font-semibold tracking-tight">{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
-        <ScrollArea className="min-h-0 max-h-[calc(100vh-7rem)]" type="always">
+        <ScrollArea className="min-h-0 max-h-[calc(100vh-7rem)]" type="auto">
           <div className="px-6 py-6">{children}</div>
         </ScrollArea>
       </DialogContent>

@@ -8,3 +8,7 @@ export function scanMigrate() {
 export function executeMigrate(items: MigrateSelection[]) {
   return invokeCommand<MigrateResult>("execute_migrate", { items });
 }
+
+export function removeMigrateLink(sourcePath: string) {
+  return invokeCommand<void>("remove_migrate_link", { sourcePath });
+}

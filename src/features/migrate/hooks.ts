@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import { executeMigrate, scanMigrate } from "./api";
+import { executeMigrate, removeMigrateLink, scanMigrate } from "./api";
 import type { MigrateResult, MigrateScanResult, MigrateSelection } from "./types";
 import { normalizeTauriError } from "../../lib/tauri";
 
@@ -9,6 +9,7 @@ export function useMigration() {
   const [error, setError] = useState<string>();
   const [scanning, setScanning] = useState(false);
   const [executing, setExecuting] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   const runScan = useCallback(async () => {
     setScanning(true);
@@ -38,5 +39,20 @@ export function useMigration() {
     }
   }, []);
 
-  return { error, execute, executing, runScan, scan, scanning, setScan };
+  const removeLink = useCallback(async (sourcePath: string) => {
+    setRemoving(true);
+    setError(undefined);
+    try {
+      await removeMigrateLink(sourcePath);
+      await runScan();
+      return true;
+    } catch (reason) {
+      setError(normalizeTauriError(reason));
+      return false;
+    } finally {
+      setRemoving(false);
+    }
+  }, [runScan]);
+
+  return { error, execute, executing, removeLink, removing, runScan, scan, scanning, setScan };
 }

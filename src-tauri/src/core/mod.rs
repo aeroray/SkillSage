@@ -5,6 +5,7 @@ pub mod github;
 pub mod import;
 pub mod lifecycle;
 pub mod migrate;
+pub mod paths;
 pub mod repo;
 pub mod settings;
 pub mod skill;

@@ -5,14 +5,13 @@ import {
   checkUpdates,
   distributeSkills,
   installSkill,
-  installTestSkill,
   refreshInstalled,
   rollbackSkill,
   uninstallSkill,
   updateSkill,
 } from "./api";
 import { checkDistributionConflicts } from "./api";
-import type { DistributionActions, DistributionConflict, InstallResult, InstalledSkill, SkillProgress, UpdateInfo } from "./types";
+import type { DistributionActions, DistributionConflict, InstalledSkill, SkillProgress, UpdateInfo } from "./types";
 import { normalizeTauriError } from "../../lib/tauri";
 
 export function useInstalledSkills() {
@@ -40,50 +39,6 @@ export function useInstalledSkills() {
   }, [refresh]);
 
   return { error, loading, refresh, setSkills, skills };
-}
-
-export function usePhase2Install(onCompleted: () => void) {
-  const [installing, setInstalling] = useState(false);
-  const [stage, setStage] = useState("idle");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState<string>();
-
-  const install = useCallback(
-    async (agents: string[]): Promise<InstallResult | undefined> => {
-      setInstalling(true);
-      setStage("downloading");
-      setMessage("准备安装测试技能…");
-      setError(undefined);
-      let unlisten: (() => void) | undefined;
-
-      try {
-        try {
-          unlisten = await listen<SkillProgress>("skill-progress", (event) => {
-            setStage(event.payload.stage);
-            setMessage(event.payload.message);
-          });
-        } catch {
-          // Browser preview does not expose Tauri events; invoke will report the real error.
-        }
-        const result = await installTestSkill(agents);
-        setStage("done");
-        setMessage("已完成落库、哈希和分发");
-        onCompleted();
-        return result;
-      } catch (reason) {
-        setStage("failed");
-        setMessage("");
-        setError(normalizeTauriError(reason));
-        return undefined;
-      } finally {
-        unlisten?.();
-        setInstalling(false);
-      }
-    },
-    [onCompleted],
-  );
-
-  return { error, install, installing, message, stage };
 }
 
 export function useSkillInstall(onCompleted: () => void) {

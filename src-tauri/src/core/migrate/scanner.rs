@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+use crate::core::paths;
 use crate::core::repo::layout::RepoLayout;
 use crate::core::skill::parser::read_skill_md;
 use crate::core::tools::registry::TOOLS;
@@ -17,6 +18,7 @@ pub struct MigrateItem {
     pub name: String,
     pub description: String,
     pub source_path: String,
+    pub display_path: String,
     pub location: String,
     pub kind: String,
     pub classification: String,
@@ -27,7 +29,11 @@ pub struct MigrateItem {
     pub remote_version: Option<String>,
     pub remote_skill_path: Option<String>,
     pub can_takeover: bool,
+    pub can_manual_handle: bool,
+    pub can_remove: bool,
     pub warning: Option<String>,
+    #[serde(skip)]
+    pub link_paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -51,10 +57,10 @@ pub fn scan(layout: &RepoLayout) -> Result<MigrateScanResult, SkillsageError> {
     let mut candidates = Vec::new();
     for tool in TOOLS {
         let root = tool.skills_path()?;
-        roots.push(root.display().to_string());
+        roots.push(paths::display(&root));
         collect_root(&root, "tool", Some(tool.id), &mut candidates)?;
     }
-    roots.push(public_root.display().to_string());
+    roots.push(paths::display(&public_root));
     collect_root(&public_root, "public", None, &mut candidates)?;
     build_result(layout, &home, &public_root, roots, candidates)
 }
@@ -86,6 +92,7 @@ fn build_result(
         };
         let skill_md = source_path.join("SKILL.md");
         let parsed = read_skill_md(&skill_md);
+        let parsed_ok = parsed.is_ok();
         let (name, description) = match parsed {
             Ok(parsed) => (parsed.manifest.name, parsed.manifest.description),
             Err(_error) => {
@@ -113,11 +120,13 @@ fn build_result(
             "local"
         };
         let key = source_path.to_string_lossy().to_string();
+        let display_path = paths::display(&source_path);
         let item = items.entry(key.clone()).or_insert_with(|| MigrateItem {
             id: key.clone(),
             name: name.clone(),
             description: description.clone(),
             source_path: key.clone(),
+            display_path: display_path.clone(),
             location: candidate.location.clone(),
             kind: resolved_kind.to_string(),
             classification: classification.to_string(),
@@ -127,15 +136,23 @@ fn build_result(
             remote_source: legacy.as_ref().map(|source| source.source.clone()),
             remote_version: legacy.as_ref().map(|source| source.version.clone()),
             remote_skill_path: legacy.as_ref().and_then(|source| source.skill_path.clone()),
-            can_takeover: resolved_kind != "unknown-link" && !description.is_empty(),
-            warning: if resolved_kind == "unknown-link" {
-                Some("未知来源链接不会自动接管，可手动处理。".into())
+            can_takeover: resolved_kind != "unknown-link" && parsed_ok,
+            can_manual_handle: resolved_kind == "unknown-link" && parsed_ok,
+            can_remove: link_like && !parsed_ok,
+            warning: if link_like && !parsed_ok {
+                Some("链接目标不存在或不是有效技能，可以直接移除。".into())
+            } else if resolved_kind == "unknown-link" {
+                Some("来源未知，请手动选择工具后接管。".into())
             } else if classification == "remote" {
                 Some("接管后将由 SkillSage 管理此技能。".into())
             } else {
                 None
             },
+            link_paths: Vec::new(),
         });
+        if link_like && !item.link_paths.iter().any(|path| path == &candidate.path) {
+            item.link_paths.push(candidate.path.clone());
+        }
         if let Some(tool_id) = candidate.tool_id {
             if !item.tool_ids.iter().any(|id| id == &tool_id) {
                 item.tool_ids.push(tool_id);

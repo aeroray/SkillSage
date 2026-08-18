@@ -4,17 +4,23 @@ use std::path::{Component, Path, PathBuf};
 use serde::Serialize;
 
 use crate::core::distribute::{conflict, link, tracker::LinkTracker};
+use crate::core::paths;
 use crate::core::repo::{atomic, layout::RepoLayout, lockfile};
 use crate::core::skill::parser::read_skill_md;
 use crate::core::store::models::SkillDetail;
 use crate::core::tools::registry::find_tool;
 use crate::error::SkillsageError;
 
+#[cfg(test)]
 pub const TEST_SKILL_ID: &str = "skillsage/skillsage-phase2-test";
+#[cfg(test)]
 const TEST_SKILL_OWNER: &str = "skillsage";
+#[cfg(test)]
 const TEST_SKILL_REPO: &str = "skillsage-phase2-test";
+#[cfg(test)]
 const TEST_SKILL_COMMIT: &str = "phase2-fixture";
 
+#[cfg(test)]
 const TEST_SKILL_MD: &str = r#"---
 name: skillsage-phase2-test
 description: A built-in verification skill for the SkillSage install pipeline.
@@ -229,19 +235,15 @@ pub fn install_skill_from_store_at_with_conflicts(
         current_version,
         current_hash,
         distributed_to: actual_agents,
-        central_path: destination.display().to_string(),
+        central_path: paths::display(&destination),
         link_paths: link_paths
             .into_iter()
-            .map(|path| path.display().to_string())
+            .map(|path| paths::display(&path))
             .collect(),
     })
 }
 
-pub fn install_test_skill(agents: Vec<String>) -> Result<InstallResult, SkillsageError> {
-    let layout = RepoLayout::from_user_home()?;
-    install_test_skill_at(&layout, agents)
-}
-
+#[cfg(test)]
 pub fn install_test_skill_at(
     layout: &RepoLayout,
     agents: Vec<String>,
@@ -333,10 +335,10 @@ pub fn install_test_skill_at(
         current_version: TEST_SKILL_COMMIT.to_string(),
         current_hash,
         distributed_to: agents,
-        central_path: destination.display().to_string(),
+        central_path: paths::display(&destination),
         link_paths: link_paths
             .into_iter()
-            .map(|path| path.display().to_string())
+            .map(|path| paths::display(&path))
             .collect(),
     })
 }

@@ -46,7 +46,7 @@ export function SettingsPage() {
 
   return (
     <div>
-      <PageHeader description="管理外观、GitHub 凭据和网络连接。Token 只保存在本机系统凭据管理器中。" eyebrow="03 / SETTINGS" title="设置" />
+      <PageHeader description="管理外观、GitHub 凭据、网络连接和应用数据。Token 只保存在本机系统凭据管理器中。" eyebrow="04 / SETTINGS" title="设置" />
       <ErrorBanner className="mb-6" error={error} onRetry={() => void refresh()} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
@@ -86,7 +86,7 @@ export function SettingsPage() {
 
       <Card className="mt-6">
         <CardHeader className="flex flex-row items-start gap-4"><div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><Info aria-hidden="true" className="h-5 w-5" /></div><div><CardTitle>关于 SkillSage</CardTitle><CardDescription className="mt-1">桌面端 AI Agent 技能管理器，当前版本已支持三种安装来源。</CardDescription></div></CardHeader>
-        <CardContent><p className="text-xs text-muted-foreground">v0.1.0 · Phase 5 settings, import & GitHub URL</p></CardContent>
+        <CardContent><p className="text-xs text-muted-foreground">v0.1.0 · Windows / macOS 桌面端</p></CardContent>
       </Card>
 
       <Card className="mt-6 border-destructive/30">

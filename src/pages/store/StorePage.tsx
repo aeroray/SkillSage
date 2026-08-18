@@ -33,6 +33,7 @@ import { groupByRepository } from "../../features/store/selectors";
 import { useLeaderboard, useSkillDetail, useSkillSearch } from "../../features/store/hooks";
 import type { DistributionConflict } from "../../features/skills/types";
 import type { LeaderboardRange, SkillDetail, SkillGroup } from "../../features/store/types";
+import { displayPath } from "../../lib/paths";
 
 const leaderboardTabs: Array<{ label: string; value: LeaderboardRange }> = [
   { label: "热门", value: "all-time" },
@@ -214,7 +215,7 @@ export function StorePage() {
 
   return (
     <div>
-      <PageHeader actions={<><Button onClick={() => setGithubUrlOpen(true)} variant="outline"><GitBranch data-icon="inline-start" />GitHub URL</Button><Button onClick={() => navigate("/skills")} variant="outline">我的技能<ArrowRight data-icon="inline-end" /></Button></>} description="从 skills.sh 发现、搜索并安装面向 AI Agent 的能力模块。" eyebrow="01 / STORE" title="技能商店" />
+      <PageHeader actions={<><Button onClick={() => setGithubUrlOpen(true)} variant="outline"><GitBranch data-icon="inline-start" />GitHub URL</Button><Button onClick={() => navigate("/skills")} variant="outline">我的技能<ArrowRight data-icon="inline-end" /></Button></>} description="从 skills.sh 发现、搜索并安装面向 AI Agent 的能力模块。" eyebrow="02 / STORE" title="技能商店" />
 
       <section aria-labelledby="store-search-title" className="rounded-lg border border-border bg-card p-5 shadow-sm">
         <div className="flex items-center justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">DISCOVER</p><h2 className="mt-2 text-base font-semibold text-foreground" id="store-search-title">找到下一项能力</h2></div><GitBranch aria-hidden="true" className="h-5 w-5 text-muted-foreground" /></div>
@@ -234,7 +235,7 @@ export function StorePage() {
         {toolsError ? <ErrorBanner className="mt-4" error={toolsError} onRetry={() => void refreshTools()} /> : null}
         {selectedSkillId && !toolsLoading ? <Button className="mt-4" onClick={() => void refreshTools()} size="sm" variant="ghost"><Star data-icon="inline-start" />刷新工具检测</Button> : null}
       </Dialog>
-      <Dialog description="目标工具目录中已有非 SkillSage 条目。" onClose={() => setInstallConflicts(undefined)} open={Boolean(installConflicts)} title="处理安装冲突"><div className="flex flex-col gap-4"><Alert variant="destructive"><CircleAlert /><AlertDescription>{installConflicts?.map((item) => `${item.toolName}: ${item.path}`).join("；")}</AlertDescription></Alert><p className="text-sm leading-6 text-muted-foreground">跳过会忽略冲突工具；接管会先把原实体迁入中央仓库本地区并改名保存；取消则返回安装流程。</p><div className="flex flex-wrap justify-end gap-2"><Button onClick={() => setInstallConflicts(undefined)} variant="ghost">取消</Button><Button disabled={installState.installing} onClick={() => void installSkippingConflicts()} variant="outline">跳过冲突项</Button><Button disabled={installState.installing} onClick={() => void installTakingOverConflicts()}>接管并安装</Button></div></div></Dialog>
+      <Dialog description="目标工具目录中已有非 SkillSage 条目。" onClose={() => setInstallConflicts(undefined)} open={Boolean(installConflicts)} title="处理安装冲突"><div className="flex flex-col gap-4"><Alert variant="destructive"><CircleAlert /><AlertDescription>{installConflicts?.map((item) => `${item.toolName}: ${displayPath(item.path)}`).join("；")}</AlertDescription></Alert><p className="text-sm leading-6 text-muted-foreground">跳过会忽略冲突工具；接管会先把原实体迁入中央仓库本地区并改名保存；取消则返回安装流程。</p><div className="flex flex-wrap justify-end gap-2"><Button onClick={() => setInstallConflicts(undefined)} variant="ghost">取消</Button><Button disabled={installState.installing} onClick={() => void installSkippingConflicts()} variant="outline">跳过冲突项</Button><Button disabled={installState.installing} onClick={() => void installTakingOverConflicts()}>接管并安装</Button></div></div></Dialog>
       <GithubUrlInstallDialog onClose={() => setGithubUrlOpen(false)} onCompleted={() => undefined} onOpenSettings={() => navigate("/settings")} open={githubUrlOpen} tools={tools} />
     </div>
   );

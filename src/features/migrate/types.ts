@@ -3,6 +3,7 @@ export type MigrateItem = {
   name: string;
   description: string;
   sourcePath: string;
+  displayPath: string;
   location: string;
   kind: string;
   classification: string;
@@ -13,6 +14,8 @@ export type MigrateItem = {
   remoteVersion?: string;
   remoteSkillPath?: string;
   canTakeover: boolean;
+  canManualHandle: boolean;
+  canRemove: boolean;
   warning?: string;
 };
 
@@ -24,6 +27,7 @@ export type MigrateScanResult = {
 export type MigrateSelection = {
   sourcePath: string;
   agents: string[];
+  manual?: boolean;
   targetName?: string;
 };
 
