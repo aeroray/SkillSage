@@ -5,61 +5,61 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SkillsageError {
-    #[error("网络请求失败，请检查网络连接或代理配置: {0}")]
+    #[error("网络请求失败，请检查网络或代理：{0}")]
     Network(String),
     #[error("GitHub 请求失败（HTTP {0}）")]
     GithubApi(u16),
     #[error("skills.sh 请求失败（HTTP {0}）")]
     StoreApi(u16),
-    #[error("skills.sh 返回的数据无法识别: {0}")]
+    #[error("skills.sh 返回的数据无法识别：{0}")]
     InvalidStoreData(String),
-    #[error("GitHub API 需要认证，请前往设置配置 GitHub Token")]
+    #[error("GitHub API 需要 Token，请在设置中配置")]
     GithubAuthMissing,
-    #[error("GitHub Token 无效或已过期，请前往设置更新 Token")]
+    #[error("GitHub Token 无效或已过期，请在设置中更新")]
     GithubAuthInvalid,
-    #[error("请求受到服务端限流，请稍后重试；GitHub 请求可前往设置配置 Token")]
+    #[error("请求过于频繁，请稍后重试；GitHub 请求可在设置中配置 Token")]
     RateLimited,
-    #[error("skills.sh 暂时不可达，请检查网络或代理配置后重试")]
+    #[error("暂时无法连接 skills.sh，请检查网络或代理后重试")]
     StoreUnavailable,
     #[error("GitHub 仓库不存在，或当前 Token 无权访问")]
     RepositoryNotFound,
-    #[error("GitHub 地址无效: {0}")]
+    #[error("GitHub 地址无效：{0}")]
     InvalidGithubUrl(String),
-    #[error("无效的 SKILL.md: {0}")]
+    #[error("SKILL.md 无效：{0}")]
     InvalidSkill(String),
-    #[error("技能名称冲突: {0}")]
+    #[error("技能名称已存在：{0}")]
     NameConflict(String),
-    #[error("设置保存失败: {0}")]
+    #[error("保存设置失败：{0}")]
     Settings(String),
-    #[error("本地导入失败: {0}")]
+    #[error("导入失败：{0}")]
     ImportFailed(String),
-    #[error("同步清单无效: {0}")]
+    #[error("同步数据文件无效：{0}")]
     SyncInvalid(String),
-    #[error("同步导出失败: {0}")]
+    #[error("导出失败：{0}")]
     ExportFailed(String),
-    #[error("存量迁移失败: {0}")]
+    #[error("迁移失败：{0}")]
     MigrateFailed(String),
-    #[error("分发冲突: {0}")]
+    #[error("分发冲突：{0}")]
     DistributionConflict(String),
-    #[error("技能已安装: {0}")]
+    #[error("技能已安装：{0}")]
     AlreadyInstalled(String),
-    #[error("技能未安装: {0}")]
+    #[error("技能未安装：{0}")]
     NotInstalled(String),
-    #[error("工具不存在: {0}")]
+    #[error("找不到工具：{0}")]
     UnknownTool(String),
-    #[error("路径不存在: {0}")]
+    #[error("路径不存在：{0}")]
     PathNotFound(PathBuf),
     #[error("没有可用的用户目录")]
     HomeDirectoryUnavailable,
-    #[error("文件系统操作失败: {0}")]
+    #[error("文件操作失败：{0}")]
     Io(String),
-    #[error("分发链接创建失败: {path}: {reason}")]
+    #[error("无法创建分发链接：{path}（{reason}）")]
     LinkCreation { path: PathBuf, reason: String },
-    #[error("分发链接删除失败: {path}: {reason}")]
+    #[error("无法删除分发链接：{path}（{reason}）")]
     LinkRemoval { path: PathBuf, reason: String },
-    #[error("后台任务失败: {0}")]
+    #[error("后台任务失败：{0}")]
     Task(String),
-    #[error("应用数据清理失败: {0}")]
+    #[error("清理应用数据失败：{0}")]
     CleanupFailed(String),
 }
 
@@ -160,6 +160,6 @@ mod tests {
         ));
         assert!(SkillsageError::StoreUnavailable
             .to_string()
-            .contains("不可达"));
+            .contains("无法连接"));
     }
 }

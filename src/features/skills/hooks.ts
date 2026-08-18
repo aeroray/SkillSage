@@ -51,7 +51,7 @@ export function useSkillInstall(onCompleted: () => void) {
     async (skillId: string, agents: string[], conflicts?: DistributionActions) => {
       setInstalling(true);
       setStage("downloading");
-      setMessage("准备下载技能文件");
+      setMessage("准备下载");
       setError(undefined);
       let unlisten: (() => void) | undefined;
 
@@ -68,7 +68,7 @@ export function useSkillInstall(onCompleted: () => void) {
         }
         const result = await installSkill(skillId, agents, conflicts);
         setStage("done");
-        setMessage("已完成落库、校验和分发");
+        setMessage("安装完成");
         onCompleted();
         return result;
       } catch (reason) {

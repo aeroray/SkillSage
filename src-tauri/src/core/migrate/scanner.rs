@@ -140,11 +140,11 @@ fn build_result(
             can_manual_handle: resolved_kind == "unknown-link" && parsed_ok,
             can_remove: link_like && !parsed_ok,
             warning: if link_like && !parsed_ok {
-                Some("链接目标不存在或不是有效技能，可以直接移除。".into())
+                Some("链接目标不存在或不是有效技能，可直接删除。".into())
             } else if resolved_kind == "unknown-link" {
-                Some("来源未知，请手动选择工具后接管。".into())
+                Some("来源未知，请选择工具后手动迁移。".into())
             } else if classification == "remote" {
-                Some("接管后将由 SkillSage 管理此技能。".into())
+                Some("迁移后由 SkillSage 管理。".into())
             } else {
                 None
             },

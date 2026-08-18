@@ -119,3 +119,18 @@ Reason: Replacing one source file and rerunning one command keeps product docume
 
 Decision: Preview 01 is the product light mode and preview 03 is the product dark mode; both modes share the same semantic Tailwind/shadcn tokens, with teal for active/status states and restrained borders and shadows.
 Reason: The desktop UI should feel like a quiet native utility in light mode and an OLED workbench in dark mode without duplicating page-specific themes.
+
+## 2026-08-18 - Plain-language UI copy
+
+Decision: UI text should be short, direct, and user-facing; remove redundant helper text and replace internal terms such as "落库" and "接管" with plain actions.
+Reason: SkillSage should explain what will happen without exposing implementation details.
+
+## 2026-08-18 - User-selectable theme accents
+
+Decision: The appearance settings expose teal, blue, violet, and orange accent themes, persisted with the display mode and applied through semantic light/dark tokens.
+Reason: Users can personalize the interface without fragmenting page-level styling or weakening the shared visual system.
+
+## 2026-08-18 - Device sync package scope
+
+Decision: Device sync is managed from Settings and exports a user-selected JSON destination containing remote skill records, distribution targets, display mode, theme accent, and proxy settings. GitHub Tokens are excluded; importing preferences is explicit.
+Reason: A sync file should move a usable workspace between devices without embedding credentials or silently overwriting local preferences.

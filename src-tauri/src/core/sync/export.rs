@@ -3,15 +3,37 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::core::repo::{layout::RepoLayout, lockfile};
+use crate::core::settings;
 use crate::error::SkillsageError;
 
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncSettings {
+    pub theme_mode: String,
+    pub theme_accent: String,
+    #[serde(default)]
+    pub proxy_url: Option<String>,
+}
+
+impl Default for SyncSettings {
+    fn default() -> Self {
+        Self {
+            theme_mode: "system".into(),
+            theme_accent: "teal".into(),
+            proxy_url: None,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncPackage {
     pub format_version: u32,
     pub exported_at: String,
+    #[serde(default)]
+    pub settings: Option<SyncSettings>,
     pub skills: Vec<SyncSkillEntry>,
 }
 
@@ -48,7 +70,13 @@ impl SyncSkillEntry {
     }
 }
 
-pub fn export_at(layout: &RepoLayout) -> Result<PathBuf, SkillsageError> {
+pub fn export_at(
+    layout: &RepoLayout,
+    destination: &str,
+    mut sync_settings: SyncSettings,
+) -> Result<PathBuf, SkillsageError> {
+    validate_settings(&sync_settings)?;
+    sync_settings.proxy_url = settings::normalize_proxy(sync_settings.proxy_url)?;
     let lock = lockfile::load(layout)?;
     let skills = lock
         .skills
@@ -63,24 +91,63 @@ pub fn export_at(layout: &RepoLayout) -> Result<PathBuf, SkillsageError> {
     let package = SyncPackage {
         format_version: FORMAT_VERSION,
         exported_at: lockfile::unix_timestamp(),
+        settings: Some(sync_settings),
         skills,
     };
 
     layout.ensure_roots()?;
-    let path = layout
-        .exports_root()
-        .join(format!("skillsage-sync-{}.json", package.exported_at));
+    let path = PathBuf::from(destination.trim());
+    if path.as_os_str().is_empty() {
+        return Err(SkillsageError::ExportFailed("未选择导出位置".into()));
+    }
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.is_dir() {
+            return Err(SkillsageError::ExportFailed(format!(
+                "导出目录不存在: {}",
+                parent.display()
+            )));
+        }
+    }
+    if let Ok(metadata) = std::fs::symlink_metadata(&path) {
+        if metadata.file_type().is_symlink() {
+            return Err(SkillsageError::ExportFailed(
+                "导出文件不能是符号链接".into(),
+            ));
+        }
+        if !metadata.is_file() {
+            return Err(SkillsageError::ExportFailed("导出位置不是文件".into()));
+        }
+    }
     let content = serde_json::to_string_pretty(&package)?;
     std::fs::write(&path, format!("{content}\n"))
         .map_err(|error| SkillsageError::ExportFailed(error.to_string()))?;
     Ok(path)
 }
 
+pub fn validate_settings(sync_settings: &SyncSettings) -> Result<(), SkillsageError> {
+    if !matches!(
+        sync_settings.theme_mode.as_str(),
+        "light" | "dark" | "system"
+    ) {
+        return Err(SkillsageError::SyncInvalid(
+            "同步文件中的显示模式无效".into(),
+        ));
+    }
+    if !matches!(
+        sync_settings.theme_accent.as_str(),
+        "teal" | "blue" | "violet" | "orange"
+    ) {
+        return Err(SkillsageError::SyncInvalid("同步文件中的主题色无效".into()));
+    }
+    settings::normalize_proxy(sync_settings.proxy_url.clone())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
 
-    use super::{export_at, SyncPackage, FORMAT_VERSION};
+    use super::{export_at, SyncPackage, SyncSettings, FORMAT_VERSION};
     use crate::core::repo::{layout::RepoLayout, lockfile};
 
     #[test]
@@ -126,11 +193,18 @@ mod tests {
         );
         lockfile::save(&layout, &lock).expect("save lock");
 
-        let path = export_at(&layout).expect("export should succeed");
+        let path = root.join("skillsage-sync.json");
+        let path = export_at(
+            &layout,
+            path.to_str().expect("path should be valid UTF-8"),
+            SyncSettings::default(),
+        )
+        .expect("export should succeed");
         let package: SyncPackage =
             serde_json::from_str(&fs::read_to_string(path).expect("read package"))
                 .expect("parse package");
         assert_eq!(package.format_version, FORMAT_VERSION);
+        assert!(package.settings.is_some());
         assert_eq!(package.skills.len(), 1);
         assert_eq!(package.skills[0].name, "skill");
         fs::remove_dir_all(root).expect("remove test root");

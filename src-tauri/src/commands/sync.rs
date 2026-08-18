@@ -26,6 +26,7 @@ pub struct SyncImportResult {
     pub imported: Vec<InstallResult>,
     pub skipped: Vec<String>,
     pub failed: Vec<SyncImportFailure>,
+    pub settings: Option<export::SyncSettings>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -35,13 +36,19 @@ pub struct SyncImportOptions {
     pub selected_ids: Vec<String>,
     #[serde(default)]
     pub agents_by_skill: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    pub apply_settings: bool,
 }
 
 #[tauri::command]
-pub async fn export_package() -> Result<String, SkillsageError> {
-    tokio::task::spawn_blocking(|| {
+pub async fn export_package(
+    destination: String,
+    sync_settings: Option<export::SyncSettings>,
+) -> Result<String, SkillsageError> {
+    tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
-        export::export_at(&layout).map(|path| paths::display(&path))
+        export::export_at(&layout, &destination, sync_settings.unwrap_or_default())
+            .map(|path| paths::display(&path))
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))?
@@ -69,6 +76,14 @@ pub async fn import_package(
     let layout = RepoLayout::from_user_home()?;
     let package = import::load(&path)?;
     let options = options.unwrap_or_default();
+    let settings = if options.apply_settings {
+        package.settings.clone()
+    } else {
+        None
+    };
+    if let Some(sync_settings) = &settings {
+        crate::core::settings::save(&layout, sync_settings.proxy_url.clone(), None, false)?;
+    }
     let selected = import::selected_entries(&package, &options.selected_ids)?;
     let detected = detect_tools()?
         .tools
@@ -81,6 +96,7 @@ pub async fn import_package(
         imported: Vec::new(),
         skipped: Vec::new(),
         failed: Vec::new(),
+        settings,
     };
 
     for entry in selected {

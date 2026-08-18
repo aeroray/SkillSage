@@ -53,7 +53,7 @@ pub fn execute_at(
         else {
             result.failed.push(MigrateFailure {
                 source_path: selection.source_path,
-                reason: "扫描结果中不存在该条目，可能已被移动".into(),
+                reason: "找不到扫描条目，可能已被移动".into(),
             });
             continue;
         };
@@ -87,7 +87,7 @@ fn migrate_item(
         .unwrap_or_else(|| parsed.manifest.name.clone());
     if !crate::core::skill::parser::is_valid_skill_name(&target_name) {
         return Err(SkillsageError::MigrateFailed(
-            "目标技能名称必须是 kebab-case".into(),
+            "技能名称必须使用 kebab-case".into(),
         ));
     }
     let mut agents = if selection.agents.is_empty() {
@@ -108,7 +108,7 @@ fn migrate_item(
         .any(|record| record.name == target_name)
     {
         return Err(SkillsageError::NameConflict(format!(
-            "技能名称已被中央仓库占用: {target_name}"
+            "中央仓库已有同名技能：{target_name}"
         )));
     }
     let is_remote = item.classification == "remote"
@@ -124,7 +124,7 @@ fn migrate_item(
     };
     if destination.exists() {
         return Err(SkillsageError::NameConflict(format!(
-            "中央仓库目标已存在: {}",
+            "中央仓库已有此路径：{}",
             destination.display()
         )));
     }
@@ -141,7 +141,7 @@ fn migrate_item(
     if let Err(error) = std::fs::rename(&source, &destination) {
         restore_links(&source, &removed_links);
         return Err(SkillsageError::MigrateFailed(format!(
-            "无法移动 {}: {}",
+            "无法移动 {}：{}",
             source.display(),
             error
         )));
@@ -227,12 +227,10 @@ pub fn remove_unknown_link_at(
         .items
         .iter()
         .find(|item| item.source_path == source_path)
-        .ok_or_else(|| {
-            SkillsageError::MigrateFailed("扫描结果中不存在该链接，可能已被移除".into())
-        })?;
+        .ok_or_else(|| SkillsageError::MigrateFailed("找不到该链接，可能已被移除".into()))?;
     if !item.can_remove {
         return Err(SkillsageError::MigrateFailed(
-            "只有无效的未知来源链接可以直接移除".into(),
+            "只能删除无效的未知来源链接".into(),
         ));
     }
     for link_path in &item.link_paths {

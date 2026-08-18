@@ -12,3 +12,7 @@ export function executeMigrate(items: MigrateSelection[]) {
 export function removeMigrateLink(sourcePath: string) {
   return invokeCommand<void>("remove_migrate_link", { sourcePath });
 }
+
+export function openMigratePath(path: string) {
+  return invokeCommand<void>("open_path", { path });
+}

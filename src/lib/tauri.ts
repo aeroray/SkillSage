@@ -73,7 +73,7 @@ const previewTools = [
 
 let previewSettings = { proxyUrl: "", githubTokenConfigured: false };
 
-function isBrowserPreview() {
+export function isBrowserPreview() {
   return import.meta.env.DEV && typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window);
 }
 
@@ -88,12 +88,12 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
     const skill = previewSkills.find((item) => item.id === args?.skillId) ?? previewSkills[0];
     return {
       ...skill,
-      description: "一组面向 AI Agent 的可复用工作流，包含清晰的使用说明和安全边界。",
+      description: "一组可复用的 AI Agent 工作流，附带使用说明和安全提示。",
       license: "MIT",
       githubStars: 18400,
       audits: [
-        { provider: "Socket", slug: "socket", status: "pass", summary: "未发现已知的高风险依赖。" },
-        { provider: "Snyk", slug: "snyk", status: "pass", summary: "依赖扫描通过。" },
+        { provider: "Socket", slug: "socket", status: "pass", summary: "未发现已知高风险依赖。" },
+        { provider: "Snyk", slug: "snyk", status: "pass", summary: "依赖未发现问题。" },
       ],
       url: skill.url,
     } as T;
@@ -107,7 +107,7 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
         owner: skill.source.split("/")[0],
         repo: skill.source.split("/")[1],
         source: "skills.sh",
-        description: "用于验证本地管理界面的示例技能。",
+        description: "用于界面设计和组件规范。",
         currentVersion: index === 0 ? "a1b2c3d" : "d4e5f6a",
         currentHash: "9c8b7a6d5e4f3210",
         distributedTo: previewTools.filter((tool) => tool.detected).map((tool) => tool.id),
@@ -131,7 +131,7 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
       sourceKind: "directory",
       skillRoot: String(args?.path ?? "C:\\Skills\\local-research"),
       name: "local-research",
-      description: "用于验证本地导入流程的示例技能。",
+      description: "用于整理本地研究资料。",
       fileCount: 3,
       existingLocal: false,
       remoteConflict: false,
@@ -143,7 +143,7 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
   if (command === "inspect_github_url") {
     return {
       parsed: { owner: "vercel-labs", repo: "agent-skills", skillPath: undefined, commit: "main", canonicalUrl: String(args?.url ?? "https://github.com/vercel-labs/agent-skills") },
-      skills: [{ name: "frontend-design", description: "用于验证 GitHub URL 安装流程的示例技能。", skillPath: "skills/frontend-design", url: "https://github.com/vercel-labs/agent-skills/tree/main/skills/frontend-design" }],
+      skills: [{ name: "frontend-design", description: "用于界面设计和组件规范。", skillPath: "skills/frontend-design", url: "https://github.com/vercel-labs/agent-skills/tree/main/skills/frontend-design" }],
     } as T;
   }
   if (command === "url_install") {
@@ -154,11 +154,12 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
     return {
       path: String(args?.path ?? "C:\\Users\\PC\\skillsage-sync.json"),
       exportedAt: "2026-08-18T08:00:00Z",
+      settings: { themeMode: "light", themeAccent: "teal", proxyUrl: "" },
       skills: [
         {
           id: "vercel-labs/agent-skills/frontend-design",
           name: "frontend-design",
-          description: "用于验证跨设备同步预览的示例技能。",
+          description: "从其他设备恢复的技能。",
           source: "https://skills.sh/vercel-labs/agent-skills/frontend-design",
           currentVersion: "a1b2c3d",
           distributedTo: ["claude-code", "cursor"],
@@ -170,7 +171,12 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
   }
   if (command === "import_package") {
     const options = (args?.options as { selectedIds?: string[] } | undefined) ?? {};
-    return { imported: (options.selectedIds ?? []).map((id) => ({ id, name: id.split("/").at(-1) ?? id })), skipped: [], failed: [] } as T;
+    return {
+      imported: (options.selectedIds ?? []).map((id) => ({ id, name: id.split("/").at(-1) ?? id })),
+      skipped: [],
+      failed: [],
+      settings: (options as { applySettings?: boolean }).applySettings ? { themeMode: "light", themeAccent: "teal", proxyUrl: "" } : undefined,
+    } as T;
   }
   if (command === "scan_migrate") {
     return {
@@ -178,7 +184,7 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
         {
           id: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
           name: "legacy-research",
-          description: "用于验证存量迁移向导的示例技能。",
+          description: "从旧目录迁移的技能。",
           sourcePath: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
           displayPath: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
           location: "public",
@@ -188,12 +194,12 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
           canTakeover: true,
           canManualHandle: false,
           canRemove: false,
-          warning: "接管后将由 SkillSage 管理此技能。",
+          warning: "迁移后由 SkillSage 管理。",
         },
         {
           id: "C:\\Users\\PC\\.agents\\skills\\code-review-pro",
           name: "code-review-pro",
-          description: "来源无法从现有记录中确认的技能链接。",
+          description: "无法确认来源的技能链接。",
           sourcePath: "C:\\Users\\PC\\.agents\\skills\\code-review-pro",
           displayPath: "C:\\Users\\PC\\.agents\\skills\\code-review-pro",
           location: "tool",
@@ -203,7 +209,7 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
           canTakeover: false,
           canManualHandle: true,
           canRemove: false,
-          warning: "来源未知，请手动选择工具后接管。",
+          warning: "来源未知，请选择工具后手动迁移。",
         },
         {
           id: "C:\\Users\\PC\\.agents\\skills\\missing-skill",
@@ -218,7 +224,7 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
           canTakeover: false,
           canManualHandle: false,
           canRemove: true,
-          warning: "链接目标不存在或不是有效技能，可以直接移除。",
+          warning: "链接目标不存在或不是有效技能，可直接删除。",
         },
       ],
       scannedRoots: ["C:\\Users\\PC\\.agents\\skills"],
@@ -226,6 +232,7 @@ async function previewInvoke<T>(command: string, args?: Record<string, unknown>)
   }
   if (command === "execute_migrate") return { migrated: ["legacy-research"], skipped: [], failed: [] } as T;
   if (command === "remove_migrate_link") return undefined as T;
+  if (command === "open_path" || command === "open_skill_directory") return undefined as T;
   if (command === "check_distribution_conflicts") return [] as T;
   if (command === "check_updates") return { updates: [] } as T;
   if (command === "cleanup_app") return { mode: args?.mode ?? "all", removedLinks: 2, centralRemoved: args?.mode !== "keep-skills", managementDataRemoved: true } as T;

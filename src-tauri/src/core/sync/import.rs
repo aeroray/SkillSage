@@ -10,7 +10,7 @@ use crate::core::tools::detection::detect_tools;
 use crate::core::tools::registry::find_tool;
 use crate::error::SkillsageError;
 
-use super::export::{SyncPackage, SyncSkillEntry, FORMAT_VERSION};
+use super::export::{validate_settings, SyncPackage, SyncSettings, SyncSkillEntry, FORMAT_VERSION};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,22 +39,23 @@ pub struct SyncSkillPreview {
 pub struct SyncImportPreview {
     pub path: String,
     pub exported_at: String,
+    pub settings: Option<SyncSettings>,
     pub skills: Vec<SyncSkillPreview>,
 }
 
 pub fn load(path: &str) -> Result<SyncPackage, SkillsageError> {
     let path = Path::new(path);
     let metadata = std::fs::symlink_metadata(path)
-        .map_err(|error| SkillsageError::SyncInvalid(format!("无法读取同步清单: {error}")))?;
+        .map_err(|error| SkillsageError::SyncInvalid(format!("无法读取同步数据文件: {error}")))?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err(SkillsageError::SyncInvalid(format!(
-            "同步清单不存在: {}",
+            "同步数据文件不存在: {}",
             path.display()
         )));
     }
     if metadata.len() > 8 * 1024 * 1024 {
         return Err(SkillsageError::SyncInvalid(
-            "同步清单超过 8 MiB，已拒绝读取".into(),
+            "同步数据文件超过 8 MiB，已拒绝读取".into(),
         ));
     }
     let content = std::fs::read_to_string(path)
@@ -95,6 +96,7 @@ pub fn preview_at(layout: &RepoLayout, path: &str) -> Result<SyncImportPreview, 
     Ok(SyncImportPreview {
         path: paths::display(&PathBuf::from(path)),
         exported_at: package.exported_at,
+        settings: package.settings,
         skills,
     })
 }
@@ -123,7 +125,7 @@ pub fn selected_entries(
             .iter()
             .find(|entry| entry.id == id)
             .cloned()
-            .ok_or_else(|| SkillsageError::SyncInvalid(format!("清单中不存在技能: {id}")))?;
+            .ok_or_else(|| SkillsageError::SyncInvalid(format!("同步数据中不存在技能: {id}")))?;
         entries.push(entry);
     }
     Ok(entries)
@@ -145,14 +147,19 @@ pub fn agents_for(
 }
 
 fn validate(package: &SyncPackage) -> Result<(), SkillsageError> {
-    if package.format_version != FORMAT_VERSION {
+    if package.format_version != 1 && package.format_version != FORMAT_VERSION {
         return Err(SkillsageError::SyncInvalid(format!(
-            "不支持的清单版本: {}",
+            "不支持的同步数据版本: {}",
             package.format_version
         )));
     }
+    if let Some(settings) = &package.settings {
+        validate_settings(settings)?;
+    }
     if package.skills.len() > 1000 {
-        return Err(SkillsageError::SyncInvalid("清单中的技能数量过多".into()));
+        return Err(SkillsageError::SyncInvalid(
+            "同步数据中的技能数量过多".into(),
+        ));
     }
     let mut ids = HashSet::new();
     let mut names = HashSet::new();

@@ -23,7 +23,7 @@ SkillSage 用一个私有中央仓库管理 AI Agent 技能，再通过 Windows 
 - **本地导入**：导入 `SKILL.md` 文件、技能目录，或包含单个技能目录的父目录。
 - **多工具分发**：支持 Claude Code、Cursor、GitHub Copilot、OpenAI Codex CLI 和 OpenCode。
 - **存量迁移**：扫描已注册工具目录和 `~/.agents/skills/`，识别可接管、冲突或失效的旧技能链接。
-- **跨设备同步**：导出远程技能的锁定信息，在另一台设备上重新获取指定提交并恢复。
+- **跨设备同步**：导出远程技能记录、分发目标和非敏感应用设置，在另一台设备上重新获取指定提交并恢复。
 - **设置与清理**：配置代理、保存 GitHub Token 到系统密钥环，并在卸载前选择清理范围。
 - **可诊断性**：统一的加载/错误状态，以及写入平台应用日志目录的普通日志和 tracing 日志。
 
@@ -72,11 +72,11 @@ SkillSage 默认使用用户目录下的中央仓库：
 | 远程技能 | `~/.skillsage/remote/` |
 | 本地技能 | `~/.skillsage/local/` |
 | 技能锁定记录 | `~/.skillsage/lock/skill-lock.json` |
-| 同步导出 | `~/.skillsage/exports/` |
+| 同步数据文件 | 用户在导出时选择的位置 |
 | 代理配置 | `~/.skillsage/settings.json` |
 
 - Windows 使用 junction，macOS 使用 symlink；分发不会复制技能内容。
-- GitHub Token 使用 Windows 凭据管理器或 macOS Keychain 保存，不写入设置文件或日志。
+- 同步数据包含远程技能记录、分发目标和非敏感应用设置；GitHub Token 使用 Windows 凭据管理器或 macOS Keychain 保存，不写入同步文件、设置文件或日志。
 - 远程更新按 Git 提交记录版本，更新前创建快照，网络不可用时可回退到本地快照。
 - 卸载清理支持“清理全部”和“保留技能”两种模式；保留模式不会删除现有链接依赖的中央技能文件。
 

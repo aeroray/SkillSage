@@ -110,12 +110,12 @@ pub fn takeover_at_transaction(
     let source = canonical_or_self(&target);
     if !path_exists(&target) || !source.is_dir() {
         return Err(SkillsageError::DistributionConflict(format!(
-            "冲突路径已不存在或不是目录: {}",
+            "冲突路径不存在或不是目录：{}",
             target.display()
         )));
     }
     let parsed = read_skill_md(&source.join("SKILL.md")).map_err(|_| {
-        SkillsageError::DistributionConflict(format!("{} 不是可接管的技能目录", target.display()))
+        SkillsageError::DistributionConflict(format!("{} 不是可迁移的技能目录", target.display()))
     })?;
     import_source::validate_tree(&source)?;
     let mut lock = lockfile::load(layout)?;
@@ -214,7 +214,7 @@ fn copy_dir(source: &Path, destination: &Path) -> Result<(), SkillsageError> {
         let metadata = std::fs::symlink_metadata(&source_path)?;
         if metadata.file_type().is_symlink() {
             return Err(SkillsageError::DistributionConflict(format!(
-                "技能内容包含符号链接，无法安全接管: {}",
+                "技能内容包含符号链接，无法安全迁移：{}",
                 source_path.display()
             )));
         }

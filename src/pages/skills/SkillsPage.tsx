@@ -11,13 +11,12 @@ import {
 } from "../../components/ui/alert-dialog";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../components/ui/accordion";
-import { ArrowRight, Check, CircleAlert, Download, FolderOpen, Library, MoreHorizontal, RefreshCw, Search, Settings2, SlidersHorizontal, Trash2, Undo2, Upload } from "lucide-react";
+import { ArrowRight, CircleAlert, Download, FolderOpen, Library, MoreHorizontal, RefreshCw, Search, Settings2, SlidersHorizontal, Trash2, Undo2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PageHeader } from "../../components/common/PageHeader";
 import { ImportDialog } from "../import/ImportDialog";
-import { SyncImportDialog } from "../sync/SyncImportDialog";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -30,11 +29,12 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
 import { useDetectedTools } from "../../features/tools/hooks";
+import { openSkillDirectory } from "../../features/skills/api";
 import { useDistributionConflicts, useInstalledSkills, useSkillManagement, useSkillUpdates } from "../../features/skills/hooks";
-import { useSyncExport } from "../../features/sync";
 import type { DistributionConflict, InstalledSkill } from "../../features/skills/types";
 import { filterAndSortSkills, groupByAuthor, sourceLabel, type SkillSortMode, type SkillSourceFilter, type SkillStatusFilter } from "../../features/skills/selectors";
 import { displayPath } from "../../lib/paths";
+import { normalizeTauriError } from "../../lib/tauri";
 
 function shortVersion(version: string) {
   return version.length > 12 ? version.slice(0, 8) : version;
@@ -52,7 +52,7 @@ function ToolPicker({ agents, onToggle, tools }: { agents: string[]; onToggle: (
         return (
           <div className="flex min-h-10 items-center justify-between gap-3 rounded-md border border-border px-3 transition-colors hover:bg-muted" key={tool.id}>
             <div className="flex items-center gap-3"><Checkbox checked={agents.includes(tool.id)} id={checkboxId} onCheckedChange={(checked) => onToggle(tool.id, checked === true)} /><Label className="font-normal" htmlFor={checkboxId}>{tool.name}</Label></div>
-            {tool.detected ? <Badge variant="success">已检测</Badge> : <Badge variant="muted">未检测</Badge>}
+            {tool.detected ? <Badge variant="success">已找到</Badge> : <Badge variant="muted">未找到</Badge>}
           </div>
         );
       })}
@@ -60,7 +60,7 @@ function ToolPicker({ agents, onToggle, tools }: { agents: string[]; onToggle: (
   );
 }
 
-function SkillRow({ checked, onAdjust, onCheck, onHistory, onUninstall, onUpdate, pending, skill, updateAvailable }: { checked: boolean; onAdjust: (skill: InstalledSkill) => void; onCheck: (checked: boolean) => void; onHistory: (skill: InstalledSkill) => void; onUninstall: (skill: InstalledSkill) => void; onUpdate: (skill: InstalledSkill) => void; pending: boolean; skill: InstalledSkill; updateAvailable: boolean }) {
+function SkillRow({ checked, onAdjust, onCheck, onHistory, onOpenDirectory, onUninstall, onUpdate, pending, skill, updateAvailable }: { checked: boolean; onAdjust: (skill: InstalledSkill) => void; onCheck: (checked: boolean) => void; onHistory: (skill: InstalledSkill) => void; onOpenDirectory: (skill: InstalledSkill) => void; onUninstall: (skill: InstalledSkill) => void; onUpdate: (skill: InstalledSkill) => void; pending: boolean; skill: InstalledSkill; updateAvailable: boolean }) {
   return (
     <div className="grid gap-4 border-b border-border px-5 py-4 last:border-b-0 lg:grid-cols-[auto_minmax(0,1fr)_180px_150px_auto] lg:items-center">
       <Checkbox aria-label={`选择 ${skill.name}`} checked={checked} onCheckedChange={(value) => onCheck(value === true)} />
@@ -73,6 +73,7 @@ function SkillRow({ checked, onAdjust, onCheck, onHistory, onUninstall, onUpdate
           <DropdownMenuItem disabled={pending || !updateAvailable} onSelect={() => onUpdate(skill)}><Download />{updateAvailable ? "更新" : "已是最新"}</DropdownMenuItem>
           <DropdownMenuItem disabled={pending || skill.versionHistory.length === 0} onSelect={() => onHistory(skill)}><Undo2 />版本历史</DropdownMenuItem>
           <DropdownMenuItem disabled={pending} onSelect={() => onAdjust(skill)}><Settings2 />调整分发</DropdownMenuItem>
+          <DropdownMenuItem disabled={pending} onSelect={() => onOpenDirectory(skill)}><FolderOpen />打开技能目录</DropdownMenuItem>
           <DropdownMenuItem disabled={pending} onSelect={() => onUninstall(skill)} variant="destructive"><Trash2 />卸载</DropdownMenuItem>
         </DropdownMenuGroup></DropdownMenuContent>
       </DropdownMenu>
@@ -102,8 +103,7 @@ export function SkillsPage() {
   const [uninstallTarget, setUninstallTarget] = useState<InstalledSkill>();
   const [batchOpen, setBatchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [syncOpen, setSyncOpen] = useState(false);
-  const syncExport = useSyncExport();
+  const [directoryError, setDirectoryError] = useState<string>();
   const initializedAgents = useRef(false);
 
   useEffect(() => {
@@ -129,8 +129,16 @@ export function SkillsPage() {
 
   const filteredIds = filteredSkills.map((skill) => skill.id);
   const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
-  const pageError = toolsError ?? skillsError ?? updatesError ?? management.error ?? distributionConflictCheck.error;
+  const pageError = directoryError ?? toolsError ?? skillsError ?? updatesError ?? management.error ?? distributionConflictCheck.error;
   const openDistribution = (skill: InstalledSkill) => { setDistributionSkill(skill); setDistributionAgents(skill.distributedTo); };
+  const openDirectory = async (skill: InstalledSkill) => {
+    setDirectoryError(undefined);
+    try {
+      await openSkillDirectory(skill.id);
+    } catch (error) {
+      setDirectoryError(normalizeTauriError(error));
+    }
+  };
   const confirmUninstall = async () => { if (!uninstallTarget) return; await management.uninstall(uninstallTarget.id); setUninstallTarget(undefined); };
   const saveDistribution = async () => {
     if (!distributionSkill) return;
@@ -177,26 +185,51 @@ export function SkillsPage() {
 
   return (
     <div>
-      <PageHeader actions={<Button onClick={() => navigate("/store")}>技能商店<ArrowRight data-icon="inline-end" /></Button>} description="集中查看、更新、回滚和分发已安装的技能。" eyebrow="01 / LIBRARY" title="我的技能" />
+      <PageHeader actions={<Button onClick={() => setImportOpen(true)}><FolderOpen data-icon="inline-start" />导入本地技能</Button>} description="查看、更新、回滚和分发已安装技能。" title="我的技能" />
       <ErrorBanner className="mb-6" error={pageError} onOpenSettings={() => navigate("/settings")} onRetry={refreshPage} />
 
-      <Card className="mb-6"><CardHeader className="flex flex-row items-center justify-between gap-4"><div className="flex items-center gap-4"><div className="flex size-10 items-center justify-center rounded-md bg-primary-soft text-primary"><Library aria-hidden="true" className="h-5 w-5" /></div><div><CardTitle>中央技能仓库</CardTitle><CardDescription className="mt-1">~/.skillsage/remote · 单一数据源</CardDescription></div></div><div className="flex items-center gap-2"><Badge variant="muted">{skills.length} 个技能</Badge><Button aria-label="刷新技能与工具状态" disabled={skillsLoading || toolsLoading || updatesChecking} onClick={() => { void refreshSkills(); void refreshTools(); void checkUpdatesNow(); }} size="icon" variant="ghost"><RefreshCw /></Button></div></CardHeader></Card>
+      <Card className="mb-6"><CardHeader className="flex flex-row items-center justify-between gap-4"><div className="flex items-center gap-4"><div className="flex size-10 items-center justify-center rounded-md bg-primary-soft text-primary"><Library aria-hidden="true" className="h-5 w-5" /></div><div><CardTitle>中央仓库</CardTitle><CardDescription className="mt-1">~/.skillsage/remote · 唯一来源</CardDescription></div></div><div className="flex items-center gap-2"><Badge variant="muted">{skills.length} 个技能</Badge><Button aria-label="刷新技能和工具" disabled={skillsLoading || toolsLoading || updatesChecking} onClick={() => { void refreshSkills(); void refreshTools(); void checkUpdatesNow(); }} size="icon" variant="ghost"><RefreshCw /></Button></div></CardHeader></Card>
 
-      <Card className="mb-6"><CardContent className="flex flex-col gap-4 p-4"><div className="flex flex-wrap items-center gap-3"><label className="relative min-w-56 flex-1"><span className="sr-only">搜索已安装技能</span><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" onChange={(event) => setSearch(event.target.value)} placeholder="搜索技能、作者或描述" value={search} /></label><Select onValueChange={(value) => setSource(value as SkillSourceFilter)} value={source}><SelectTrigger aria-label="来源筛选" className="w-36"><SelectValue placeholder="来源" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">全部来源</SelectItem><SelectItem value="skills.sh">skills.sh</SelectItem><SelectItem value="builtin">内置来源</SelectItem><SelectItem value="local">本地导入</SelectItem></SelectGroup></SelectContent></Select><Select onValueChange={(value) => setStatus(value as SkillStatusFilter)} value={status}><SelectTrigger aria-label="状态筛选" className="w-36"><SelectValue placeholder="状态" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">全部状态</SelectItem><SelectItem value="update">有可用更新</SelectItem><SelectItem value="current">已是最新</SelectItem></SelectGroup></SelectContent></Select><Select onValueChange={setTool} value={tool}><SelectTrigger aria-label="工具筛选" className="w-40"><SelectValue placeholder="工具" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">全部工具</SelectItem>{tools.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectGroup></SelectContent></Select><Select onValueChange={(value) => setSort(value as SkillSortMode)} value={sort}><SelectTrigger aria-label="排序方式" className="w-36"><SelectValue placeholder="排序" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="recent">最近安装</SelectItem><SelectItem value="name">名称</SelectItem><SelectItem value="source">来源</SelectItem></SelectGroup></SelectContent></Select></div><Separator /><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><Checkbox checked={allFilteredSelected} id="select-filtered" onCheckedChange={(checked) => setSelectedIds((current) => checked === true ? [...new Set([...current, ...filteredIds])] : current.filter((id) => !filteredIds.includes(id)))} /><Label className="font-normal text-muted-foreground" htmlFor="select-filtered">选择当前筛选结果 ({selectedIds.length})</Label></div><div className="flex flex-wrap items-center gap-2"><Button disabled={selectedIds.length === 0 || Boolean(management.pending)} onClick={() => setBatchOpen(true)} variant="outline"><SlidersHorizontal data-icon="inline-start" />批量分发</Button><Button disabled={updatesChecking} onClick={() => void checkUpdatesNow()} variant="secondary"><RefreshCw data-icon="inline-start" />{updatesChecking ? "检查中" : "检查更新"}</Button><Button onClick={() => setImportOpen(true)} variant="outline"><FolderOpen data-icon="inline-start" />导入技能</Button><Button onClick={() => setSyncOpen(true)} variant="outline"><Upload data-icon="inline-start" />导入同步</Button><Button disabled={syncExport.exporting} onClick={() => void syncExport.run()} variant="outline"><Download data-icon="inline-start" />{syncExport.exporting ? "导出中…" : "导出同步"}</Button></div></div></CardContent></Card>
-      <ErrorBanner className="mb-6" error={syncExport.error} onOpenSettings={() => navigate("/settings")} onRetry={() => void syncExport.run()} />
-      {syncExport.path ? <Alert className="mb-6"><Download /><AlertDescription>同步清单已导出：{displayPath(syncExport.path)}</AlertDescription></Alert> : null}
+      <Card className="mb-6">
+        <CardContent className="flex flex-col gap-4 p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Select onValueChange={(value) => setSource(value as SkillSourceFilter)} value={source}>
+              <SelectTrigger aria-label="来源筛选" className="w-32"><SelectValue placeholder="来源" /></SelectTrigger>
+              <SelectContent><SelectGroup><SelectItem value="all">全部来源</SelectItem><SelectItem value="skills.sh">skills.sh</SelectItem><SelectItem value="builtin">内置来源</SelectItem><SelectItem value="local">本地导入</SelectItem></SelectGroup></SelectContent>
+            </Select>
+            <Select onValueChange={(value) => setStatus(value as SkillStatusFilter)} value={status}>
+              <SelectTrigger aria-label="状态筛选" className="w-32"><SelectValue placeholder="状态" /></SelectTrigger>
+              <SelectContent><SelectGroup><SelectItem value="all">全部状态</SelectItem><SelectItem value="update">有可用更新</SelectItem><SelectItem value="current">已是最新</SelectItem></SelectGroup></SelectContent>
+            </Select>
+            <Select onValueChange={setTool} value={tool}>
+              <SelectTrigger aria-label="工具筛选" className="w-36"><SelectValue placeholder="工具" /></SelectTrigger>
+              <SelectContent><SelectGroup><SelectItem value="all">全部工具</SelectItem>{tools.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectGroup></SelectContent>
+            </Select>
+            <Select onValueChange={(value) => setSort(value as SkillSortMode)} value={sort}>
+              <SelectTrigger aria-label="排序方式" className="w-32"><SelectValue placeholder="排序" /></SelectTrigger>
+              <SelectContent><SelectGroup><SelectItem value="recent">最近安装</SelectItem><SelectItem value="name">名称</SelectItem><SelectItem value="source">来源</SelectItem></SelectGroup></SelectContent>
+            </Select>
+            <label className="relative min-w-56 flex-1 basis-56">
+              <span className="sr-only">搜索已安装技能</span>
+              <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input className="pl-9" onChange={(event) => setSearch(event.target.value)} placeholder="搜索技能、作者或描述" value={search} />
+            </label>
+          </div>
+          <Separator />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2"><Checkbox checked={allFilteredSelected} id="select-filtered" onCheckedChange={(checked) => setSelectedIds((current) => checked === true ? [...new Set([...current, ...filteredIds])] : current.filter((id) => !filteredIds.includes(id)))} /><Label className="font-normal text-muted-foreground" htmlFor="select-filtered">全选筛选结果 ({selectedIds.length})</Label></div>
+            <div className="flex flex-wrap items-center gap-2"><Button disabled={selectedIds.length === 0 || Boolean(management.pending)} onClick={() => setBatchOpen(true)} variant="outline"><SlidersHorizontal data-icon="inline-start" />批量分发</Button><Button disabled={updatesChecking} onClick={() => void checkUpdatesNow()} variant="secondary"><RefreshCw data-icon="inline-start" />{updatesChecking ? "检查中" : "检查更新"}</Button></div>
+          </div>
+        </CardContent>
+      </Card>
+      {skillsLoading ? <SkillsLoadingState /> : skills.length === 0 ? <EmptyState action={<Button onClick={() => navigate("/store")} variant="secondary">去技能商店<ArrowRight data-icon="inline-end" /></Button>} description="安装技能后会显示在这里，可按作者查看。" icon={Library} title="还没有技能" /> : groups.length === 0 ? <EmptyState description="换个搜索词或筛选条件试试。" icon={Search} title="没有匹配的技能" /> : <Accordion className="flex flex-col gap-4" defaultValue={groups.map(([owner]) => owner)} type="multiple">{groups.map(([owner, ownerSkills]) => <AccordionItem className="rounded-lg border border-border bg-card shadow-sm" key={owner} value={owner}><AccordionTrigger className="px-5 py-4 hover:no-underline"><div className="flex items-center gap-3"><span className="text-sm font-semibold text-foreground">{owner}</span><Badge variant="muted">{ownerSkills.length} 个技能</Badge></div></AccordionTrigger><AccordionContent className="pb-0"><div>{ownerSkills.map((skill) => <SkillRow checked={selectedIds.includes(skill.id)} key={skill.id} onAdjust={openDistribution} onCheck={(checked) => setSelectedIds((current) => checked ? [...new Set([...current, skill.id])] : current.filter((id) => id !== skill.id))} onHistory={setHistorySkill} onOpenDirectory={(item) => void openDirectory(item)} onUninstall={setUninstallTarget} onUpdate={(item) => void management.update(item.id)} pending={management.pending === skill.id} skill={skill} updateAvailable={updatesById.get(skill.id)?.updateAvailable ?? false} />)}</div></AccordionContent></AccordionItem>)}</Accordion>}
 
-      {skillsLoading ? <SkillsLoadingState /> : skills.length === 0 ? <EmptyState action={<Button onClick={() => navigate("/store")} variant="secondary">发现更多技能<ArrowRight data-icon="inline-end" /></Button>} description="从技能商店安装技能后，它们会出现在这里，并可以按作者分组管理。" icon={Library} title="还没有已安装技能" /> : groups.length === 0 ? <EmptyState description="调整搜索条件或筛选器，查看已安装的技能。" icon={Search} title="没有匹配的技能" /> : <Accordion className="flex flex-col gap-4" defaultValue={groups.map(([owner]) => owner)} type="multiple">{groups.map(([owner, ownerSkills]) => <AccordionItem className="rounded-lg border border-border bg-card shadow-sm" key={owner} value={owner}><AccordionTrigger className="px-5 py-4 hover:no-underline"><div className="flex items-center gap-3"><span className="text-sm font-semibold text-foreground">{owner}</span><Badge variant="muted">{ownerSkills.length} 个技能</Badge></div></AccordionTrigger><AccordionContent className="pb-0"><div>{ownerSkills.map((skill) => <SkillRow checked={selectedIds.includes(skill.id)} key={skill.id} onAdjust={openDistribution} onCheck={(checked) => setSelectedIds((current) => checked ? [...new Set([...current, skill.id])] : current.filter((id) => id !== skill.id))} onHistory={setHistorySkill} onUninstall={setUninstallTarget} onUpdate={(item) => void management.update(item.id)} pending={management.pending === skill.id} skill={skill} updateAvailable={updatesById.get(skill.id)?.updateAvailable ?? false} />)}</div></AccordionContent></AccordionItem>)}</Accordion>}
-
-      {skills.length > 0 ? <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground"><Check aria-hidden="true" className="h-3.5 w-3.5 text-success" />中央仓库内容更新时，分发链接无需重复创建。</p> : null}
-
-      <Dialog description="选择要保留的工具分发目标。" onClose={() => setDistributionSkill(undefined)} open={Boolean(distributionSkill)} title="调整分发"><ToolPicker agents={distributionAgents} onToggle={(id, checked) => setDistributionAgents((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))} tools={tools} /><div className="mt-6 flex justify-end gap-2"><Button onClick={() => setDistributionSkill(undefined)} variant="ghost">取消</Button><Button disabled={!distributionSkill || Boolean(management.pending) || distributionConflictCheck.checking} onClick={() => void saveDistribution()}>{distributionConflictCheck.checking ? "检查冲突…" : "保存分发设置"}</Button></div></Dialog>
-      <Dialog description={`已选择 ${selectedIds.length} 个技能。`} onClose={() => setBatchOpen(false)} open={batchOpen} title="批量分发"><ToolPicker agents={batchAgents} onToggle={(id, checked) => setBatchAgents((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))} tools={tools} /><div className="mt-6 flex justify-end gap-2"><Button onClick={() => setBatchOpen(false)} variant="ghost">取消</Button><Button disabled={selectedIds.length === 0 || Boolean(management.pending) || distributionConflictCheck.checking} onClick={() => void startBatchDistribution()}>{distributionConflictCheck.checking ? "检查冲突…" : "应用到选中技能"}</Button></div></Dialog>
-      <Dialog description="回滚会创建新的版本历史记录，当前版本仍可再次恢复。" onClose={() => setHistorySkill(undefined)} open={Boolean(historySkill)} title="版本历史"><div className="flex flex-col gap-3">{(historySkill?.versionHistory ?? []).slice().reverse().map((version) => <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3" key={`${version.commit}-${version.hash}`}><div className="min-w-0"><p className="text-sm font-medium text-foreground">{shortVersion(version.commit)}</p><p className="mt-1 text-xs text-muted-foreground">hash {version.hash.slice(0, 12)} · {version.recordedAt}</p></div><Button disabled={Boolean(management.pending)} onClick={async () => { if (!historySkill) return; const result = await management.rollback(historySkill.id, version.commit); if (result) setHistorySkill(undefined); }} variant="outline">回滚</Button></div>)}</div></Dialog>
-      <Dialog description="检测到目标工具目录中已有非 SkillSage 条目。请选择处理方式。" onClose={() => setDistributionConflict(undefined)} open={Boolean(distributionConflict)} title="处理分发冲突"><div className="flex flex-col gap-4"><Alert variant="destructive"><CircleAlert /><AlertDescription>{distributionConflict?.conflicts.map((item) => `${item.toolName}: ${displayPath(item.path)}`).join("；")}</AlertDescription></Alert><p className="text-sm leading-6 text-muted-foreground">跳过会保留原条目并不向该工具分发；接管会把原实体移入中央仓库的本地区并使用新名称保存；取消则不执行任何变更。</p><div className="flex flex-wrap justify-end gap-2"><Button onClick={() => setDistributionConflict(undefined)} variant="ghost">取消</Button><Button disabled={Boolean(management.pending)} onClick={() => void skipDistributionConflicts()} variant="outline">跳过冲突项</Button><Button disabled={Boolean(management.pending)} onClick={() => void takeoverDistributionConflicts()}>接管并分发</Button></div></div></Dialog>
-      <AlertDialog onOpenChange={(open) => !open && setUninstallTarget(undefined)} open={Boolean(uninstallTarget)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>确认卸载</AlertDialogTitle><AlertDialogDescription>卸载只会移除分发链接、中央仓库内容和 lock 记录，不会影响其他技能。</AlertDialogDescription></AlertDialogHeader><p className="text-sm leading-6 text-muted-foreground">确定要卸载“{uninstallTarget?.name}”吗？</p><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={Boolean(management.pending)} onClick={() => void confirmUninstall()} variant="destructive">{management.pending ? "卸载中" : "确认卸载"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      <Dialog description="选择要使用这个技能的工具。" onClose={() => setDistributionSkill(undefined)} open={Boolean(distributionSkill)} title="选择分发工具"><ToolPicker agents={distributionAgents} onToggle={(id, checked) => setDistributionAgents((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))} tools={tools} /><div className="mt-6 flex justify-end gap-2"><Button onClick={() => setDistributionSkill(undefined)} variant="ghost">取消</Button><Button disabled={!distributionSkill || Boolean(management.pending) || distributionConflictCheck.checking} onClick={() => void saveDistribution()}>{distributionConflictCheck.checking ? "检查冲突…" : "保存"}</Button></div></Dialog>
+      <Dialog description={`将为 ${selectedIds.length} 个技能设置分发工具。`} onClose={() => setBatchOpen(false)} open={batchOpen} title="批量分发"><ToolPicker agents={batchAgents} onToggle={(id, checked) => setBatchAgents((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))} tools={tools} /><div className="mt-6 flex justify-end gap-2"><Button onClick={() => setBatchOpen(false)} variant="ghost">取消</Button><Button disabled={selectedIds.length === 0 || Boolean(management.pending) || distributionConflictCheck.checking} onClick={() => void startBatchDistribution()}>{distributionConflictCheck.checking ? "检查冲突…" : "应用到选中技能"}</Button></div></Dialog>
+      <Dialog description="查看版本记录并回滚。" onClose={() => setHistorySkill(undefined)} open={Boolean(historySkill)} title="版本历史"><div className="flex flex-col gap-3">{(historySkill?.versionHistory ?? []).slice().reverse().map((version) => <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3" key={`${version.commit}-${version.hash}`}><div className="min-w-0"><p className="text-sm font-medium text-foreground">{shortVersion(version.commit)}</p><p className="mt-1 text-xs text-muted-foreground">hash {version.hash.slice(0, 12)} · {version.recordedAt}</p></div><Button disabled={Boolean(management.pending)} onClick={async () => { if (!historySkill) return; const result = await management.rollback(historySkill.id, version.commit); if (result) setHistorySkill(undefined); }} variant="outline">回滚</Button></div>)}</div></Dialog>
+      <Dialog description="目标工具已有同名内容。" onClose={() => setDistributionConflict(undefined)} open={Boolean(distributionConflict)} title="处理分发冲突"><div className="flex flex-col gap-4"><Alert variant="destructive"><CircleAlert /><AlertDescription>{distributionConflict?.conflicts.map((item) => `${item.toolName}: ${displayPath(item.path)}`).join("；")}</AlertDescription></Alert><p className="text-sm leading-6 text-muted-foreground">跳过该工具；备份原内容后继续分发；取消返回上一步。</p><div className="flex flex-wrap justify-end gap-2"><Button onClick={() => setDistributionConflict(undefined)} variant="ghost">取消</Button><Button disabled={Boolean(management.pending)} onClick={() => void skipDistributionConflicts()} variant="outline">跳过</Button><Button disabled={Boolean(management.pending)} onClick={() => void takeoverDistributionConflicts()}>备份后分发</Button></div></div></Dialog>
+      <AlertDialog onOpenChange={(open) => !open && setUninstallTarget(undefined)} open={Boolean(uninstallTarget)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>确认卸载</AlertDialogTitle><AlertDialogDescription>会删除这个技能的分发链接、仓库文件和记录，不影响其他技能。</AlertDialogDescription></AlertDialogHeader><p className="text-sm leading-6 text-muted-foreground">确定卸载“{uninstallTarget?.name}”？</p><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={Boolean(management.pending)} onClick={() => void confirmUninstall()} variant="destructive">{management.pending ? "卸载中" : "卸载"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <ImportDialog onClose={() => setImportOpen(false)} onCompleted={refreshPage} open={importOpen} tools={tools} />
-      <SyncImportDialog onClose={() => setSyncOpen(false)} onCompleted={refreshPage} onOpenSettings={() => navigate("/settings")} open={syncOpen} tools={tools} />
     </div>
   );
 }

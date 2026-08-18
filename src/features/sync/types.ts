@@ -1,3 +1,11 @@
+import type { ThemeAccent, ThemeMode } from "../theme/store";
+
+export type SyncSettings = {
+  themeMode: ThemeMode;
+  themeAccent: ThemeAccent;
+  proxyUrl?: string;
+};
+
 export type SyncToolPreview = {
   id: string;
   name: string;
@@ -19,10 +27,12 @@ export type SyncSkillPreview = {
 export type SyncImportPreview = {
   path: string;
   exportedAt: string;
+  settings?: SyncSettings;
   skills: SyncSkillPreview[];
 };
 
 export type SyncImportOptions = {
+  applySettings: boolean;
   selectedIds: string[];
   agentsBySkill: Record<string, string[]>;
 };
@@ -36,4 +46,5 @@ export type SyncImportResult = {
   imported: { id: string; name: string }[];
   skipped: string[];
   failed: SyncImportFailure[];
+  settings?: SyncSettings;
 };

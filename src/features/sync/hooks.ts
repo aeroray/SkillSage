@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { exportPackage, importPackage, previewImportPackage } from "./api";
-import type { SyncImportOptions, SyncImportPreview, SyncImportResult } from "./types";
+import type { SyncImportOptions, SyncImportPreview, SyncImportResult, SyncSettings } from "./types";
 import { normalizeTauriError } from "../../lib/tauri";
 
 export function useSyncExport() {
@@ -9,11 +9,11 @@ export function useSyncExport() {
   const [error, setError] = useState<string>();
   const [exporting, setExporting] = useState(false);
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (destination: string, settings: SyncSettings) => {
     setExporting(true);
     setError(undefined);
     try {
-      const result = await exportPackage();
+      const result = await exportPackage(destination, settings);
       setPath(result);
       return result;
     } catch (reason) {

@@ -32,7 +32,7 @@ pub fn resolve(path: &Path) -> Result<ResolvedSource, SkillsageError> {
         return Ok(ResolvedSource {
             root: path
                 .parent()
-                .ok_or_else(|| SkillsageError::ImportFailed("无法确定技能目录".into()))?
+                .ok_or_else(|| SkillsageError::ImportFailed("找不到技能目录".into()))?
                 .to_path_buf(),
             skill_md: path.to_path_buf(),
             kind: "file",
@@ -74,10 +74,10 @@ pub fn resolve(path: &Path) -> Result<ResolvedSource, SkillsageError> {
             })
         }
         0 => Err(SkillsageError::ImportFailed(
-            "所选目录及其一级子目录中都没有 SKILL.md".into(),
+            "所选目录中没有 SKILL.md".into(),
         )),
         _ => Err(SkillsageError::ImportFailed(
-            "所选目录包含多个技能，请直接选择其中一个技能目录".into(),
+            "所选目录包含多个技能，请选择一个技能目录".into(),
         )),
     }
 }

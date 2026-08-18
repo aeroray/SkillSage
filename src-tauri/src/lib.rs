@@ -14,6 +14,8 @@ pub fn run() {
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::distribution::check_distribution_conflicts,
+            commands::files::open_path,
+            commands::files::open_skill_directory,
             commands::install::install_skill,
             commands::import::preview_local_import,
             commands::import::import_local,

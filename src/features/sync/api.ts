@@ -1,8 +1,8 @@
 import { invokeCommand } from "../../lib/tauri";
-import type { SyncImportOptions, SyncImportPreview, SyncImportResult } from "./types";
+import type { SyncImportOptions, SyncImportPreview, SyncImportResult, SyncSettings } from "./types";
 
-export function exportPackage() {
-  return invokeCommand<string>("export_package");
+export function exportPackage(destination: string, settings: SyncSettings) {
+  return invokeCommand<string>("export_package", { destination, syncSettings: settings });
 }
 
 export function previewImportPackage(path: string) {

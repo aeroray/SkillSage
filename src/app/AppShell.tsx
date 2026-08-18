@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { CheckCircle2, FolderSync, Library, Settings, Store } from "lucide-react";
-import { ThemeControl } from "../components/common/ThemeControl";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { useThemeStore } from "../features/theme/store";
 import { Skeleton } from "../components/ui/skeleton";
@@ -15,11 +14,13 @@ const MigrationPage = lazy(() => import("../pages/migrate/MigrationPage").then((
 const navigation = [
   { icon: Library, label: "我的技能", path: "/skills" },
   { icon: Store, label: "技能商店", path: "/store" },
-  { icon: FolderSync, label: "迁移存量", path: "/migrate" },
-  { icon: Settings, label: "设置", path: "/settings" },
+  { icon: FolderSync, label: "迁移技能", path: "/migrate" },
 ];
 
+const settingsNavigation = [{ icon: Settings, label: "设置", path: "/settings" }];
+
 function ThemeSync() {
+  const accent = useThemeStore((state) => state.accent);
   const mode = useThemeStore((state) => state.mode);
 
   useEffect(() => {
@@ -27,22 +28,22 @@ function ThemeSync() {
     const updateTheme = () => {
       const isDark = mode === "dark" || (mode === "system" && mediaQuery.matches);
       document.documentElement.classList.toggle("dark", isDark);
+      document.documentElement.dataset.accent = accent;
     };
 
     updateTheme();
     if (mode !== "system") return;
     mediaQuery.addEventListener("change", updateTheme);
     return () => mediaQuery.removeEventListener("change", updateTheme);
-  }, [mode]);
+  }, [accent, mode]);
 
   return null;
 }
 
-function Navigation() {
+function Navigation({ ariaLabel, className, items }: { ariaLabel: string; className?: string; items: typeof navigation }) {
   return (
-    <nav aria-label="主导航" className="mt-12 flex flex-col gap-1">
-      <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">工作区</p>
-      {navigation.map(({ icon: Icon, label, path }) => (
+    <nav aria-label={ariaLabel} className={cn("flex flex-col gap-1", className)}>
+      {items.map(({ icon: Icon, label, path }) => (
         <NavLink
           className={({ isActive }) => cn(
             "group flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
@@ -77,24 +78,18 @@ export function AppShell() {
             />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold tracking-tight text-foreground">SkillSage</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">AI 技能管理器</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">技能管理器</p>
             </div>
           </div>
 
-          <Navigation />
+          <Navigation ariaLabel="主导航" className="mt-12" items={navigation} />
 
           <div className="mt-auto flex flex-col gap-5">
-            <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-3">
-              <CheckCircle2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-              <div>
-                <p className="text-xs font-medium text-foreground">中央仓库已就绪</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">技能安装、迁移与分发统一管理</p>
-              </div>
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+              <CheckCircle2 aria-hidden="true" className="h-4 w-4 shrink-0 text-success" />
+              <p className="text-xs font-medium text-foreground">仓库已就绪</p>
             </div>
-            <div className="flex items-center justify-between gap-2 px-1">
-              <span className="text-xs font-medium text-muted-foreground">外观</span>
-              <ThemeControl />
-            </div>
+            <Navigation ariaLabel="应用设置" items={settingsNavigation} />
           </div>
         </aside>
 

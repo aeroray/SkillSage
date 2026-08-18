@@ -40,3 +40,7 @@ export function distributeSkills(skillIds: string[], agents: string[], conflicts
 export function checkDistributionConflicts(skillName: string, agents: string[]) {
   return invokeCommand<DistributionConflict[]>("check_distribution_conflicts", { skillName, agents });
 }
+
+export function openSkillDirectory(skillId: string) {
+  return invokeCommand<void>("open_skill_directory", { skillId });
+}
