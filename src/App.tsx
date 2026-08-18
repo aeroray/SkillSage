@@ -1,10 +1,13 @@
 import { BrowserRouter } from "react-router-dom";
 import { AppShell } from "./app/AppShell";
+import { TooltipProvider } from "./components/ui/tooltip";
 
 function App() {
   return (
     <BrowserRouter>
-      <AppShell />
+      <TooltipProvider>
+        <AppShell />
+      </TooltipProvider>
     </BrowserRouter>
   );
 }

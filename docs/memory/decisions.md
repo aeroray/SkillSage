@@ -159,3 +159,27 @@ Reason: This reduces unused vertical space while keeping related settings scanna
 
 Decision: The Settings cleanup module is presented as “停止管理”, not app uninstall. It explains the handoff use case: keep current skill files and links while removing SkillSage management records, or explicitly clean up SkillSage-created skill data and links.
 Reason: The action controls SkillSage’s ownership of managed skills; the operating-system uninstaller remains a separate product lifecycle action.
+
+## 2026-08-18 - Installed skills management surface
+
+Decision: The installed-skills page presents local import, GitHub URL installation, and the store as peer actions in the top-right. Filters, selection, batch actions, and author groups share one management panel; the master selection checkbox exposes an indeterminate state when only part of the filtered result is selected.
+Reason: Installation entry points belong to the same skill-management context, while the selection workflow should visually and semantically connect its controls to the list it operates on.
+
+## 2026-08-18 - Selection-scoped update checks
+
+Decision: The installed-skills “检查更新” action is enabled only when skills are selected and checks exactly those selected skill IDs; the page's initial refresh and lifecycle refreshes may still check all installed skills.
+Reason: Batch operations should share one predictable selection scope instead of silently operating on the entire repository.
+
+## 2026-08-18 - Migration and store visual hierarchy
+
+Decision: Migration results use compact single-line path fields, explicit right-side action panels for manual/invalid items, and no redundant pending-count badge. Store browsing uses left-aligned colored ranking tabs, a right-aligned search field, text-led skill cards, and an expandable same-repository skill menu.
+Reason: These surfaces should make the primary content and next action obvious without oversized decorative elements or duplicated status text.
+
+Decision: Migration cards place a same-scale type icon before the skill name, expose its meaning through a tooltip, let the path row fill the available width, and place all corrective actions at the upper right.
+Reason: The card should communicate the source shape at the point where the skill identity is read, while keeping every next action close to the relevant heading instead of separating actions across the card.
+
+Decision: Store skill cards use natural content height with explicit bottom padding; their bottom metadata row has a minimum height matching the same-repository action; ranking tabs remain compact and the search field fills the remaining toolbar width.
+Reason: The store should show more results at a glance without leaving large blank regions or visually oversized controls.
+
+Decision: Store security-audit failures are represented by a red warning icon beside the audit heading, with the detailed warning exposed through a tooltip instead of a full-width alert below the audit cards.
+Reason: Audit problems remain discoverable without interrupting the detail flow or adding a large block of repeated status text.

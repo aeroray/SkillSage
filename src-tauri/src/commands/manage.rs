@@ -39,17 +39,29 @@ pub struct UpdateCheckList {
 }
 
 #[tauri::command]
-pub async fn check_updates(skill_id: Option<String>) -> Result<UpdateCheckList, SkillsageError> {
+pub async fn check_updates(
+    skill_id: Option<String>,
+    skill_ids: Option<Vec<String>>,
+) -> Result<UpdateCheckList, SkillsageError> {
     let records = tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
         let lock = crate::core::repo::lockfile::load(&layout)?;
-        let records = match skill_id {
-            Some(id) => vec![lock
+        let records = match (skill_id, skill_ids) {
+            (Some(id), _) => vec![lock
                 .skills
                 .get(&id)
                 .cloned()
                 .ok_or(SkillsageError::NotInstalled(id))?],
-            None => lock.skills.into_values().collect(),
+            (None, Some(ids)) => ids
+                .into_iter()
+                .map(|id| {
+                    lock.skills
+                        .get(&id)
+                        .cloned()
+                        .ok_or(SkillsageError::NotInstalled(id))
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            (None, None) => lock.skills.into_values().collect(),
         };
         Ok::<_, SkillsageError>(records)
     })

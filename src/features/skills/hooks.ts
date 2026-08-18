@@ -115,12 +115,12 @@ export function useSkillUpdates() {
   const [error, setError] = useState<string>();
   const requestId = useRef(0);
 
-  const check = useCallback(async (skillId?: string) => {
+  const check = useCallback(async (skillId?: string, skillIds?: string[]) => {
     const currentRequest = ++requestId.current;
     setChecking(true);
     setError(undefined);
     try {
-      const result = await checkUpdates(skillId);
+      const result = await checkUpdates(skillId, skillIds);
       if (currentRequest === requestId.current) setUpdates(result.updates);
       return result.updates;
     } catch (reason) {

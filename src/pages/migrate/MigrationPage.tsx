@@ -21,6 +21,7 @@ import { Dialog } from "../../components/ui/dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
 import { Skeleton } from "../../components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PageHeader } from "../../components/common/PageHeader";
 import { ToolSelection, type ToolOption } from "../../components/common/ToolSelection";
@@ -79,28 +80,33 @@ function MigrationItemCard({ item, onCopyError, onManual, onOpenPath, onRemove, 
         <div className="flex shrink-0 items-center">
           {item.canTakeover ? <Checkbox aria-label={`选择迁移 ${item.name}`} checked={selected} disabled={working} onCheckedChange={(checked) => onToggle(item.id, checked === true)} /> : <div aria-hidden="true" className="size-4" />}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="min-w-0 truncate text-sm font-medium text-foreground">{item.name}</p>
-                <Badge variant={classificationVariant(item.classification)}>{classificationLabel(item.classification)}</Badge>
-                <Badge variant="muted">{item.location === "public" ? "公共目录" : "工具目录"}</Badge>
-                <Badge aria-label={kindLabel} variant="outline"><KindIcon aria-hidden="true" />{kindLabel}</Badge>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">{item.description || "暂无描述"}</p>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span aria-label={kindLabel} className="inline-flex size-4 shrink-0 cursor-help items-center justify-center text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60" role="img" tabIndex={0}>
+                    <KindIcon aria-hidden="true" className="size-4" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={6}>{kindLabel}</TooltipContent>
+              </Tooltip>
+              <p className="min-w-0 truncate text-sm font-medium text-foreground">{item.name}</p>
+              <Badge variant={classificationVariant(item.classification)}>{classificationLabel(item.classification)}</Badge>
+              <Badge variant="muted">{item.location === "public" ? "公共目录" : "工具目录"}</Badge>
             </div>
-            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               {item.canManualHandle ? <Button disabled={working} onClick={() => onManual(item)} size="sm" variant="outline"><Wrench data-icon="inline-start" />手动处理</Button> : null}
               {item.canRemove ? <Button disabled={working} onClick={() => onRemove(item)} size="sm" variant="destructive"><Trash2 data-icon="inline-start" />删除无效链接</Button> : null}
             </div>
           </div>
+          <p className="mt-1 text-sm text-muted-foreground">{item.description || "暂无描述"}</p>
           <div className="mt-3 flex w-full items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-muted/60 px-2 py-1.5 font-mono text-xs text-muted-foreground">
-              <p className="min-w-0 flex-1 break-all">{path}</p>
-              <Button aria-label={copied ? "地址已复制" : "复制地址"} className="shrink-0" onClick={() => void copyPath()} size="icon" title={copied ? "地址已复制" : "复制地址"} variant="ghost">{copied ? <Check /> : <Copy />}</Button>
+            <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md bg-muted/60 px-2 font-mono text-xs text-muted-foreground" title={path}>
+              <p className="min-w-0 flex-1 truncate">{path}</p>
+              <Button aria-label={copied ? "地址已复制" : "复制地址"} className="size-8 shrink-0" onClick={() => void copyPath()} size="icon" title={copied ? "地址已复制" : "复制地址"} variant="ghost">{copied ? <Check /> : <Copy />}</Button>
             </div>
-            <Button aria-label="打开当前目录" disabled={working || item.canRemove} onClick={() => onOpenPath(path)} size="icon" title={item.canRemove ? "路径不可用" : "打开当前目录"} variant="outline"><FolderOpen /></Button>
+            <Button aria-label="打开当前目录" className="shrink-0" disabled={working || item.canRemove} onClick={() => onOpenPath(path)} size="icon" title={item.canRemove ? "路径不可用" : "打开当前目录"} variant="outline"><FolderOpen /></Button>
           </div>
           {item.warning ? <p className="mt-2 flex items-center gap-1.5 text-xs text-warning"><AlertCircle aria-hidden="true" className="size-3.5 shrink-0" />{item.warning}</p> : null}
           {item.toolIds.length > 0 ? <div className="mt-2 flex flex-wrap gap-1.5">{item.toolIds.map((toolId) => <Badge key={toolId} variant="outline">{tools.find((tool) => tool.id === toolId)?.name ?? toolId}</Badge>)}</div> : null}
@@ -179,7 +185,7 @@ export function MigrationPage() {
   return (
     <div>
       <PageHeader
-        actions={<div className="flex items-center gap-2"><Button disabled={selected.length === 0 || working || toolsLoading} onClick={() => void submit()}>{executing ? "迁移中…" : "迁移所选技能"}</Button><Button aria-label="重新扫描" disabled={working} onClick={() => void runScan()} size="icon" variant="ghost"><RefreshCw /></Button></div>}
+        actions={<Button disabled={selected.length === 0 || working || toolsLoading} onClick={() => void submit()}>{executing ? "迁移中…" : "迁移所选技能"}</Button>}
         description="扫描工具和公共目录，把已有技能纳入中央仓库。"
         title="迁移技能"
       />
@@ -200,7 +206,7 @@ export function MigrationPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between gap-4"><div><CardTitle>扫描结果</CardTitle><CardDescription className="mt-1">可直接迁移 {eligibleCount} 个，需手动处理 {manualCount} 个，可删除 {removableCount} 个无效链接。</CardDescription></div><Badge variant="muted">{selected.length} 个待迁移</Badge></div>
+          <div><CardTitle>扫描结果</CardTitle><CardDescription className="mt-1">可直接迁移 {eligibleCount} 个，需手动处理 {manualCount} 个，可删除 {removableCount} 个无效链接。</CardDescription></div>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 pb-5">
           {scanning ? <div aria-busy="true" className="flex flex-col gap-3"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div> : scan?.items.length ? scan.items.map((item) => <MigrationItemCard item={item} key={item.id} onCopyError={setPathError} onManual={openManual} onOpenPath={(path) => void openPath(path)} onRemove={setRemoveTarget} onToggle={(id, checked) => setSelected((current) => checked ? [...new Set([...current, id])] : current.filter((value) => value !== id))} selected={selected.includes(item.id)} tools={toolOptions} working={working} />) : <div className="flex flex-col items-center gap-2 py-12 text-center"><FolderSync aria-hidden="true" className="size-8 text-muted-foreground" /><p className="text-sm font-medium text-foreground">没有找到待迁移技能</p><p className="text-sm text-muted-foreground">这些目录里的技能都已由 SkillSage 管理。</p></div>}

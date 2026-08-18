@@ -17,8 +17,8 @@ export function uninstallSkill(skillId: string) {
   return invokeCommand<void>("uninstall_skill", { skillId });
 }
 
-export function checkUpdates(skillId?: string) {
-  return invokeCommand<UpdateCheckList>("check_updates", { skillId });
+export function checkUpdates(skillId?: string, skillIds?: string[]) {
+  return invokeCommand<UpdateCheckList>("check_updates", { skillId, skillIds });
 }
 
 export function updateSkill(skillId: string) {
