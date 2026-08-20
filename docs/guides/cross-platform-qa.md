@@ -14,7 +14,7 @@ pnpm build
 pnpm exec tauri build --debug --no-bundle
 ```
 
-仓库中的 `.github/workflows/qa.yml` 会在 `windows-latest` 和 `macos-latest` 上执行同一组检查。
+这些检查目前通过本地命令执行；GitHub Actions 仅保留发布 workflow，发布前由 Windows/macOS runner 构建安装包并生成 updater artifacts。
 
 ## 手工走查
 

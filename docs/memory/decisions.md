@@ -186,7 +186,7 @@ Reason: Audit problems remain discoverable without interrupting the detail flow 
 
 ## 2026-08-20 - Single shared public-directory install model (supersedes per-tool distribution)
 
-Decision: Skills no longer install into a private central repository (`~/.skillsage/{remote,local}`) and get symlinked/junctioned out to per-tool directories. Every skill — from the store, a GitHub URL, or local import — installs as real content directly into one shared directory, `~/.agents/skills/<name>/` (flat, no owner subfolder). This supersedes the "Central repository," "Supported tools," and "Windows link invocation" decisions above, and directly reverses `docs/specs/01-需求文档.md`'s original "minimum privilege" principle and its explicit listing of Amp-style shared-directory tools as unsupported.
+Decision: Skills no longer install into a private central repository (`~/.skillsage/{remote,local}`) and get symlinked/junctioned out to per-tool directories. Every skill — from the store, a GitHub URL, or local import — installs as real content directly into one shared directory, `~/.agents/skills/<name>/` (flat, no owner subfolder). This supersedes the "Central repository," "Supported tools," and "Windows link invocation" decisions above, and directly reverses the old requirements' original "minimum privilege" principle and its explicit listing of Amp-style shared-directory tools as unsupported.
 Reason: Investigation found the promised per-tool isolation doesn't hold in practice — other AI tools already read from shared locations (this exact `~/.agents/skills/` path was already referenced in this codebase as a migration-scan source) regardless of whether SkillSage links into their own directory. Maintaining platform-specific symlink/junction/conflict/takeover machinery in service of an isolation guarantee that doesn't actually hold added real complexity and attack surface for no real benefit.
 
 Decision: Tool detection, the 5-tool registry, and all "adjust distribution"/"batch distribution" functionality are removed entirely — a skill is just installed or not, with no per-tool dimension.
@@ -207,3 +207,8 @@ Note: the Rust module path and Tauri command names (`core/migrate/`, `scan_migra
 
 Decision: The individual skill uninstall action deletes the real folder every AI tool reads from directly, not a disposable link; there is no global cleanup command.
 Reason: A single-skill confirmation can explain the blast radius while avoiding a broad app-level deletion control.
+
+## 2026-08-20 - Historical specifications retired
+
+Decision: Keep current product context in source, tests, README, QA guidance, and active memory; retire the historical `docs/specs/` and design-system master documents.
+Reason: They duplicate current decisions or describe superseded architecture, so retaining them creates competing sources of truth.

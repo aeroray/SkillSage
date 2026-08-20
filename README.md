@@ -167,12 +167,6 @@ xattr -rd com.apple.quarantine /Applications/SkillSage.app
 
 ## 项目文档
 
-- [需求文档](./docs/specs/01-需求文档.md)
-- [设计规范](./docs/specs/02-设计规范.md)
-- [后端架构](./docs/specs/03-后端架构.md)
-- [前端结构](./docs/specs/04-前端结构.md)
-- [生命周期状态机](./docs/specs/05-生命周期状态机.md)
-- [开发阶段规划](./docs/specs/06-开发阶段规划.md)
 - [跨平台 QA 指南](./docs/guides/cross-platform-qa.md)
 
-当前桌面端已覆盖商店、GitHub/本地导入、版本管理、设置、同步、技能采纳和冲突处理等核心流程，并采用单一共享技能目录模型。
+当前桌面端已覆盖商店、GitHub/本地导入、版本管理、设置、同步、技能采纳和冲突处理等核心流程，并采用单一共享技能目录模型。历史规格和设计草稿已移除，避免与实际代码形成两套标准。

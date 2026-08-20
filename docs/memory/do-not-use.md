@@ -12,7 +12,7 @@ into, and "adjust/batch distribution" commands to add/remove links after install
 
 **Why it was rejected:** the whole design rested on "skills exist only in the private
 directory, projected via links only into user-selected tool directories; other tools
-cannot read them" (`docs/specs/01-需求文档.md`'s original §8 principle 1). Investigation
+cannot read them" (the old requirements' original minimum-privilege principle). Investigation
 found this isolation doesn't hold in practice — other AI tools already read from shared
 locations (notably `~/.agents/skills/`, which this very codebase already referenced as a
 migration-scan source) regardless of which tool-specific directory SkillSage links into.
@@ -25,3 +25,9 @@ concept at all).
 If a future need for genuine per-tool isolation resurfaces, treat it as a new problem to
 design fresh — don't resurrect this implementation; it was removed on principle, not
 just refactored.
+
+## Historical specification files retired
+
+Do not recreate or rely on the deleted `docs/specs/` or
+`design-system/skillsage/MASTER.md` files as current specifications. Use source, tests,
+the README, the QA guide, and active project memory instead.
