@@ -1,7 +1,8 @@
 [package]
 name = "app"
-version = "0.1.0"
-description = "SkillSage AI Agent 技能管理器"
+# Synchronized from package.json by `pnpm sync:version`.
+version = "1.0.0"
+description = "SkillSage · 技匠 AI Agent 技能管理器"
 authors = ["SkillSage contributors"]
 license = "MIT"
 repository = "https://github.com/aeroray/SkillSage"

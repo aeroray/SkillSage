@@ -32,7 +32,7 @@ impl GitHubClient {
         proxy_url: Option<String>,
     ) -> Result<Self, SkillsageError> {
         let mut builder = reqwest::Client::builder()
-            .user_agent("SkillSage/0.1")
+            .user_agent(concat!("SkillSage/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(45));
         if let Some(proxy_url) = proxy_url {

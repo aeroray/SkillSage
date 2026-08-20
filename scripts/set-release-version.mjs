@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 
 const rawTag = process.argv[2] || process.env.GITHUB_REF_NAME;
 const version = rawTag?.replace(/^v/, "");
@@ -9,16 +9,15 @@ if (!version || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
 
 const packagePath = "package.json";
 const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
-packageJson.version = version;
-await writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
+if (packageJson.version !== version) {
+  throw new Error(`package.json version ${packageJson.version} does not match release tag ${version}. Update package.json first.`);
+}
 
 const cargoPath = "src-tauri/Cargo.toml";
 const cargoToml = await readFile(cargoPath, "utf8");
-const nextCargoToml = cargoToml.replace(/(^\[package\][\s\S]*?^version\s*=\s*")[^"]+("\s*$)/m, `$1${version}$2`);
-
-if (nextCargoToml === cargoToml) {
-  throw new Error("Could not update the package version in src-tauri/Cargo.toml.");
+const cargoVersion = cargoToml.match(/(^\[package\][\s\S]*?^version\s*=\s*")([^"]+)("\s*$)/m)?.[2];
+if (cargoVersion !== version) {
+  throw new Error(`src-tauri/Cargo.toml version ${cargoVersion || "<missing>"} is not synchronized with package.json ${version}. Run pnpm sync:version first.`);
 }
 
-await writeFile(cargoPath, nextCargoToml, "utf8");
-console.log(`Release version set to ${version}.`);
+console.log(`Release version verified from package.json: ${version}.`);

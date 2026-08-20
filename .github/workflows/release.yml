@@ -1,6 +1,6 @@
 name: Release
 
-# Push a SemVer tag (for example v0.1.0) to build and publish the desktop
+# Push a SemVer tag (for example v1.0.0) to build and publish the desktop
 # installers. The same release also contains signed updater artifacts and
 # latest.json for in-app updates on Windows and macOS.
 on:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing SemVer tag to release, for example v0.1.0"
+        description: "Existing SemVer tag to release, for example v1.0.0"
         required: true
         type: string
 
@@ -84,10 +84,23 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: "SkillSage ${{ inputs.tag || github.ref_name }}"
+          releaseName: "SkillSage · 技匠 ${{ inputs.tag || github.ref_name }}"
           generateReleaseNotes: true
           releaseBody: |
-            ## 下载
+            ## What's New · 本次更新
+
+            ### 🧰 技能管理
+
+            - 统一管理来自技能商店、本地目录和 GitHub 的 AI Agent 技能。
+            - 支持技能版本记录、更新检查、快照回退和冲突处理。
+            - 通过「采纳技能」发现并登记共享目录中已有的技能。
+
+            ### 🎨 桌面体验
+
+            - 提供亮色、深色和跟随系统三种显示模式，并支持主题色切换。
+            - 以桌面端 1200×800 为基准，围绕 Windows 和 macOS 使用场景优化。
+
+            ## Download · 下载
 
             - **Windows**：NSIS 安装包，支持简体中文和 English。
             - **macOS（Apple Silicon）**：DMG 安装包。

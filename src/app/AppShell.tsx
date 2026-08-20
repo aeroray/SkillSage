@@ -111,13 +111,13 @@ export function AppShell() {
         <aside className="flex min-h-screen w-[228px] shrink-0 flex-col border-r border-border bg-sidebar px-5 py-6 text-sidebar-foreground">
           <div className="flex items-center gap-3 px-1">
             <img
-              alt="SkillSage"
+              alt="SkillSage · 技匠"
               className="size-9 shrink-0 rounded-md object-cover"
               src="/skillsage-logo.png"
             />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold tracking-tight text-foreground">SkillSage</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">技能管理器</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">技匠</p>
             </div>
           </div>
 

@@ -1,6 +1,6 @@
 <div align="center">
   <img src="./skillsage-logo.png" alt="SkillSage Logo" width="120" />
-  <h1>SkillSage</h1>
+  <h1>SkillSage · 技匠</h1>
   <p>面向 Windows 和 macOS 的桌面端 AI Agent 技能管理器</p>
 
   <p>
@@ -12,7 +12,7 @@
   </p>
 </div>
 
-SkillSage 将 AI Agent 技能直接安装到各工具共用的 `~/.agents/skills/` 目录，并在本地维护版本、来源和快照信息。它适合需要统一安装、更新和维护技能的个人开发者与团队。
+技匠（SkillSage）将 AI Agent 技能直接安装到各工具共用的 `~/.agents/skills/` 目录，并在本地维护版本、来源和快照信息。它适合需要统一安装、更新和维护技能的个人开发者与团队。
 
 > [!NOTE]
 > SkillSage 是桌面端软件，主窗口默认及最小尺寸为 `1200×800`，支持最大化，不面向移动端布局。
@@ -61,6 +61,16 @@ pnpm exec tauri build
 ```bash
 pnpm exec tauri build --debug --no-bundle
 ```
+
+### 版本维护
+
+应用版本以 [`package.json`](./package.json) 中的 `version` 为唯一来源。Tauri 配置直接读取该字段；Cargo 版本由以下命令同步生成：
+
+```bash
+pnpm sync:version
+```
+
+`pnpm build` 会自动执行同步。发布标签必须与 `package.json` 的版本一致，例如 `package.json` 为 `1.0.0` 时推送 `v1.0.0`。
 
 ### Logo 维护
 
@@ -116,8 +126,8 @@ src-tauri/src/
 └── main.rs          # 瘦启动入口
 
 docs/
-├── specs/           # 需求、设计、架构、状态机和阶段规划
-└── guides/          # 跨平台 QA 与发布前检查
+├── guides/          # 跨平台 QA 与发布前检查
+└── memory/          # 项目长期约束与已确认决策
 ```
 
 安装、更新、回退、卸载、采纳和同步等文件系统写操作由 Rust 负责；前端通过 Tauri commands 调用后端能力。不要在前端或脚本中直接实现技能安装、采纳或卸载流程，也不要调用 `npx skills`。
@@ -149,7 +159,7 @@ cargo audit --manifest-path src-tauri/Cargo.toml
 
 ### GitHub Release
 
-发布 workflow 位于 [`release.yml`](./.github/workflows/release.yml)。推送 `v` 开头的 SemVer 标签（例如 `v0.1.0`）后，GitHub Actions 会：
+发布 workflow 位于 [`release.yml`](./.github/workflows/release.yml)。推送 `v` 开头的 SemVer 标签（例如 `v1.0.0`）后，GitHub Actions 会：
 
 - 构建 Windows NSIS 安装包，安装器支持简体中文和 English。
 - 构建 Apple Silicon macOS DMG，并同时生成应用内更新所需的签名产物。

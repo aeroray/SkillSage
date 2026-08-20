@@ -1,4 +1,4 @@
-# SkillSage 文档
+# SkillSage · 技匠文档
 
 <p align="center">
   <img src="../skillsage-logo.png" alt="SkillSage Logo" width="96" height="96" />

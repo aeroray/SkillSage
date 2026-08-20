@@ -1,14 +1,16 @@
 {
   "name": "skillsage",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "pnpm sync:version",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
     "sync:branding": "node scripts/sync-branding.mjs",
+    "sync:version": "node scripts/sync-version.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

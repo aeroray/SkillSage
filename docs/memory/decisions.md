@@ -212,3 +212,8 @@ Reason: A single-skill confirmation can explain the blast radius while avoiding 
 
 Decision: Keep current product context in source, tests, README, QA guidance, and active memory; retire the historical `docs/specs/` and design-system master documents.
 Reason: They duplicate current decisions or describe superseded architecture, so retaining them creates competing sources of truth.
+
+## 2026-08-20 - Package version and Chinese product name
+
+Decision: `package.json.version` is the sole app release version; Tauri reads it directly and Cargo metadata is synchronized by `pnpm sync:version`. The official Chinese product name is 技匠, shown with the SkillSage brand where appropriate.
+Reason: One release field prevents version drift, while a stable bilingual identity keeps the app recognizable across installers, UI, and documentation.

@@ -20,6 +20,7 @@ import { useThemeStore } from "../../features/theme/store";
 import { useAppUpdateStore } from "../../features/update/store";
 import { displayPath } from "../../lib/paths";
 import { isBrowserPreview } from "../../lib/tauri";
+import packageJson from "../../../package.json";
 
 const GITHUB_PROJECT_URL = "https://github.com/aeroray/SkillSage";
 const PRODUCT_HOME_URL = "https://aeroray.github.io/SkillSage/";
@@ -34,7 +35,7 @@ export function SettingsPage() {
   const [githubToken, setGithubToken] = useState("");
   const [proxyUrl, setProxyUrl] = useState("");
   const [saved, setSaved] = useState(false);
-  const [appVersion, setAppVersion] = useState("0.1.0");
+  const [appVersion, setAppVersion] = useState(packageJson.version);
   const [syncOpen, setSyncOpen] = useState(false);
   const syncExport = useSyncExport();
   const themeMode = useThemeStore((state) => state.mode);
@@ -130,7 +131,7 @@ export function SettingsPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-4">
-              <div className="flex min-w-0 items-center gap-4"><div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><Info aria-hidden="true" className="h-5 w-5" /></div><div><CardTitle>关于与更新</CardTitle><CardDescription className="mt-1">SkillSage 技能管理器与版本信息。</CardDescription></div></div>
+              <div className="flex min-w-0 items-center gap-4"><div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><Info aria-hidden="true" className="h-5 w-5" /></div><div><CardTitle>关于与更新</CardTitle><CardDescription className="mt-1">技匠（SkillSage）技能管理器与版本信息。</CardDescription></div></div>
               <Badge className="shrink-0" variant="muted">v{appVersion}</Badge>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-3 pb-5">
