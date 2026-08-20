@@ -167,7 +167,7 @@ cargo audit --manifest-path src-tauri/Cargo.toml
 
 在仓库的 Actions secrets 中配置 `TAURI_SIGNING_PRIVATE_KEY`。使用 Tauri signer 生成密钥后，只复制私钥内容到 GitHub Secret，不能提交到仓库。`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 只有在私钥设置了密码时才需要配置；对应的公钥已经写入 Tauri 配置。
 
-SkillSage 不发布到 Mac App Store，而是直接通过 GitHub Release 提供 Apple Silicon DMG。macOS 签名和公证不是 Tauri 自动更新签名的替代品，而是用于减少 Gatekeeper 的首次启动拦截；它们通过 workflow 中的 `APPLE_*` secrets 可选配置。未配置时仍可生成未签名 DMG，但用户首次打开可能需要在 Finder 中右键选择“打开”，或执行：
+SkillSage 不发布到 Mac App Store，而是直接通过 GitHub Release 提供未签名的 Apple Silicon DMG。macOS 签名和公证不是 Tauri 自动更新签名的替代品，本项目的开源发布 workflow 不依赖 Apple 开发者证书；用户首次打开可能需要在 Finder 中右键选择“打开”，或执行：
 
 ```bash
 xattr -rd com.apple.quarantine /Applications/SkillSage.app
