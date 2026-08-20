@@ -76,19 +76,6 @@ pub fn save(
     load_view(layout)
 }
 
-pub fn clear_for_cleanup(layout: &RepoLayout) -> Result<(), SkillsageError> {
-    let previous_file = read_settings_file(layout)?;
-    let previous_token = read_token()?;
-    remove_settings_file(layout)?;
-    if let Err(error) = delete_token() {
-        let restore_file = restore_settings_file(layout, previous_file);
-        let restore_token = set_token(previous_token.as_deref());
-        let recovery = restore_file.err().or(restore_token.err());
-        return Err(with_recovery(error, recovery));
-    }
-    Ok(())
-}
-
 pub fn normalize_proxy(proxy_url: Option<String>) -> Result<Option<String>, SkillsageError> {
     let Some(proxy_url) = proxy_url else {
         return Ok(None);

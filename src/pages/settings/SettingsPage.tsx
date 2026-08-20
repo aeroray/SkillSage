@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { CheckCircle2, Download, ExternalLink, GitFork, Globe2, Info, LogOut, Palette, RefreshCw, ShieldCheck, Upload } from "lucide-react";
+import { Download, ExternalLink, GitFork, Globe2, Info, Palette, RefreshCw, ShieldCheck, Upload } from "lucide-react";
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
@@ -13,9 +13,7 @@ import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { AccentControl } from "../../components/common/AccentControl";
 import { PageHeader } from "../../components/common/PageHeader";
 import { ThemeControl } from "../../components/common/ThemeControl";
-import { useAppCleanup } from "../../features/cleanup";
 import { useSettings } from "../../features/settings/hooks";
-import { CleanupDialog } from "./CleanupDialog";
 import { SyncImportDialog } from "../sync/SyncImportDialog";
 import { useSyncExport, type SyncSettings } from "../../features/sync";
 import { useThemeStore } from "../../features/theme/store";
@@ -33,12 +31,10 @@ function formatLastChecked(value: string | null) {
 
 export function SettingsPage() {
   const { error, loading, refresh, save, saving, settings } = useSettings();
-  const cleanup = useAppCleanup();
   const [githubToken, setGithubToken] = useState("");
   const [proxyUrl, setProxyUrl] = useState("");
   const [saved, setSaved] = useState(false);
   const [appVersion, setAppVersion] = useState("0.1.0");
-  const [cleanupOpen, setCleanupOpen] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
   const syncExport = useSyncExport();
   const themeMode = useThemeStore((state) => state.mode);
@@ -196,25 +192,6 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <Card className="mt-5 border-border">
-        <CardHeader className="flex flex-row items-start gap-4">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><LogOut aria-hidden="true" className="h-5 w-5" /></div>
-          <div><CardTitle>停止管理</CardTitle><CardDescription className="mt-1">不再使用 SkillSage 管理技能时，选择保留技能文件，或删除 SkillSage 安装的技能。</CardDescription></div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 pb-5">
-          {cleanup.error ? <ErrorBanner error={cleanup.error} /> : null}
-          {cleanup.result ? <Alert><CheckCircle2 /><AlertDescription>{cleanup.result.mode === "all" ? `已删除 ${cleanup.result.trackedSkillsRemoved} 个 SkillSage 安装的技能文件夹和管理数据，其他 AI 工具会立即失去这些技能。` : "已保留共享目录中的所有技能文件，仅移除 SkillSage 的管理记录，AI 工具不受影响。"}</AlertDescription></Alert> : null}
-          <div className="flex items-center justify-between gap-5 rounded-lg border border-border bg-muted/30 p-4">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">选择处理方式</p>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">保留技能后，共享目录中的文件完全不受影响，AI 工具仍可继续使用；删除技能后，SkillSage 安装的技能文件夹会从共享目录中永久移除，且不可恢复。</p>
-            </div>
-            <Button className="shrink-0" onClick={() => setCleanupOpen(true)} variant="outline">选择方式</Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <CleanupDialog cleaning={cleanup.cleaning} onClose={() => setCleanupOpen(false)} onConfirm={(mode) => { void cleanup.run(mode); setCleanupOpen(false); }} open={cleanupOpen} />
       <SyncImportDialog onApplySettings={applyImportedSettings} onClose={() => setSyncOpen(false)} onCompleted={() => { void refresh(); }} open={syncOpen} />
     </div>
   );

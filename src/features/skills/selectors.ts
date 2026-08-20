@@ -1,6 +1,6 @@
 import type { InstalledSkill, UpdateInfo } from "./types";
 
-export type SkillSourceFilter = "all" | "skills.sh" | "builtin" | "local";
+export type SkillSourceFilter = "all" | "skills.sh" | "local";
 export type SkillStatusFilter = "all" | "update" | "current";
 export type SkillSortMode = "recent" | "name" | "source";
 
@@ -11,7 +11,7 @@ function timestamp(value: string) {
 
 export function sourceLabel(source: string) {
   if (source.startsWith("local://")) return "本地导入";
-  if (source.startsWith("builtin://")) return "内置来源";
+  if (source.startsWith("builtin://")) return "SkillSage 内置";
   if (source.includes("skills.sh")) return "skills.sh";
   return source.replace(/^https?:\/\//, "").split("/").slice(0, 2).join("/");
 }
@@ -32,9 +32,10 @@ export function filterAndSortSkills(
       const updateAvailable = updates.get(skill.id)?.updateAvailable ?? false;
       const matchesQuery = !query || [skill.name, skill.owner, skill.description, skill.source].join(" ").toLowerCase().includes(query);
       const matchesSource = filters.source === "all"
-        || (filters.source === "builtin" && skill.source.startsWith("builtin://"))
         || (filters.source === "local" && skill.source.startsWith("local://"))
-        || (filters.source === "skills.sh" && !skill.source.startsWith("builtin://") && !skill.source.startsWith("local://"));
+        || (filters.source === "skills.sh"
+          && !skill.source.startsWith("local://")
+          && !skill.source.startsWith("builtin://"));
       const matchesStatus = filters.status === "all"
         || (filters.status === "update" && updateAvailable)
         || (filters.status === "current" && !updateAvailable);

@@ -3,12 +3,25 @@ import {
   AlertCircle,
   Check,
   Copy,
+  FilePenLine,
   FolderInput,
   FolderOpen,
-  RefreshCw,
+  ScanSearch,
+  Trash2,
+  X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../components/ui/alert-dialog";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -17,7 +30,13 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PageHeader } from "../../components/common/PageHeader";
 import { useToast } from "../../components/ui/toast-context";
-import { openAdoptPath, useAdoptExecute, useAdoptScan } from "../../features/adopt";
+import {
+  openAdoptPath,
+  removeAdoptCandidate,
+  renameAdoptCandidate,
+  useAdoptExecute,
+  useAdoptScan,
+} from "../../features/adopt";
 import type { AdoptableItem } from "../../features/adopt";
 import { copyText } from "../../lib/clipboard";
 import { displayPath } from "../../lib/paths";
@@ -27,6 +46,8 @@ function AdoptCandidateRow({
   item,
   onCopyError,
   onOpenPath,
+  onRemove,
+  onRename,
   onToggle,
   selected,
   working,
@@ -34,6 +55,8 @@ function AdoptCandidateRow({
   item: AdoptableItem;
   onCopyError: (message: string) => void;
   onOpenPath: (path: string) => void;
+  onRemove: (item: AdoptableItem) => void;
+  onRename: (item: AdoptableItem) => void;
   onToggle: (name: string, checked: boolean) => void;
   selected: boolean;
   working: boolean;
@@ -57,15 +80,41 @@ function AdoptCandidateRow({
         <div className="flex shrink-0 items-center">
           <Checkbox
             aria-label={`选择采纳 ${item.name}`}
-            checked={item.valid && selected}
-            disabled={working || !item.valid}
+            checked={item.valid && !item.declaredName && selected}
+            disabled={working || !item.valid || Boolean(item.declaredName)}
             onCheckedChange={(checked) => onToggle(item.name, checked === true)}
           />
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <p className="min-w-0 truncate text-sm font-medium text-foreground">{item.name}</p>
-            {!item.valid ? <Badge variant="muted">无法采纳</Badge> : null}
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <p className="min-w-0 truncate text-sm font-medium text-foreground">{item.name}</p>
+              {item.declaredName ? <Badge className="bg-warning/10 text-warning" variant="muted">名称需整理</Badge> : null}
+              {!item.valid ? <Badge variant="muted">无法采纳</Badge> : null}
+            </div>
+            {item.declaredName ? (
+              <Button
+                className="shrink-0"
+                disabled={working}
+                onClick={() => onRename(item)}
+                size="sm"
+                variant="outline"
+              >
+                <FilePenLine data-icon="inline-start" />
+                整理名称
+              </Button>
+            ) : !item.valid && item.removable ? (
+              <Button
+                className="shrink-0"
+                disabled={working}
+                onClick={() => onRemove(item)}
+                size="sm"
+                variant="destructive"
+              >
+                <Trash2 data-icon="inline-start" />
+                删除条目
+              </Button>
+            ) : null}
           </div>
           <p className="mt-1 line-clamp-2 text-sm text-muted-foreground" title={item.description || "暂无描述"}>
             {item.description || "暂无描述"}
@@ -113,6 +162,10 @@ export function AdoptPage() {
   const { error, runScan, scan, scanning } = useAdoptScan();
   const [selected, setSelected] = useState<string[]>([]);
   const [directoryError, setDirectoryError] = useState<string>();
+  const [removeTarget, setRemoveTarget] = useState<AdoptableItem>();
+  const [renameTarget, setRenameTarget] = useState<AdoptableItem>();
+  const [actionError, setActionError] = useState<string>();
+  const [actionBusy, setActionBusy] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -132,9 +185,10 @@ export function AdoptPage() {
   };
   const { error: executeError, execute, executing } = useAdoptExecute(handleCompleted);
 
-  const validCount = scan?.items.filter((item) => item.valid).length ?? 0;
-  const working = scanning || executing;
-  const pageError = directoryError ?? error ?? executeError;
+  const adoptableItems = scan?.items.filter((item) => item.valid && !item.declaredName) ?? [];
+  const adoptableCount = adoptableItems.length;
+  const working = scanning || executing || actionBusy;
+  const pageError = directoryError ?? actionError ?? error ?? executeError;
 
   const submit = async () => {
     const result = await execute(selected.map((name) => ({ name })));
@@ -156,12 +210,44 @@ export function AdoptPage() {
     }
   };
 
+  const removeCandidate = async () => {
+    if (!removeTarget) return;
+    setActionError(undefined);
+    setActionBusy(true);
+    try {
+      await removeAdoptCandidate(removeTarget.name);
+      setRemoveTarget(undefined);
+      toast({ description: `已删除无效条目“${removeTarget.name}”。`, title: "删除完成", variant: "success" });
+      await runScan();
+    } catch (error) {
+      setActionError(normalizeTauriError(error));
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const renameCandidate = async () => {
+    if (!renameTarget?.declaredName) return;
+    setActionError(undefined);
+    setActionBusy(true);
+    try {
+      const nextName = await renameAdoptCandidate(renameTarget.name);
+      setRenameTarget(undefined);
+      toast({ description: `文件夹已整理为“${nextName}”，请重新确认采纳。`, title: "名称已整理", variant: "success" });
+      await runScan();
+    } catch (error) {
+      setActionError(normalizeTauriError(error));
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   return (
     <div>
       <PageHeader
         actions={
           <Button disabled={working} onClick={refreshPage} variant="outline">
-            <RefreshCw data-icon="inline-start" />
+            <ScanSearch data-icon="inline-start" />
             重新扫描
           </Button>
         }
@@ -184,7 +270,7 @@ export function AdoptPage() {
           <div className="min-w-0">
             <CardTitle>扫描结果</CardTitle>
             <CardDescription className="mt-1">
-              {scan?.items.length ?? 0} 个条目，可采纳 {validCount} 个。
+              {scan?.items.length ?? 0} 个条目，可直接采纳 {adoptableCount} 个。
             </CardDescription>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -192,17 +278,17 @@ export function AdoptPage() {
               <Checkbox
                 aria-label="全选"
                 checked={
-                  validCount > 0 && selected.length === validCount
+                  adoptableCount > 0 && selected.length === adoptableCount
                     ? true
                     : selected.length > 0
                       ? "indeterminate"
                       : false
                 }
-                disabled={working || validCount === 0}
+                disabled={working || adoptableCount === 0}
                 onCheckedChange={(checked) =>
                   setSelected(
                     checked === true
-                      ? (scan?.items.filter((item) => item.valid).map((item) => item.name) ?? [])
+                      ? adoptableItems.map((item) => item.name)
                       : [],
                   )
                 }
@@ -230,6 +316,8 @@ export function AdoptPage() {
                   toast({ description: message, title: "复制地址失败", variant: "error" })
                 }
                 onOpenPath={(path) => void openPath(path)}
+                onRemove={setRemoveTarget}
+                onRename={setRenameTarget}
                 onToggle={(name, checked) =>
                   setSelected((current) =>
                     checked ? [...new Set([...current, name])] : current.filter((value) => value !== name),
@@ -248,6 +336,66 @@ export function AdoptPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog
+        onOpenChange={(open) => {
+          if (!open && !actionBusy) setRemoveTarget(undefined);
+        }}
+        open={Boolean(removeTarget)}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogCancel
+            aria-label="关闭确认窗口"
+            className="absolute right-3 top-3"
+            size="icon"
+            variant="ghost"
+          >
+            <X />
+          </AlertDialogCancel>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除无效条目？</AlertDialogTitle>
+            <AlertDialogDescription>
+              将删除共享技能目录中的“{removeTarget?.name}”文件夹。这个目录没有有效的 SKILL.md，删除后无法恢复。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionBusy}>取消</AlertDialogCancel>
+            <AlertDialogAction disabled={actionBusy} onClick={() => void removeCandidate()} variant="destructive">
+              {actionBusy ? "删除中…" : "确认删除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        onOpenChange={(open) => {
+          if (!open && !actionBusy) setRenameTarget(undefined);
+        }}
+        open={Boolean(renameTarget)}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogCancel
+            aria-label="关闭确认窗口"
+            className="absolute right-3 top-3"
+            size="icon"
+            variant="ghost"
+          >
+            <X />
+          </AlertDialogCancel>
+          <AlertDialogHeader>
+            <AlertDialogTitle>按 SKILL.md 名称整理？</AlertDialogTitle>
+            <AlertDialogDescription>
+              将文件夹“{renameTarget?.name}”改为“{renameTarget?.declaredName}”。之后采纳时会使用 SKILL.md 中的名称；如果目标名称已存在，操作会中止。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionBusy}>取消</AlertDialogCancel>
+            <AlertDialogAction disabled={actionBusy} onClick={() => void renameCandidate()}>
+              {actionBusy ? "整理中…" : "确认整理"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

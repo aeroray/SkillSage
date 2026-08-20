@@ -1,14 +1,13 @@
 /** A folder already sitting in the shared public directory that SkillSage
- * doesn't yet track. The folder name (`name`) is authoritative for
- * adoption — it never moves files, so a SKILL.md's declared name (surfaced
- * only as `declaredName`/`warning` when it differs) is never used as the
- * record's name. */
+ * doesn't yet track. When the folder name differs from SKILL.md, the
+ * declared name is authoritative after the user confirms the rename. */
 export type AdoptableItem = {
   name: string;
   declaredName?: string;
   description: string;
   path: string;
   valid: boolean;
+  removable: boolean;
   recommended: boolean;
   warning?: string;
 };

@@ -45,3 +45,7 @@ export function checkInstallConflict(name: string) {
 export function openSkillDirectory(skillId: string) {
   return invokeCommand<void>("open_skill_directory", { skillId });
 }
+
+export function openSkillsRoot(path: string) {
+  return invokeCommand<void>("open_path", { path });
+}

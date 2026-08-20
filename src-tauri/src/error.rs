@@ -53,8 +53,6 @@ pub enum SkillsageError {
     Io(String),
     #[error("后台任务失败：{0}")]
     Task(String),
-    #[error("清理应用数据失败：{0}")]
-    CleanupFailed(String),
 }
 
 impl Serialize for SkillsageError {

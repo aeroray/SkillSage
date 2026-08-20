@@ -16,3 +16,11 @@ export function adoptSkills(items: AdoptSelection[]) {
 export function openAdoptPath(path: string) {
   return invokeCommand<void>("open_path", { path });
 }
+
+export function removeAdoptCandidate(name: string) {
+  return invokeCommand<void>("remove_adopt_candidate", { name });
+}
+
+export function renameAdoptCandidate(name: string) {
+  return invokeCommand<string>("rename_adopt_candidate", { name });
+}

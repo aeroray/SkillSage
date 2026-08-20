@@ -20,10 +20,10 @@ import {
   Download,
   FolderOpen,
   GitBranch,
-  Info,
   Library,
   MoreHorizontal,
   RefreshCw,
+  ScanSearch,
   Search,
   Store,
   Trash2,
@@ -41,9 +41,6 @@ import { Button } from "../../components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Dialog } from "../../components/ui/dialog";
@@ -66,12 +63,7 @@ import {
 } from "../../components/ui/select";
 import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../components/ui/tooltip";
-import { openSkillDirectory } from "../../features/skills/api";
+import { openSkillDirectory, openSkillsRoot } from "../../features/skills/api";
 import {
   useInstalledSkills,
   useSkillManagement,
@@ -86,7 +78,6 @@ import {
   type SkillSourceFilter,
   type SkillStatusFilter,
 } from "../../features/skills/selectors";
-import { displayPath } from "../../lib/paths";
 import { normalizeTauriError } from "../../lib/tauri";
 
 function shortVersion(version: string) {
@@ -169,9 +160,9 @@ function SkillRow({
       </div>
       <div className="text-xs text-muted-foreground">
         <p className="font-medium text-foreground">
-          {shortVersion(skill.currentVersion)}
+          版本 {shortVersion(skill.currentVersion)}
         </p>
-        <p className="mt-1">{skill.currentHash.slice(0, 10)}</p>
+        <p className="mt-1">指纹 {skill.currentHash.slice(0, 10)}</p>
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -240,6 +231,9 @@ export function SkillsPage() {
     void refreshSkills();
     void checkUpdatesNow();
   }, [checkUpdatesNow, refreshSkills]);
+  const rescanSkills = useCallback(() => {
+    void refreshSkills();
+  }, [refreshSkills]);
   const management = useSkillManagement(refreshPage);
   const [search, setSearch] = useState("");
   const [source, setSource] = useState<SkillSourceFilter>("all");
@@ -311,6 +305,15 @@ export function SkillsPage() {
     if (selectedIds.length === 0) return;
     void checkUpdatesNow(undefined, selectedIds);
   };
+  const openRootDirectory = async () => {
+    if (!skillsRoot) return;
+    setDirectoryError(undefined);
+    try {
+      await openSkillsRoot(skillsRoot);
+    } catch (error) {
+      setDirectoryError(normalizeTauriError(error));
+    }
+  };
 
   return (
     <div>
@@ -341,55 +344,6 @@ export function SkillsPage() {
         onRetry={refreshPage}
       />
 
-      <Card className="mb-6">
-        <CardHeader className="flex flex-row items-center gap-4">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary">
-            <Library aria-hidden="true" className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <CardTitle>技能目录</CardTitle>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    aria-label="查看技能目录"
-                    className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-                    type="button"
-                  >
-                    <Info aria-hidden="true" className="size-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-md p-3" sideOffset={6}>
-                  <div className="flex max-w-md min-w-0 flex-col gap-1.5">
-                    <p className="font-medium">共享技能目录</p>
-                    <p className="break-all font-mono text-xs text-background/80">
-                      {skillsRoot
-                        ? displayPath(skillsRoot)
-                        : "正在读取技能目录路径…"}
-                    </p>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <CardDescription className="mt-1">
-              {skills.length} 个技能
-            </CardDescription>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button
-              aria-label="刷新技能"
-              disabled={skillsLoading || updatesChecking}
-              onClick={refreshPage}
-              size="sm"
-              variant="outline"
-            >
-              <RefreshCw data-icon="inline-start" />
-              刷新技能
-            </Button>
-          </div>
-        </CardHeader>
-      </Card>
-
       <Card className="mb-6 overflow-hidden">
         <CardContent className="p-0">
           <div className="flex flex-col gap-4 bg-muted/20 p-4">
@@ -405,7 +359,6 @@ export function SkillsPage() {
                   <SelectGroup>
                     <SelectItem value="all">全部来源</SelectItem>
                     <SelectItem value="skills.sh">skills.sh</SelectItem>
-                    <SelectItem value="builtin">内置来源</SelectItem>
                     <SelectItem value="local">本地导入</SelectItem>
                   </SelectGroup>
                 </SelectContent>
@@ -469,7 +422,7 @@ export function SkillsPage() {
                 ) : null}
               </div>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
                 <Checkbox
                   checked={filteredSelectionState}
@@ -482,26 +435,43 @@ export function SkillsPage() {
                     )
                   }
                 />
-                <Label
-                  className="font-normal text-muted-foreground"
-                  htmlFor="select-filtered"
-                >
-                  全选筛选结果 ({selectedFilteredCount})
+                <Label className="font-normal text-muted-foreground" htmlFor="select-filtered">
+                  全选
                 </Label>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="ml-auto flex items-center gap-2">
                 <Button
-                  disabled={selectedIds.length === 0 || updatesChecking}
-                  onClick={checkSelectedUpdates}
-                  variant="secondary"
+                  aria-label="打开技能目录"
+                  disabled={!skillsRoot || skillsLoading}
+                  onClick={() => void openRootDirectory()}
+                  title="打开技能目录"
+                  variant="ghost"
                 >
-                  <RefreshCw data-icon="inline-start" />
-                  {updatesChecking ? "检查中" : "检查更新"}
+                  <FolderOpen data-icon="inline-start" />
+                  打开技能目录
+                </Button>
+                <Button
+                  aria-label="重新扫描技能目录"
+                  disabled={skillsLoading}
+                  onClick={rescanSkills}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <ScanSearch data-icon="inline-start" />
+                  重新扫描
                 </Button>
               </div>
+              <Button
+                disabled={selectedIds.length === 0 || updatesChecking}
+                onClick={checkSelectedUpdates}
+                variant="secondary"
+              >
+                <RefreshCw data-icon="inline-start" />
+                {updatesChecking ? "检查中" : "检查更新"}
+              </Button>
             </div>
           </div>
-          <Separator />
+          <Separator className="bg-foreground/20" />
           <div className="p-4">
             {skillsLoading ? (
               <SkillsLoadingState />
@@ -603,7 +573,7 @@ export function SkillsPage() {
                     {shortVersion(version.commit)}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    hash {version.hash.slice(0, 12)} · {version.recordedAt}
+                    内容指纹 {version.hash.slice(0, 12)} · {version.recordedAt}
                   </p>
                 </div>
                 <Button

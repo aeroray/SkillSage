@@ -1,4 +1,3 @@
-pub mod cleanup;
 #[allow(dead_code)]
 pub mod github;
 pub mod import;

@@ -32,10 +32,8 @@ pub struct AdoptResult {
 }
 
 /// Brings each selected untracked public-directory folder under SkillSage's
-/// tracking. No `fs::rename`, no link rebuild — the content is already at
-/// the right path, so adoption is a near-pure metadata write: parse
-/// SKILL.md, hash the folder, write a lock record pointing at the existing
-/// path.
+/// tracking. A folder whose name differs from SKILL.md is rejected until the
+/// user resolves the mismatch, so the declared skill name remains canonical.
 #[cfg(test)]
 pub async fn execute_at(
     layout: &RepoLayout,
@@ -74,6 +72,13 @@ pub async fn execute_at_with_lock(
             result.failed.push(AdoptFailure {
                 name: item.name.clone(),
                 reason: "未找到有效的 SKILL.md，无法采纳".into(),
+            });
+            continue;
+        }
+        if item.declared_name.is_some() {
+            result.failed.push(AdoptFailure {
+                name: item.name.clone(),
+                reason: "请先按 SKILL.md 中的名称整理文件夹".into(),
             });
             continue;
         }
@@ -122,10 +127,8 @@ async fn prepare_adoption(
         None => None,
     };
 
-    // Folder name is authoritative: every other module resolves a record's
-    // content via `layout.skill(&record.name)`, so an adopted record's name
-    // must be the folder name, never the (possibly different) SKILL.md
-    // declared name.
+    // At this point the scanner has guaranteed that the folder and declared
+    // names match. The declared name is therefore canonical for the record.
     let record = match verified {
         Some(candidate) => lockfile::SkillLockRecord {
             id: format!("{}/{}", candidate.owner, item.name),

@@ -91,10 +91,10 @@ Reason: The scanner preserves the single-source-of-truth while giving users an e
 Decision: External distribution conflicts require an explicit skip, takeover, or cancel action; takeover preserves the old entity under a renamed local record before the requested skill occupies the original tool path.
 Reason: Conflict resolution must be reversible enough to avoid silently destroying pre-existing skills.
 
-## 2026-08-18 - Phase 7 cleanup and observability
+## 2026-08-18 - Phase 7 observability and product boundary
 
-Decision: The app cleanup command supports full removal and metadata-only removal while retaining managed skill links in keep mode.
-Reason: Existing junctions/symlinks cannot remain usable after deleting their central target, so keep mode prioritizes safe, working skills.
+Decision: The app writes normal logs and tracing output; global application cleanup is not part of the user-facing product surface.
+Reason: The shared public-directory model makes a global cleanup action unnecessarily risky; users can remove individual skills explicitly.
 
 Decision: Tauri writes normal logs and a tracing subscriber stream to the platform app log directory in every build profile.
 Reason: User feedback needs actionable diagnostics without exposing GitHub credentials.
@@ -152,13 +152,13 @@ Reason: Updates should stay quiet during normal use while remaining easy to disc
 
 ## 2026-08-18 - Compact settings layout
 
-Decision: Settings uses a fixed desktop two-column card grid at the 1200px minimum, grouping security/appearance and about/update/device sync; the stop-management flow remains a separated full-width section.
+Decision: Settings uses a fixed desktop two-column card grid at the 1200px minimum, grouping security/appearance and about/update/device sync; there is no stop-management section.
 Reason: This reduces unused vertical space while keeping related settings scannable and isolating destructive actions.
 
 ## 2026-08-18 - Stop-management flow wording
 
-Decision: The Settings cleanup module is presented as “停止管理”, not app uninstall. It explains the handoff use case: keep current skill files and links while removing SkillSage management records, or explicitly clean up SkillSage-created skill data and links.
-Reason: The action controls SkillSage’s ownership of managed skills; the operating-system uninstaller remains a separate product lifecycle action.
+Decision: The Settings page does not expose a “停止管理” or global cleanup module. Removing the app does not modify the shared skill directory; individual uninstall remains on the installed-skills page.
+Reason: SkillSage installs real files into a shared directory, so app removal and skill deletion must remain separate actions.
 
 ## 2026-08-18 - Installed skills management surface
 
@@ -201,12 +201,9 @@ Reason: This is an early-stage product; a real migration path wasn't worth the c
 Decision: Installing into a name already occupied by an untracked foreign directory/link asks skip / takeover / cancel (one shared `PathConflictDialog`, not a per-tool conflict list); takeover renames the foreign entity aside (`<name>.skillsage-backup-<timestamp>`) and never deletes or adopts it in place. A name already owned by a *tracked* record is a separate, harder `NameConflict` — not takeover-eligible, since renaming aside another tracked record would orphan its lock entry.
 Reason: Preserves the app's existing non-destructive safety habits with much less code than the old per-tool `TakeoverTransaction` (no more `unique_name()` auto-numbering, no link rebuild, no SKILL.md-parse-and-validate on the displaced content).
 
-Decision: The Migrate feature is replaced by "Adopt" — scanning only the public directory for untracked real directories with a valid SKILL.md, and registering them in place with no `fs::rename` and no link rebuild. The folder name is authoritative (never the SKILL.md's possibly-different declared name). Cross-tool lock-sniffed provenance recovery (`classifier.rs`) is kept, but only trusted after re-fetching the guessed commit and confirming a matching content hash — otherwise the adopted skill records as an unversioned `local://` source.
-Reason: Adoption no longer needs to move content (it's already in the right place), which eliminates most of the old migration machinery's complexity. The verify-before-trust step is cheap and purely additive: worst case matches "no provenance recovery at all," best case gives adopted skills real update/rollback support.
+Decision: The Migrate feature is replaced by "Adopt" — scanning only the public directory for untracked real directories with a valid SKILL.md, and registering them in place after the folder agrees with the SKILL.md declared name. The declared name is authoritative; a mismatch can be resolved by an explicit safe folder rename, and an invalid safe directory can be removed. Cross-tool lock-sniffed provenance recovery (`classifier.rs`) is kept, but only trusted after re-fetching the guessed commit and confirming a matching content hash — otherwise the adopted skill records as an unversioned `local://` source.
+Reason: Adoption no longer needs to move content during registration, while the explicit rename makes the name shown to AI tools canonical and the explicit invalid-entry removal handles abandoned directories without hiding destructive behavior.
 Note: the Rust module path and Tauri command names (`core/migrate/`, `scan_migrate`, `execute_migrate`) were kept as-is for minimal churn; the frontend presents this to users as "采纳技能" / Adopt.
 
-Decision: Cleanup's `keep-skills` mode now only deletes `~/.skillsage/` and leaves every file in the public directory untouched (safer than before — the old mode still had to carefully dodge `remote/`/`local/` content while deleting links). `all` mode deletes only the public-directory folders the lock file actually tracks, then `~/.skillsage/`; untracked neighbors are never touched.
-Reason: Directly follows from content living in one place — `keep-skills` never had `remote/`/`local/` to dodge in the first place.
-
-Decision: Uninstall and cleanup `all` now delete the real folder every AI tool reads from directly, not a disposable link — the single biggest blast-radius increase in this redesign. UI copy for both must say plainly that this removes the skill from every tool simultaneously and cannot be undone (see `docs/specs/05-生命周期状态机.md` §6 and `docs/specs/01-需求文档.md` §13).
-Reason: The old copy ("clean up links") would now be actively misleading about what's actually being deleted.
+Decision: The individual skill uninstall action deletes the real folder every AI tool reads from directly, not a disposable link; there is no global cleanup command.
+Reason: A single-skill confirmation can explain the blast radius while avoiding a broad app-level deletion control.

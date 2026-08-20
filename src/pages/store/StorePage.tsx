@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Flame,
   Rocket,
+  RefreshCw,
   Search,
   ShieldCheck,
   TrendingUp,
@@ -436,6 +437,8 @@ export function StorePage() {
   const conflictCheck = useInstallConflictCheck();
 
   const isSearching = !isSearchComposing && query.trim().length >= 2;
+  const activeLeaderboardLabel =
+    leaderboardTabs.find((tab) => tab.value === range)?.label ?? "排行榜";
   const displaySkills = isSearching ? searchResults : leaderboardSkills;
   const displayLoading = isSearching ? searchLoading : leaderboardLoading;
   const displayError = isSearching ? searchError : leaderboardError;
@@ -486,33 +489,48 @@ export function StorePage() {
             {isSearching ? `“${query.trim()}”的结果` : "技能排行榜"}
           </h2>
           {!isSearching ? (
-            <Tabs
-              className="shrink-0"
-              onValueChange={(value) => setRange(value as LeaderboardRange)}
-              value={range}
-            >
-              <TabsList
-                aria-label="排行榜范围"
-                className="gap-1 rounded-lg border border-border bg-muted/60 p-1"
+            <div className="flex shrink-0 items-center gap-1">
+              <Tabs
+                onValueChange={(value) => setRange(value as LeaderboardRange)}
+                value={range}
               >
-                {leaderboardTabs.map(
-                  ({ icon: Icon, iconClassName, label, value }) => (
-                    <TabsTrigger
-                      className="items-center gap-1 px-2 text-sm data-[state=active]:bg-background data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
-                      key={value}
-                      value={value}
-                    >
-                      <Icon
-                        aria-hidden="true"
-                        className={iconClassName}
-                        data-icon="inline-start"
-                      />
-                      {label}
-                    </TabsTrigger>
-                  ),
-                )}
-              </TabsList>
-            </Tabs>
+                <TabsList
+                  aria-label="排行榜范围"
+                  className="gap-1 rounded-lg border border-border bg-muted/60 p-1"
+                >
+                  {leaderboardTabs.map(
+                    ({ icon: Icon, iconClassName, label, value }) => (
+                      <TabsTrigger
+                        className="items-center gap-1 px-2 text-sm data-[state=active]:bg-background data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
+                        key={value}
+                        value={value}
+                      >
+                        <Icon
+                          aria-hidden="true"
+                          className={iconClassName}
+                          data-icon="inline-start"
+                        />
+                        {label}
+                      </TabsTrigger>
+                    ),
+                  )}
+                </TabsList>
+              </Tabs>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-label={`刷新${activeLeaderboardLabel}技能`}
+                    disabled={leaderboardLoading}
+                    onClick={refreshLeaderboard}
+                    size="icon"
+                    variant="ghost"
+                  >
+                    <RefreshCw aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>刷新{activeLeaderboardLabel}技能</TooltipContent>
+              </Tooltip>
+            </div>
           ) : null}
           <div className="relative ml-auto min-w-0 flex-1">
             <label className="sr-only" htmlFor="skill-search">

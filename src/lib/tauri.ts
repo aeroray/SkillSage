@@ -235,6 +235,7 @@ async function previewInvoke<T>(
           description: "已经在共享技能目录中，但还未被 SkillSage 记录。",
           path: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
           valid: true,
+          removable: false,
           recommended: true,
           warning: undefined,
         },
@@ -244,9 +245,10 @@ async function previewInvoke<T>(
           description: "文件夹名和 SKILL.md 中的名称不一致。",
           path: "C:\\Users\\PC\\.agents\\skills\\renamed-notes",
           valid: true,
+          removable: false,
           recommended: false,
           warning:
-            "SKILL.md 中的名称为 notes-helper，与文件夹名不同；采纳后将使用文件夹名 renamed-notes。",
+            "SKILL.md 中的名称为 notes-helper，建议按该名称整理后再采纳。",
         },
         {
           name: "broken-entry",
@@ -254,6 +256,7 @@ async function previewInvoke<T>(
           description: "",
           path: "C:\\Users\\PC\\.agents\\skills\\broken-entry",
           valid: false,
+          removable: true,
           recommended: false,
           warning: "未找到有效的 SKILL.md，无法采纳。",
         },
@@ -263,16 +266,12 @@ async function previewInvoke<T>(
   }
   if (command === "execute_migrate")
     return { adopted: ["legacy-research"], skipped: [], failed: [] } as T;
+  if (command === "remove_adopt_candidate") return undefined as T;
+  if (command === "rename_adopt_candidate") return "notes-helper" as T;
   if (command === "open_path" || command === "open_skill_directory")
     return undefined as T;
   if (command === "check_install_conflict") return undefined as T;
   if (command === "check_updates") return { updates: [] } as T;
-  if (command === "cleanup_app")
-    return {
-      mode: args?.mode ?? "all",
-      trackedSkillsRemoved: args?.mode === "keep-skills" ? 0 : 3,
-      managementDataRemoved: true,
-    } as T;
   return {} as T;
 }
 

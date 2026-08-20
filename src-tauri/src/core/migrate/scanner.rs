@@ -2,6 +2,7 @@ use serde::Serialize;
 
 use crate::core::import::source::validate_tree;
 use crate::core::paths;
+use crate::core::repo::atomic;
 use crate::core::repo::conflict;
 use crate::core::repo::layout::RepoLayout;
 use crate::core::repo::lockfile;
@@ -10,9 +11,8 @@ use crate::error::SkillsageError;
 
 /// A folder already sitting in the shared public directory that SkillSage
 /// doesn't yet track — either placed there by another tool/process, or
-/// left over from before this machine used SkillSage at all. The folder
-/// name is authoritative for adoption (see `execute_at`), since adoption
-/// never moves files and a SKILL.md's declared name may not match it.
+/// left over from before this machine used SkillSage at all. A valid
+/// SKILL.md name is authoritative; a mismatch must be resolved before adoption.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdoptableItem {
@@ -21,6 +21,9 @@ pub struct AdoptableItem {
     pub description: String,
     pub path: String,
     pub valid: bool,
+    /// Only invalid entries with a safe, real directory and no valid SKILL.md
+    /// may be removed from the shared directory by the user.
+    pub removable: bool,
     /// Pre-checked in a bulk "adopt selected" action. False whenever the item
     /// isn't valid, or is valid but has something worth the user's specific
     /// attention (e.g. a name mismatch) before adopting it unattended.
@@ -75,6 +78,7 @@ pub fn scan(layout: &RepoLayout) -> Result<AdoptScanResult, SkillsageError> {
                 description: String::new(),
                 path: display_path,
                 valid: false,
+                removable: false,
                 recommended: false,
                 warning: Some(error.to_string()),
             }
@@ -84,9 +88,7 @@ pub fn scan(layout: &RepoLayout) -> Result<AdoptScanResult, SkillsageError> {
                     let declared_name =
                         (parsed.manifest.name != name).then_some(parsed.manifest.name);
                     let warning = declared_name.as_ref().map(|declared| {
-                        format!(
-                            "SKILL.md 中的名称为 {declared}，与文件夹名不同；采纳后将使用文件夹名 {name}。"
-                        )
+                        format!("SKILL.md 中的名称为 {declared}，建议按该名称整理后再采纳。")
                     });
                     AdoptableItem {
                         recommended: declared_name.is_none(),
@@ -95,6 +97,7 @@ pub fn scan(layout: &RepoLayout) -> Result<AdoptScanResult, SkillsageError> {
                         description: parsed.manifest.description,
                         path: display_path,
                         valid: true,
+                        removable: false,
                         warning,
                     }
                 }
@@ -104,6 +107,7 @@ pub fn scan(layout: &RepoLayout) -> Result<AdoptScanResult, SkillsageError> {
                     description: String::new(),
                     path: display_path,
                     valid: false,
+                    removable: true,
                     recommended: false,
                     warning: Some("未找到有效的 SKILL.md，无法采纳。".into()),
                 },
@@ -118,11 +122,65 @@ pub fn scan(layout: &RepoLayout) -> Result<AdoptScanResult, SkillsageError> {
     })
 }
 
+pub fn remove_invalid(layout: &RepoLayout, name: &str) -> Result<(), SkillsageError> {
+    layout.ensure_roots()?;
+    let path = layout.skill(name)?;
+    let item = scan(layout)?
+        .items
+        .into_iter()
+        .find(|item| item.name == name)
+        .ok_or_else(|| SkillsageError::PathNotFound(path.clone()))?;
+    if item.valid || !item.removable {
+        return Err(SkillsageError::InvalidSkill(
+            "只能删除没有有效 SKILL.md 的安全目录".into(),
+        ));
+    }
+    // Revalidate immediately before deletion. This keeps the destructive
+    // action limited to a real directory whose tree contains no symlinks.
+    validate_tree(&path)?;
+    if read_skill_md(&path.join("SKILL.md")).is_ok() {
+        return Err(SkillsageError::InvalidSkill(
+            "条目已变化，请重新扫描后再处理".into(),
+        ));
+    }
+    atomic::remove_dir(&path)
+}
+
+pub fn rename_mismatch(layout: &RepoLayout, name: &str) -> Result<String, SkillsageError> {
+    layout.ensure_roots()?;
+    let item = scan(layout)?
+        .items
+        .into_iter()
+        .find(|item| item.name == name)
+        .ok_or_else(|| SkillsageError::InvalidSkill("找不到需要整理的技能条目".into()))?;
+    let declared_name = item
+        .declared_name
+        .ok_or_else(|| SkillsageError::InvalidSkill("该技能没有需要整理的 SKILL.md 名称".into()))?;
+    let source = layout.skill(name)?;
+    let destination = layout.skill(&declared_name)?;
+    if std::fs::symlink_metadata(&destination).is_ok() {
+        return Err(SkillsageError::NameConflict(declared_name));
+    }
+    let lock = lockfile::load(layout)?;
+    if conflict::is_tracked(&lock, &declared_name) {
+        return Err(SkillsageError::NameConflict(declared_name));
+    }
+    validate_tree(&source)?;
+    let parsed = read_skill_md(&source.join("SKILL.md"))?;
+    if parsed.manifest.name != declared_name {
+        return Err(SkillsageError::InvalidSkill(
+            "SKILL.md 名称已变化，请重新扫描后再处理".into(),
+        ));
+    }
+    std::fs::rename(source, &destination)?;
+    Ok(declared_name)
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
 
-    use super::scan;
+    use super::{remove_invalid, rename_mismatch, scan};
     use crate::core::repo::layout::RepoLayout;
 
     fn test_layout(name: &str) -> RepoLayout {
@@ -194,5 +252,54 @@ mod tests {
         let _ = fs::remove_file(&link_path);
         fs::remove_dir_all(&layout.public_root).expect("remove public root");
         fs::remove_dir_all(&real_target).expect("remove link target");
+    }
+
+    #[test]
+    fn removes_only_a_safe_directory_without_valid_skill_md() {
+        let layout = test_layout("remove-invalid");
+        layout.ensure_roots().expect("create layout");
+        let invalid = layout.public_root.join("broken-entry");
+        fs::create_dir_all(&invalid).expect("create invalid dir");
+
+        let item = scan(&layout)
+            .expect("scan should succeed")
+            .items
+            .into_iter()
+            .next()
+            .expect("invalid item present");
+        assert!(item.removable);
+        remove_invalid(&layout, &item.name).expect("invalid item should be removable");
+        assert!(!invalid.exists());
+
+        fs::remove_dir_all(&layout.root).expect("remove central root");
+        fs::remove_dir_all(&layout.public_root).expect("remove public root");
+    }
+
+    #[test]
+    fn renames_a_folder_to_the_declared_skill_name() {
+        let layout = test_layout("rename-mismatch");
+        layout.ensure_roots().expect("create layout");
+        let original = layout.public_root.join("renamed-notes");
+        fs::create_dir_all(&original).expect("create mismatch dir");
+        fs::write(
+            original.join("SKILL.md"),
+            "---\nname: notes-helper\ndescription: Notes helper.\n---\n",
+        )
+        .expect("write manifest");
+
+        let item = scan(&layout)
+            .expect("scan should succeed")
+            .items
+            .into_iter()
+            .next()
+            .expect("mismatch item present");
+        assert_eq!(item.declared_name.as_deref(), Some("notes-helper"));
+        let next_name = rename_mismatch(&layout, &item.name).expect("rename should succeed");
+        assert_eq!(next_name, "notes-helper");
+        assert!(!original.exists());
+        assert!(layout.public_root.join("notes-helper").is_dir());
+
+        fs::remove_dir_all(&layout.root).expect("remove central root");
+        fs::remove_dir_all(&layout.public_root).expect("remove public root");
     }
 }

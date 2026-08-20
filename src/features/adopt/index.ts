@@ -1,3 +1,7 @@
 export * from "./hooks";
 export type * from "./types";
-export { openAdoptPath } from "./api";
+export {
+  openAdoptPath,
+  removeAdoptCandidate,
+  renameAdoptCandidate,
+} from "./api";
