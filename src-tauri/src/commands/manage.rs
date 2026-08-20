@@ -1,9 +1,7 @@
-use std::collections::BTreeMap;
-
 use serde::Serialize;
 use tauri::State;
 
-use crate::core::lifecycle::{distribute, remote, rollback, uninstall, update};
+use crate::core::lifecycle::{remote, rollback, uninstall, update};
 use crate::core::paths;
 use crate::core::repo::{layout::RepoLayout, lockfile::SkillLockRecord};
 use crate::error::SkillsageError;
@@ -12,8 +10,7 @@ use crate::state::AppState;
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstalledSkillsList {
-    pub remote_root: String,
-    pub local_root: String,
+    pub skills_root: String,
     pub skills: Vec<SkillLockRecord>,
 }
 
@@ -23,8 +20,7 @@ pub async fn list_installed() -> Result<InstalledSkillsList, SkillsageError> {
         let layout = RepoLayout::from_user_home()?;
         let lock = crate::core::repo::lockfile::load(&layout)?;
         Ok(InstalledSkillsList {
-            remote_root: paths::display(&layout.remote_root()),
-            local_root: paths::display(&layout.local_root()),
+            skills_root: paths::display(&layout.public_root),
             skills: lock.skills.into_values().collect(),
         })
     })
@@ -139,56 +135,6 @@ pub async fn rollback_skill(
     tokio::task::spawn_blocking(move || rollback::apply_at(&layout, &skill_id, version, files))
         .await
         .map_err(|error| SkillsageError::Task(error.to_string()))?
-}
-
-#[tauri::command]
-pub async fn adjust_distribution(
-    skill_id: String,
-    agents: Vec<String>,
-    conflicts: Option<BTreeMap<String, String>>,
-    state: State<'_, AppState>,
-) -> Result<SkillLockRecord, SkillsageError> {
-    let _write_guard = state.write_lock.lock().await;
-    tokio::task::spawn_blocking(move || {
-        let layout = RepoLayout::from_user_home()?;
-        distribute::adjust_at_with_conflicts(
-            &layout,
-            &skill_id,
-            agents,
-            &conflicts.unwrap_or_default(),
-        )
-    })
-    .await
-    .map_err(|error| SkillsageError::Task(error.to_string()))?
-}
-
-#[tauri::command]
-pub async fn distribute_skills(
-    skill_ids: Vec<String>,
-    agents: Vec<String>,
-    conflicts: Option<BTreeMap<String, String>>,
-    state: State<'_, AppState>,
-) -> Result<InstalledSkillsList, SkillsageError> {
-    let _write_guard = state.write_lock.lock().await;
-    tokio::task::spawn_blocking(move || {
-        let layout = RepoLayout::from_user_home()?;
-        for skill_id in &skill_ids {
-            distribute::adjust_at_with_conflicts(
-                &layout,
-                skill_id,
-                agents.clone(),
-                &conflicts.clone().unwrap_or_default(),
-            )?;
-        }
-        let lock = crate::core::repo::lockfile::load(&layout)?;
-        Ok(InstalledSkillsList {
-            remote_root: paths::display(&layout.remote_root()),
-            local_root: paths::display(&layout.local_root()),
-            skills: lock.skills.into_values().collect(),
-        })
-    })
-    .await
-    .map_err(|error| SkillsageError::Task(error.to_string()))?
 }
 
 #[tauri::command]

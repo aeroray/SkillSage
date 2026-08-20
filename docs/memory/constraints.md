@@ -1,7 +1,7 @@
 # Constraints
 
-- Do not call `npx skills`; download, parse, install, update, distribute, and uninstall are Rust-owned.
-- Windows distribution uses same-drive junctions; macOS uses symlinks. Copy mode is not supported.
+- Do not call `npx skills`; download, parse, install, update, and uninstall are Rust-owned.
+- All skills install as real content directly into the single shared public directory (`~/.agents/skills/`, flat, no per-owner subfolder). No per-tool symlinks/junctions, no tool detection or registration — see the 2026-08-20 decision below.
 - The application is desktop-only: the main window must open at 1200×800, never resize below 1200×800, and may be maximized; do not add mobile-specific layout requirements.
 - The old Phase 1 shell is historical; the shipped application includes the completed store, lifecycle, migration, sync, settings, and cleanup flows.
 - UI uses Slate Blue primary colors, system fonts, CSS radius variables (`--radius`, `--radius-lg`), 4px spacing increments, `shadow-sm`/`shadow-lg` only, Lucide icons, and shadcn-style primitives.
@@ -15,11 +15,11 @@
 - Phase 5 GitHub URL installation supports repository, tree, blob, and raw `SKILL.md` URLs; repository URLs enumerate candidate skills from the resolved Git tree.
 - Phase 5 settings persist proxy configuration in `~/.skillsage/settings.json` and store the GitHub token in the OS keyring; request clients must receive both through the Rust settings layer.
 - Sync exports only HTTPS-backed remote lock records plus non-secret application preferences (display mode, theme accent, and proxy); local and built-in fixture skills are excluded because they cannot be reconstructed on another device, and GitHub Tokens are never exported.
-- Sync import is metadata-only for skills: each selected entry is fetched again at its recorded commit and installed through the existing Rust lifecycle, with detected-tool defaults and per-skill agent choices. Users may also restore the package's non-secret application preferences.
-- Phase 6 migration scans the five registered tool directories plus `~/.agents/skills/`; managed links are skipped, unknown valid links require manual takeover, invalid links can be removed, and accepted entities move or are copied into the central repository before links are rebuilt.
-- Distribution conflicts use explicit skip, takeover, or cancel decisions; takeover preserves the external entity as a renamed local skill before the requested skill claims the original tool path.
+- Sync import is metadata-only for skills: each selected entry is fetched again at its recorded commit and installed through the existing Rust lifecycle. Users may also restore the package's non-secret application preferences.
+- The adopt scanner (successor to Phase 6 migration) only scans the single public directory; untracked real directories with a valid SKILL.md are adoptable in place (no move/copy), the folder name is authoritative, and cross-tool lock-sniffed provenance is only trusted after a verified content-hash match against a re-fetch.
+- Install-time path conflicts (an untracked foreign directory/link already at the target name) use explicit skip, takeover, or cancel; takeover renames the foreign entity aside (`<name>.skillsage-backup-<timestamp>`) and never adopts or deletes it. This is distinct from a name already owned by a tracked record, which is a hard `NameConflict`, not a takeover candidate.
 - Frontend pages must use the installed shadcn/Radix primitives for controls and overlays; do not reintroduce page-level native selects, details menus, or custom component CSS classes.
 - Tailwind v4 is the active frontend version; use the first-party Vite plugin and CSS-first theme tokens, and do not reintroduce a v3 PostCSS/config pipeline.
-- Phase 7 cleanup offers `all` (remove central data and managed links) and `keep-skills` (preserve central data and links, remove SkillSage metadata); preserving links requires preserving their central target.
+- Cleanup offers `all` (delete every tracked skill folder from the public directory plus all management data — every AI tool loses those skills immediately, untracked neighbors are untouched) and `keep-skills` (delete only `~/.skillsage/`, leaving every file in the public directory untouched).
 - Phase 7 logs are written to Tauri's platform app log directory; GitHub tokens must never enter settings JSON or logs.
 - Phase 7 cross-platform automation targets Windows and macOS; macOS runtime verification remains CI/manual QA because development runs on Windows.

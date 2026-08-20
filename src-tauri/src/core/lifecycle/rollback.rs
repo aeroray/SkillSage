@@ -26,8 +26,9 @@ mod tests {
     fn rollback_restores_a_previous_version_and_records_current_version() {
         let root = std::env::temp_dir().join(format!("skillsage-rollback-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
-        let layout = RepoLayout::new(root.clone());
-        install_test_skill_at(&layout, Vec::new()).expect("fixture should install");
+        fs::create_dir_all(&root).expect("create shared test parent");
+        let layout = RepoLayout::new(root.join("central"), root.join("public"));
+        install_test_skill_at(&layout).expect("fixture should install");
 
         let version_two =
             "---\nname: skillsage-phase2-test\ndescription: Version two.\n---\n\n# Version two\n";
@@ -78,7 +79,7 @@ mod tests {
         assert_eq!(
             fs::read_to_string(
                 layout
-                    .remote_skill("skillsage", "skillsage-phase2-test")
+                    .skill("skillsage-phase2-test")
                     .expect("skill path should resolve")
                     .join("SKILL.md")
             )

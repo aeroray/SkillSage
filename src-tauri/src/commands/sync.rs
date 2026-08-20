@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -9,7 +7,6 @@ use crate::core::paths;
 use crate::core::repo::{layout::RepoLayout, lockfile};
 use crate::core::store::models::SkillDetail;
 use crate::core::sync::{export, import};
-use crate::core::tools::detection::detect_tools;
 use crate::error::SkillsageError;
 use crate::state::AppState;
 
@@ -34,8 +31,6 @@ pub struct SyncImportResult {
 pub struct SyncImportOptions {
     #[serde(default)]
     pub selected_ids: Vec<String>,
-    #[serde(default)]
-    pub agents_by_skill: BTreeMap<String, Vec<String>>,
     #[serde(default)]
     pub apply_settings: bool,
 }
@@ -85,12 +80,6 @@ pub async fn import_package(
         crate::core::settings::save(&layout, sync_settings.proxy_url.clone(), None, false)?;
     }
     let selected = import::selected_entries(&package, &options.selected_ids)?;
-    let detected = detect_tools()?
-        .tools
-        .into_iter()
-        .filter(|tool| tool.detected)
-        .map(|tool| tool.id)
-        .collect::<Vec<_>>();
     let existing = lockfile::load(&layout)?;
     let mut result = SyncImportResult {
         imported: Vec::new(),
@@ -119,7 +108,6 @@ pub async fn import_package(
             source: entry.source.clone(),
             current_version: entry.current_version.clone(),
             current_hash: entry.current_hash.clone(),
-            distributed_to: entry.distributed_to.clone(),
             installed_at: String::new(),
             version_history: Vec::new(),
             description: entry.description.clone(),
@@ -134,7 +122,6 @@ pub async fn import_package(
                 continue;
             }
         };
-        let agents = import::agents_for(&entry, &options.agents_by_skill, &detected);
         let detail = SkillDetail {
             id: entry.id.clone(),
             source: format!("{}/{}", entry.owner, entry.repo),
@@ -150,7 +137,7 @@ pub async fn import_package(
             version: Some(entry.current_version.clone()),
             files,
         };
-        match install::install_skill_from_store_at(&layout, detail, agents) {
+        match install::install_skill_from_store_at(&layout, detail, None) {
             Ok(installed) => result.imported.push(installed),
             Err(error) => result.failed.push(SyncImportFailure {
                 id: entry.id,

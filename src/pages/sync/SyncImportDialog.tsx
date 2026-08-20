@@ -13,7 +13,6 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Skeleton } from "../../components/ui/skeleton";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
-import { ToolSelection, type ToolOption } from "../../components/common/ToolSelection";
 import { useSyncImport } from "../../features/sync";
 import type { SyncImportOptions, SyncSettings } from "../../features/sync";
 
@@ -22,14 +21,12 @@ type SyncImportDialogProps = {
   onCompleted: () => void;
   onApplySettings?: (settings: SyncSettings) => Promise<void> | void;
   open: boolean;
-  tools: ToolOption[];
 };
 
-export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open, tools }: SyncImportDialogProps) {
+export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open }: SyncImportDialogProps) {
   const { error, importing, loading, preview, previewPath, run, setPreview } = useSyncImport();
   const [path, setPath] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [agentsBySkill, setAgentsBySkill] = useState<Record<string, string[]>>({});
   const [applySettings, setApplySettings] = useState(true);
   const [resultMessage, setResultMessage] = useState<string>();
 
@@ -37,7 +34,6 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open, 
     if (!open) {
       setPath("");
       setSelectedIds([]);
-      setAgentsBySkill({});
       setApplySettings(true);
       setResultMessage(undefined);
       setPreview(undefined);
@@ -60,20 +56,14 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open, 
     if (path.trim()) void previewPath(path);
   };
 
-  const preparePreview = (nextPreview: typeof preview) => {
-    if (!nextPreview) return;
-    const available = nextPreview.skills.filter((skill) => !skill.installed);
-    setSelectedIds(available.map((skill) => skill.id));
-    setAgentsBySkill(Object.fromEntries(available.map((skill) => [skill.id, skill.tools.filter((tool) => tool.detected && tool.requested).map((tool) => tool.id)])));
-  };
-
   useEffect(() => {
-    preparePreview(preview);
+    if (!preview) return;
+    setSelectedIds(preview.skills.filter((skill) => !skill.installed).map((skill) => skill.id));
   }, [preview]);
 
   const selectedCount = selectedIds.length;
   const canImport = Boolean(preview && path.trim() && selectedCount > 0 && !importing);
-  const selectedOptions = useMemo<SyncImportOptions>(() => ({ agentsBySkill, applySettings: Boolean(preview?.settings) && applySettings, selectedIds }), [agentsBySkill, applySettings, preview?.settings, selectedIds]);
+  const selectedOptions = useMemo<SyncImportOptions>(() => ({ applySettings: Boolean(preview?.settings) && applySettings, selectedIds }), [applySettings, preview?.settings, selectedIds]);
 
   const submit = async () => {
     if (!canImport) return;
@@ -113,12 +103,9 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open, 
               </div> : null}
               {preview.skills.map((skill) => {
                 const selected = selectedIds.includes(skill.id);
-                return <div className="flex flex-col gap-3 rounded-md border border-border p-3" key={skill.id}>
-                  <div className="flex items-start gap-3">
-                    <Checkbox aria-label={`选择 ${skill.name}`} checked={selected} disabled={skill.installed} onCheckedChange={(checked) => setSelectedIds((current) => checked === true ? [...new Set([...current, skill.id])] : current.filter((id) => id !== skill.id))} />
-                    <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium text-foreground">{skill.name}</p><Badge variant="muted">{skill.currentVersion.slice(0, 10)}</Badge>{skill.installed ? <Badge variant="secondary">已安装</Badge> : null}</div><p className="mt-1 text-xs leading-5 text-muted-foreground">{skill.description || "暂无描述"}</p><p className="mt-1 truncate text-xs text-muted-foreground">{skill.source}</p></div>
-                  </div>
-                  {selected ? <ToolSelection agents={agentsBySkill[skill.id] ?? []} disabled={importing} onToggle={(id, checked) => setAgentsBySkill((current) => ({ ...current, [skill.id]: checked ? [...new Set([...(current[skill.id] ?? []), id])] : (current[skill.id] ?? []).filter((agent) => agent !== id) }))} tools={tools} /> : null}
+                return <div className="flex items-start gap-3 rounded-md border border-border p-3" key={skill.id}>
+                  <Checkbox aria-label={`选择 ${skill.name}`} checked={selected} disabled={skill.installed} onCheckedChange={(checked) => setSelectedIds((current) => checked === true ? [...new Set([...current, skill.id])] : current.filter((id) => id !== skill.id))} />
+                  <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium text-foreground">{skill.name}</p><Badge variant="muted">{skill.currentVersion.slice(0, 10)}</Badge>{skill.installed ? <Badge variant="secondary">已安装</Badge> : null}</div><p className="mt-1 text-xs leading-5 text-muted-foreground">{skill.description || "暂无描述"}</p><p className="mt-1 truncate text-xs text-muted-foreground">{skill.source}</p></div>
                 </div>;
               })}
             </CardContent>

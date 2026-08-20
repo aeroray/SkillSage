@@ -63,39 +63,6 @@ const previewSkills = [
   },
 ];
 
-const previewTools = [
-  {
-    id: "claude-code",
-    name: "Claude Code",
-    skillsPath: "~/.claude/skills",
-    detected: true,
-  },
-  {
-    id: "cursor",
-    name: "Cursor",
-    skillsPath: "~/.cursor/skills",
-    detected: true,
-  },
-  {
-    id: "github-copilot",
-    name: "GitHub Copilot",
-    skillsPath: "~/.github/skills",
-    detected: false,
-  },
-  {
-    id: "codex",
-    name: "OpenAI Codex CLI",
-    skillsPath: "~/.codex/skills",
-    detected: false,
-  },
-  {
-    id: "opencode",
-    name: "OpenCode",
-    skillsPath: "~/.config/opencode/skills",
-    detected: false,
-  },
-];
-
 let previewSettings = { proxyUrl: "", githubTokenConfigured: false };
 
 export function isBrowserPreview() {
@@ -144,11 +111,9 @@ async function previewInvoke<T>(
       url: skill.url,
     } as T;
   }
-  if (command === "detect_tools") return { tools: previewTools } as T;
   if (command === "list_installed" || command === "refresh_installed") {
     return {
-      remoteRoot: "C:\\Users\\PC\\.skillsage\\remote",
-      localRoot: "C:\\Users\\PC\\.skillsage\\local",
+      skillsRoot: "C:\\Users\\PC\\.agents\\skills",
       skills: previewSkills.slice(0, 3).map((skill, index) => ({
         id: skill.id,
         name: skill.name,
@@ -158,9 +123,6 @@ async function previewInvoke<T>(
         description: "用于界面设计和组件规范。",
         currentVersion: index === 0 ? "a1b2c3d" : "d4e5f6a",
         currentHash: "9c8b7a6d5e4f3210",
-        distributedTo: previewTools
-          .filter((tool) => tool.detected)
-          .map((tool) => tool.id),
         installedAt: "2026-08-18T08:00:00Z",
         versionHistory: [],
       })),
@@ -196,9 +158,7 @@ async function previewInvoke<T>(
       owner: "local",
       currentVersion: "local",
       currentHash: "preview",
-      distributedTo: args?.agents ?? [],
-      centralPath: "~/.skillsage/local/local-research",
-      linkPaths: [],
+      installedPath: "C:\\Users\\PC\\.agents\\skills\\local-research",
     } as T;
   }
   if (command === "inspect_github_url") {
@@ -229,9 +189,7 @@ async function previewInvoke<T>(
       owner: "vercel-labs",
       currentVersion: "preview",
       currentHash: "preview",
-      distributedTo: args?.agents ?? [],
-      centralPath: "~/.skillsage/remote/vercel-labs/frontend-design",
-      linkPaths: [],
+      installedPath: "C:\\Users\\PC\\.agents\\skills\\frontend-design",
     } as T;
   }
   if (command === "export_package")
@@ -248,14 +206,7 @@ async function previewInvoke<T>(
           description: "从其他设备恢复的技能。",
           source: "https://skills.sh/vercel-labs/agent-skills/frontend-design",
           currentVersion: "a1b2c3d",
-          distributedTo: ["claude-code", "cursor"],
           installed: false,
-          tools: previewTools.map((tool) => ({
-            id: tool.id,
-            name: tool.name,
-            detected: tool.detected,
-            requested: ["claude-code", "cursor"].includes(tool.id),
-          })),
         },
       ],
     } as T;
@@ -279,66 +230,47 @@ async function previewInvoke<T>(
     return {
       items: [
         {
-          id: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
           name: "legacy-research",
-          description: "从旧目录迁移的技能。",
-          sourcePath: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
-          displayPath: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
-          location: "public",
-          kind: "external-directory",
-          classification: "local",
-          toolIds: ["claude-code", "cursor"],
-          canTakeover: true,
-          canManualHandle: false,
-          canRemove: false,
-          warning: "迁移后由 SkillSage 管理。",
+          declaredName: undefined,
+          description: "已经在共享技能目录中，但还未被 SkillSage 记录。",
+          path: "C:\\Users\\PC\\.agents\\skills\\legacy-research",
+          valid: true,
+          recommended: true,
+          warning: undefined,
         },
         {
-          id: "C:\\Users\\PC\\.agents\\skills\\code-review-pro",
-          name: "code-review-pro",
-          description: "无法确认来源的技能链接。",
-          sourcePath: "C:\\Users\\PC\\.agents\\skills\\code-review-pro",
-          displayPath: "C:\\Users\\PC\\.agents\\skills\\code-review-pro",
-          location: "tool",
-          kind: "unknown-link",
-          classification: "unknown",
-          toolIds: ["claude-code"],
-          canTakeover: false,
-          canManualHandle: true,
-          canRemove: false,
-          warning: "来源未知，请选择工具后手动迁移。",
+          name: "renamed-notes",
+          declaredName: "notes-helper",
+          description: "文件夹名和 SKILL.md 中的名称不一致。",
+          path: "C:\\Users\\PC\\.agents\\skills\\renamed-notes",
+          valid: true,
+          recommended: false,
+          warning:
+            "SKILL.md 中的名称为 notes-helper，与文件夹名不同；采纳后将使用文件夹名 renamed-notes。",
         },
         {
-          id: "C:\\Users\\PC\\.agents\\skills\\missing-skill",
-          name: "missing-skill",
+          name: "broken-entry",
+          declaredName: undefined,
           description: "",
-          sourcePath: "C:\\Users\\PC\\.agents\\skills\\missing-skill",
-          displayPath: "C:\\Users\\PC\\.agents\\skills\\missing-skill",
-          location: "public",
-          kind: "unknown-link",
-          classification: "unknown",
-          toolIds: [],
-          canTakeover: false,
-          canManualHandle: false,
-          canRemove: true,
-          warning: "链接目标不存在或不是有效技能，可直接删除。",
+          path: "C:\\Users\\PC\\.agents\\skills\\broken-entry",
+          valid: false,
+          recommended: false,
+          warning: "未找到有效的 SKILL.md，无法采纳。",
         },
       ],
-      scannedRoots: ["C:\\Users\\PC\\.agents\\skills"],
+      scannedRoot: "C:\\Users\\PC\\.agents\\skills",
     } as T;
   }
   if (command === "execute_migrate")
-    return { migrated: ["legacy-research"], skipped: [], failed: [] } as T;
-  if (command === "remove_migrate_link") return undefined as T;
+    return { adopted: ["legacy-research"], skipped: [], failed: [] } as T;
   if (command === "open_path" || command === "open_skill_directory")
     return undefined as T;
-  if (command === "check_distribution_conflicts") return [] as T;
+  if (command === "check_install_conflict") return undefined as T;
   if (command === "check_updates") return { updates: [] } as T;
   if (command === "cleanup_app")
     return {
       mode: args?.mode ?? "all",
-      removedLinks: 2,
-      centralRemoved: args?.mode !== "keep-skills",
+      trackedSkillsRemoved: args?.mode === "keep-skills" ? 0 : 3,
       managementDataRemoved: true,
     } as T;
   return {} as T;

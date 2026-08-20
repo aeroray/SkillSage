@@ -183,3 +183,30 @@ Reason: The store should show more results at a glance without leaving large bla
 
 Decision: Store security-audit failures are represented by a red warning icon beside the audit heading, with the detailed warning exposed through a tooltip instead of a full-width alert below the audit cards.
 Reason: Audit problems remain discoverable without interrupting the detail flow or adding a large block of repeated status text.
+
+## 2026-08-20 - Single shared public-directory install model (supersedes per-tool distribution)
+
+Decision: Skills no longer install into a private central repository (`~/.skillsage/{remote,local}`) and get symlinked/junctioned out to per-tool directories. Every skill — from the store, a GitHub URL, or local import — installs as real content directly into one shared directory, `~/.agents/skills/<name>/` (flat, no owner subfolder). This supersedes the "Central repository," "Supported tools," and "Windows link invocation" decisions above, and directly reverses `docs/specs/01-需求文档.md`'s original "minimum privilege" principle and its explicit listing of Amp-style shared-directory tools as unsupported.
+Reason: Investigation found the promised per-tool isolation doesn't hold in practice — other AI tools already read from shared locations (this exact `~/.agents/skills/` path was already referenced in this codebase as a migration-scan source) regardless of whether SkillSage links into their own directory. Maintaining platform-specific symlink/junction/conflict/takeover machinery in service of an isolation guarantee that doesn't actually hold added real complexity and attack surface for no real benefit.
+
+Decision: Tool detection, the 5-tool registry, and all "adjust distribution"/"batch distribution" functionality are removed entirely — a skill is just installed or not, with no per-tool dimension.
+Reason: Nothing left to detect or adjust once there's only one install target.
+
+Decision: `~/.skillsage/` shrinks to lock file, snapshots, tmp, and settings only — never skill content. `SkillLockRecord.distributed_to` is removed; `RepoLayout` gained `public_root` and one flat `skill(name)` accessor replacing the owner-namespaced `remote_skill()`/flat `local_skill()` split.
+Reason: Keeps the private directory's purpose to "our own bookkeeping," matching the new single-content-location model.
+
+Decision: Clean-slate cutover — no automatic migration of existing `~/.skillsage/` content or old per-tool symlinks. The lockfile format version bumped to 2; a pre-cutover (version 1) lock file is treated as absent rather than partially parsed. Old data is left on disk, untracked.
+Reason: This is an early-stage product; a real migration path wasn't worth the complexity it would add.
+
+Decision: Installing into a name already occupied by an untracked foreign directory/link asks skip / takeover / cancel (one shared `PathConflictDialog`, not a per-tool conflict list); takeover renames the foreign entity aside (`<name>.skillsage-backup-<timestamp>`) and never deletes or adopts it in place. A name already owned by a *tracked* record is a separate, harder `NameConflict` — not takeover-eligible, since renaming aside another tracked record would orphan its lock entry.
+Reason: Preserves the app's existing non-destructive safety habits with much less code than the old per-tool `TakeoverTransaction` (no more `unique_name()` auto-numbering, no link rebuild, no SKILL.md-parse-and-validate on the displaced content).
+
+Decision: The Migrate feature is replaced by "Adopt" — scanning only the public directory for untracked real directories with a valid SKILL.md, and registering them in place with no `fs::rename` and no link rebuild. The folder name is authoritative (never the SKILL.md's possibly-different declared name). Cross-tool lock-sniffed provenance recovery (`classifier.rs`) is kept, but only trusted after re-fetching the guessed commit and confirming a matching content hash — otherwise the adopted skill records as an unversioned `local://` source.
+Reason: Adoption no longer needs to move content (it's already in the right place), which eliminates most of the old migration machinery's complexity. The verify-before-trust step is cheap and purely additive: worst case matches "no provenance recovery at all," best case gives adopted skills real update/rollback support.
+Note: the Rust module path and Tauri command names (`core/migrate/`, `scan_migrate`, `execute_migrate`) were kept as-is for minimal churn; the frontend presents this to users as "采纳技能" / Adopt.
+
+Decision: Cleanup's `keep-skills` mode now only deletes `~/.skillsage/` and leaves every file in the public directory untouched (safer than before — the old mode still had to carefully dodge `remote/`/`local/` content while deleting links). `all` mode deletes only the public-directory folders the lock file actually tracks, then `~/.skillsage/`; untracked neighbors are never touched.
+Reason: Directly follows from content living in one place — `keep-skills` never had `remote/`/`local/` to dodge in the first place.
+
+Decision: Uninstall and cleanup `all` now delete the real folder every AI tool reads from directly, not a disposable link — the single biggest blast-radius increase in this redesign. UI copy for both must say plainly that this removes the skill from every tool simultaneously and cannot be undone (see `docs/specs/05-生命周期状态机.md` §6 and `docs/specs/01-需求文档.md` §13).
+Reason: The old copy ("clean up links") would now be actively misleading about what's actually being deleted.

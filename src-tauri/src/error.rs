@@ -37,26 +37,18 @@ pub enum SkillsageError {
     SyncInvalid(String),
     #[error("导出失败：{0}")]
     ExportFailed(String),
-    #[error("迁移失败：{0}")]
-    MigrateFailed(String),
-    #[error("分发冲突：{0}")]
-    DistributionConflict(String),
+    #[error("安装目标路径已被占用：{0}")]
+    InstallConflict(String),
     #[error("技能已安装：{0}")]
     AlreadyInstalled(String),
     #[error("技能未安装：{0}")]
     NotInstalled(String),
-    #[error("找不到工具：{0}")]
-    UnknownTool(String),
     #[error("路径不存在：{0}")]
     PathNotFound(PathBuf),
     #[error("没有可用的用户目录")]
     HomeDirectoryUnavailable,
     #[error("文件操作失败：{0}")]
     Io(String),
-    #[error("无法创建分发链接：{path}（{reason}）")]
-    LinkCreation { path: PathBuf, reason: String },
-    #[error("无法删除分发链接：{path}（{reason}）")]
-    LinkRemoval { path: PathBuf, reason: String },
     #[error("后台任务失败：{0}")]
     Task(String),
     #[error("清理应用数据失败：{0}")]

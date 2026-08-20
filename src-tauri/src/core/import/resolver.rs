@@ -1,14 +1,12 @@
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::core::distribute::{conflict as distribution_conflict, link, tracker::LinkTracker};
 use crate::core::lifecycle::install::{uninstall_skill_at, InstallResult};
 use crate::core::paths;
+use crate::core::repo::conflict::{self, ConflictAction};
 use crate::core::repo::{atomic, layout::RepoLayout, lockfile};
 use crate::core::skill::parser::{is_valid_skill_name, read_skill_md};
-use crate::core::tools::registry::find_tool;
 use crate::error::SkillsageError;
 
 use super::source;
@@ -50,24 +48,12 @@ pub fn preview_at(layout: &RepoLayout, path: &str) -> Result<ImportPreview, Skil
     })
 }
 
-#[allow(dead_code)]
 pub fn import_at(
     layout: &RepoLayout,
     path: &str,
-    agents: Vec<String>,
     conflict: &str,
     rename_to: Option<String>,
-) -> Result<InstallResult, SkillsageError> {
-    import_at_with_conflicts(layout, path, agents, conflict, rename_to, &BTreeMap::new())
-}
-
-pub fn import_at_with_conflicts(
-    layout: &RepoLayout,
-    path: &str,
-    agents: Vec<String>,
-    conflict: &str,
-    rename_to: Option<String>,
-    actions: &BTreeMap<String, String>,
+    conflict_action: Option<ConflictAction>,
 ) -> Result<InstallResult, SkillsageError> {
     let source_path = PathBuf::from(path);
     let resolved = source::resolve(&source_path)?;
@@ -80,6 +66,9 @@ pub fn import_at_with_conflicts(
         .find(|record| record.name == target_name)
         .cloned();
 
+    // Axis one: does a lock record we already track own this name? Resolved
+    // by the caller's explicit reject/overwrite/rename choice, same as
+    // before this redesign.
     if let Some(record) = &existing {
         if !record.source.starts_with("local://") {
             return Err(SkillsageError::NameConflict(format!(
@@ -103,7 +92,6 @@ pub fn import_at_with_conflicts(
         target_name = validate_rename(rename_to)?;
     }
 
-    validate_agents(&agents)?;
     layout.ensure_roots()?;
     let temp_dir = atomic::create_temp_dir(layout)?;
     let files = match source::collect_resolved_files(&resolved) {
@@ -137,91 +125,76 @@ pub fn import_at_with_conflicts(
             }
         };
     }
-    let destination = layout.local_skill(&parsed.manifest.name)?;
-    if destination.exists() {
-        let _ = atomic::remove_dir(&temp_dir);
-        return Err(SkillsageError::NameConflict(format!(
-            "本地目标路径已存在: {}",
-            destination.display()
-        )));
-    }
-    let current_hash = lockfile::content_hash(&temp_dir)?;
-    atomic::commit_dir(&temp_dir, &destination)?;
 
-    let mut actual_agents = agents.clone();
-    let mut takeovers = Vec::new();
-    for conflict_item in
-        distribution_conflict::find_for_skill(layout, &parsed.manifest.name, &actual_agents)?
-    {
-        match actions.get(&conflict_item.tool_id).map(String::as_str) {
-            Some("skip") => actual_agents.retain(|agent| agent != &conflict_item.tool_id),
-            Some("takeover") => {
-                match distribution_conflict::takeover_at_transaction(
-                    layout,
-                    &conflict_item,
-                    &parsed.manifest.name,
-                ) {
-                    Ok(transaction) => takeovers.push(transaction),
+    // Axis one's final name may have changed (rename branch) — re-check it
+    // isn't already tracked under a different id than the one we're
+    // overwriting.
+    let mut lock = match lockfile::load(layout) {
+        Ok(lock) => lock,
+        Err(error) => {
+            let _ = atomic::remove_dir(&temp_dir);
+            return Err(error);
+        }
+    };
+    if conflict::is_tracked(&lock, &parsed.manifest.name) {
+        let _ = atomic::remove_dir(&temp_dir);
+        return Err(SkillsageError::NameConflict(parsed.manifest.name));
+    }
+
+    let destination = match layout.skill(&parsed.manifest.name) {
+        Ok(path) => path,
+        Err(error) => {
+            let _ = atomic::remove_dir(&temp_dir);
+            return Err(error);
+        }
+    };
+    // Axis two: an untracked foreign path already sitting at that flat slot.
+    let pending = match conflict::check(layout, &lock, &parsed.manifest.name) {
+        Ok(None) => None,
+        Ok(Some(found)) => match conflict_action {
+            Some(ConflictAction::Takeover) => {
+                match conflict::take_over(layout, &parsed.manifest.name) {
+                    Ok(pending) => Some(pending),
                     Err(error) => {
-                        let _ = atomic::remove_dir(&destination);
-                        distribution_conflict::rollback_takeovers(layout, takeovers);
+                        let _ = atomic::remove_dir(&temp_dir);
                         return Err(error);
                     }
                 }
             }
             _ => {
-                let _ = atomic::remove_dir(&destination);
-                distribution_conflict::rollback_takeovers(layout, takeovers);
-                return Err(SkillsageError::DistributionConflict(format!(
-                    "{} 的目标路径已存在: {}",
-                    conflict_item.tool_name, conflict_item.path
+                let _ = atomic::remove_dir(&temp_dir);
+                return Err(SkillsageError::InstallConflict(format!(
+                    "{}: {}",
+                    found.name, found.path
                 )));
             }
-        }
-    }
-    let tools = match validate_agents(&actual_agents) {
-        Ok(tools) => tools,
+        },
         Err(error) => {
-            let _ = atomic::remove_dir(&destination);
-            distribution_conflict::rollback_takeovers(layout, takeovers);
+            let _ = atomic::remove_dir(&temp_dir);
             return Err(error);
         }
     };
-    let mut tracker = LinkTracker::default();
-    for tool in tools {
-        if let Err(error) = tracker.create(
-            &destination,
-            tool.skills_path()?.join(&parsed.manifest.name),
-        ) {
-            tracker.rollback();
-            let _ = atomic::remove_dir(&destination);
-            distribution_conflict::rollback_takeovers(layout, takeovers);
+
+    let current_hash = match lockfile::content_hash(&temp_dir) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = atomic::remove_dir(&temp_dir);
+            if let Some(pending) = pending {
+                let _ = pending.restore();
+            }
             return Err(error);
         }
+    };
+    if let Err(error) = atomic::commit_dir(&temp_dir, &destination) {
+        let _ = atomic::remove_dir(&temp_dir);
+        if let Some(pending) = pending {
+            let _ = pending.restore();
+        }
+        return Err(error);
     }
 
-    let mut next_lock = match lockfile::load(layout) {
-        Ok(lock) => lock,
-        Err(error) => {
-            tracker.rollback();
-            let _ = atomic::remove_dir(&destination);
-            distribution_conflict::rollback_takeovers(layout, takeovers);
-            return Err(error);
-        }
-    };
     let id = format!("local/{}", parsed.manifest.name);
-    if next_lock
-        .skills
-        .values()
-        .any(|record| record.name == parsed.manifest.name)
-    {
-        tracker.rollback();
-        let _ = atomic::remove_dir(&destination);
-        distribution_conflict::rollback_takeovers(layout, takeovers);
-        return Err(SkillsageError::NameConflict(parsed.manifest.name));
-    }
-    let link_paths = tracker.into_paths();
-    next_lock.skills.insert(
+    lock.skills.insert(
         id.clone(),
         lockfile::SkillLockRecord {
             id: id.clone(),
@@ -232,18 +205,16 @@ pub fn import_at_with_conflicts(
             source: format!("local://{}", parsed.manifest.name),
             current_version: "local".into(),
             current_hash: current_hash.clone(),
-            distributed_to: actual_agents.clone(),
             installed_at: lockfile::unix_timestamp(),
             version_history: Vec::new(),
             description: parsed.manifest.description.clone(),
         },
     );
-    if let Err(error) = lockfile::save(layout, &next_lock) {
-        for path in &link_paths {
-            let _ = link::remove_link(path);
-        }
+    if let Err(error) = lockfile::save(layout, &lock) {
         let _ = atomic::remove_dir(&destination);
-        distribution_conflict::rollback_takeovers(layout, takeovers);
+        if let Some(pending) = pending {
+            let _ = pending.restore();
+        }
         return Err(error);
     }
 
@@ -253,12 +224,7 @@ pub fn import_at_with_conflicts(
         owner: "local".into(),
         current_version: "local".into(),
         current_hash,
-        distributed_to: actual_agents,
-        central_path: paths::display(&destination),
-        link_paths: link_paths
-            .into_iter()
-            .map(|path| paths::display(&path))
-            .collect(),
+        install_path: paths::display(&destination),
     })
 }
 
@@ -302,12 +268,6 @@ fn rewrite_skill_name(path: &Path, name: &str) -> Result<(), SkillsageError> {
     Ok(())
 }
 
-fn validate_agents(
-    agents: &[String],
-) -> Result<Vec<crate::core::tools::registry::ToolDefinition>, SkillsageError> {
-    agents.iter().map(|agent| find_tool(agent)).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -319,7 +279,7 @@ mod tests {
     fn previews_imports_and_supports_rename_conflicts() {
         let root = std::env::temp_dir().join(format!("skillsage-import-{}", std::process::id()));
         let source = root.join("source");
-        let layout = RepoLayout::new(root.join("repo"));
+        let layout = RepoLayout::new(root.join("central"), root.join("public"));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(source.join("references")).expect("create source");
         fs::write(
@@ -336,16 +296,16 @@ mod tests {
         import_at(
             &layout,
             source.to_str().expect("source path"),
-            Vec::new(),
             "reject",
+            None,
             None,
         )
         .expect("import should succeed");
         let error = import_at(
             &layout,
             source.to_str().expect("source path"),
-            Vec::new(),
             "reject",
+            None,
             None,
         )
         .expect_err("duplicate should require a strategy");
@@ -353,9 +313,9 @@ mod tests {
         import_at(
             &layout,
             source.to_str().expect("source path"),
-            Vec::new(),
             "rename",
             Some("local-research-copy".into()),
+            None,
         )
         .expect("rename should succeed");
         let lock = lockfile::load(&layout).expect("lock should load");

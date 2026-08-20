@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   CircleAlert,
   Check,
@@ -7,7 +6,6 @@ import {
   Download,
   ExternalLink,
   Flame,
-  RefreshCw,
   Rocket,
   Search,
   ShieldCheck,
@@ -18,7 +16,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PageHeader } from "../../components/common/PageHeader";
-import { Alert, AlertDescription } from "../../components/ui/alert";
+import { PathConflictDialog } from "../../components/common/PathConflictDialog";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import {
@@ -28,7 +26,6 @@ import {
   CardHeader,
   CardTitle,
 } from "../../components/ui/card";
-import { Checkbox } from "../../components/ui/checkbox";
 import { Dialog } from "../../components/ui/dialog";
 import {
   DropdownMenu,
@@ -47,25 +44,23 @@ import {
   TooltipTrigger,
 } from "../../components/ui/tooltip";
 import {
-  useDistributionConflicts,
+  useInstallConflictCheck,
   useInstalledSkills,
   useSkillInstall,
 } from "../../features/skills/hooks";
-import { useDetectedTools } from "../../features/tools/hooks";
 import { groupByRepository } from "../../features/store/selectors";
 import {
   useLeaderboard,
   useSkillDetail,
   useSkillSearch,
 } from "../../features/store/hooks";
-import type { DistributionConflict } from "../../features/skills/types";
+import type { PathConflict } from "../../features/skills/types";
 import type {
   LeaderboardRange,
   SkillDetail,
   SkillGroup,
   SkillSearchResult,
 } from "../../features/store/types";
-import { displayPath } from "../../lib/paths";
 
 const leaderboardTabs = [
   {
@@ -91,14 +86,13 @@ const leaderboardTabs = [
 const stageLabels: Record<string, string> = {
   downloading: "下载",
   parsing: "校验",
-  distributing: "分发",
+  distributing: "安装",
   done: "完成",
   failed: "失败",
 };
 
 type PendingInstall = {
-  agents: string[];
-  conflicts: DistributionConflict[];
+  conflict: PathConflict;
   skillId: string;
 };
 
@@ -248,12 +242,7 @@ function DetailContent({
   installing,
   onOpenSettings,
   onInstall,
-  onRefreshTools,
-  selectedAgents,
-  setSelectedAgents,
   stage,
-  tools,
-  toolsLoading,
 }: {
   detail: SkillDetail;
   installError?: string;
@@ -261,18 +250,8 @@ function DetailContent({
   installing: boolean;
   onInstall: () => void;
   onOpenSettings: () => void;
-  onRefreshTools: () => void;
-  selectedAgents: string[];
-  setSelectedAgents: Dispatch<SetStateAction<string[]>>;
   stage: string;
-  tools: Array<{ id: string; name: string; detected: boolean }>;
-  toolsLoading: boolean;
 }) {
-  const toggleAgent = (agentId: string, checked: boolean) => {
-    setSelectedAgents((current) =>
-      checked ? [...current, agentId] : current.filter((id) => id !== agentId),
-    );
-  };
   const auditWarnings = detail.audits.filter(
     (audit) => audit.status.toLowerCase() !== "pass",
   );
@@ -377,39 +356,12 @@ function DetailContent({
               className="text-sm font-medium text-foreground"
               id="install-target-title"
             >
-              分发到工具
+              安装
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              技能会先保存到中央仓库，再分发到选中的工具。
+              技能会直接安装到共享技能目录，所有支持该目录的 AI 工具都能立即使用。
             </p>
           </div>
-          <span className="text-xs text-muted-foreground">
-            {selectedAgents.length} 个工具
-          </span>
-        </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {tools.map((tool) => (
-            <label
-              className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md border border-border px-3 transition-colors hover:bg-muted"
-              key={tool.id}
-            >
-              <span className="flex items-center gap-3">
-                <Checkbox
-                  checked={selectedAgents.includes(tool.id)}
-                  disabled={installing || toolsLoading}
-                  onCheckedChange={(checked) =>
-                    toggleAgent(tool.id, checked === true)
-                  }
-                />
-                <span className="text-sm text-foreground">{tool.name}</span>
-              </span>
-              {tool.detected ? (
-                <Badge variant="success">已找到</Badge>
-              ) : (
-                <Badge variant="muted">未找到</Badge>
-              )}
-            </label>
-          ))}
         </div>
         <ErrorBanner
           className="mt-4"
@@ -421,27 +373,13 @@ function DetailContent({
             {installMessage}
           </p>
         ) : null}
-        <div className="mt-5 flex items-center justify-between gap-4">
+        <div className="mt-5 flex items-center justify-end gap-4">
           <div className="flex items-center gap-2">
             {installing ? (
               <Badge variant="success">{stageLabels[stage] ?? "处理中"}</Badge>
             ) : null}
-            <Button
-              disabled={installing || toolsLoading}
-              onClick={onRefreshTools}
-              variant="outline"
-            >
-              <RefreshCw
-                className={toolsLoading ? "animate-spin" : undefined}
-                data-icon="inline-start"
-              />
-              {toolsLoading ? "检测中…" : "刷新工具检测"}
-            </Button>
           </div>
-          <Button
-            disabled={installing || selectedAgents.length === 0}
-            onClick={onInstall}
-          >
+          <Button disabled={installing} onClick={onInstall}>
             <Download data-icon="inline-start" />
             {installing ? "安装中" : "开始安装"}
           </Button>
@@ -457,11 +395,9 @@ export function StorePage() {
   const [query, setQuery] = useState("");
   const [isSearchComposing, setIsSearchComposing] = useState(false);
   const [range, setRange] = useState<LeaderboardRange>("all-time");
-  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
-  const [installConflicts, setInstallConflicts] = useState<PendingInstall>();
+  const [installConflict, setInstallConflict] = useState<PendingInstall>();
   const [quickInstallingSkillId, setQuickInstallingSkillId] =
     useState<string>();
-  const initializedDetail = useRef<string | undefined>(undefined);
   const routeSkillId = location.pathname.startsWith("/store/")
     ? decodeRouteSkillId(location.pathname.slice("/store/".length))
     : null;
@@ -485,12 +421,6 @@ export function StorePage() {
     refresh: refreshDetail,
   } = useSkillDetail(selectedSkillId);
   const {
-    error: toolsError,
-    loading: toolsLoading,
-    refresh: refreshTools,
-    tools,
-  } = useDetectedTools();
-  const {
     loading: installedLoading,
     refresh: refreshInstalledSkills,
     skills: installedSkills,
@@ -503,16 +433,7 @@ export function StorePage() {
     closeDetail();
   }, [closeDetail, refreshInstalledSkills]);
   const installState = useSkillInstall(handleInstallCompleted);
-  const conflictCheck = useDistributionConflicts();
-
-  useEffect(() => {
-    if (detail && tools.length > 0 && initializedDetail.current !== detail.id) {
-      setSelectedAgents(
-        tools.filter((tool) => tool.detected).map((tool) => tool.id),
-      );
-      initializedDetail.current = detail.id;
-    }
-  }, [detail, tools]);
+  const conflictCheck = useInstallConflictCheck();
 
   const isSearching = !isSearchComposing && query.trim().length >= 2;
   const displaySkills = isSearching ? searchResults : leaderboardSkills;
@@ -521,10 +442,6 @@ export function StorePage() {
   const groups = useMemo(
     () => groupByRepository(displaySkills),
     [displaySkills],
-  );
-  const defaultAgents = useMemo(
-    () => tools.filter((tool) => tool.detected).map((tool) => tool.id),
-    [tools],
   );
   const installedSkillIds = useMemo(
     () => new Set(installedSkills.map((skill) => skill.id)),
@@ -535,56 +452,28 @@ export function StorePage() {
   };
   const startStoreInstall = async () => {
     if (!detail) return;
-    const conflicts = await conflictCheck.check(detail.name, selectedAgents);
-    if (conflicts.length > 0) {
-      setInstallConflicts({
-        agents: [...selectedAgents],
-        conflicts,
-        skillId: detail.id,
-      });
+    const found = await conflictCheck.check(detail.name);
+    if (found) {
+      setInstallConflict({ conflict: found, skillId: detail.id });
       return;
     }
-    await installState.install(detail.id, selectedAgents);
+    await installState.install(detail.id);
   };
   const quickInstall = async (skill: SkillSearchResult) => {
-    if (
-      installedSkillIds.has(skill.id) ||
-      installState.installing ||
-      defaultAgents.length === 0
-    ) {
+    if (installedSkillIds.has(skill.id) || installState.installing) {
       return;
     }
-    const agents = [...defaultAgents];
-    const conflicts = await conflictCheck.check(skill.name, agents);
-    if (conflicts.length > 0) {
-      setInstallConflicts({ agents, conflicts, skillId: skill.id });
+    const found = await conflictCheck.check(skill.name);
+    if (found) {
+      setInstallConflict({ conflict: found, skillId: skill.id });
       return;
     }
     setQuickInstallingSkillId(skill.id);
     try {
-      await installState.install(skill.id, agents);
+      await installState.install(skill.id);
     } finally {
       setQuickInstallingSkillId(undefined);
     }
-  };
-  const installSkippingConflicts = async () => {
-    if (!installConflicts) return;
-    const pending = installConflicts;
-    const blocked = new Set(pending.conflicts.map((item) => item.toolId));
-    setInstallConflicts(undefined);
-    await installState.install(
-      pending.skillId,
-      pending.agents.filter((agent) => !blocked.has(agent)),
-    );
-  };
-  const installTakingOverConflicts = async () => {
-    if (!installConflicts) return;
-    const pending = installConflicts;
-    const actions = Object.fromEntries(
-      pending.conflicts.map((item) => [item.toolId, "takeover" as const]),
-    );
-    setInstallConflicts(undefined);
-    await installState.install(pending.skillId, pending.agents, actions);
   };
 
   return (
@@ -683,8 +572,6 @@ export function StorePage() {
                 onQuickInstall={quickInstall}
                 quickInstallDisabled={
                   installedLoading ||
-                  toolsLoading ||
-                  defaultAgents.length === 0 ||
                   installState.installing ||
                   conflictCheck.checking
                 }
@@ -749,65 +636,23 @@ export function StorePage() {
             installing={installState.installing || conflictCheck.checking}
             onInstall={() => void startStoreInstall()}
             onOpenSettings={() => navigate("/settings")}
-            onRefreshTools={() => void refreshTools()}
-            selectedAgents={selectedAgents}
-            setSelectedAgents={setSelectedAgents}
             stage={installState.stage}
-            tools={tools}
-            toolsLoading={toolsLoading}
           />
         ) : (
           <p className="text-sm text-muted-foreground">无法加载技能详情。</p>
         )}
-        {toolsError ? (
-          <ErrorBanner
-            className="mt-4"
-            error={toolsError}
-            onRetry={() => void refreshTools()}
-          />
-        ) : null}
       </Dialog>
-      <Dialog
-        description="目标工具已有同名内容。"
-        onClose={() => setInstallConflicts(undefined)}
-        open={Boolean(installConflicts)}
-        title="处理安装冲突"
-      >
-        <div className="flex flex-col gap-4">
-          <Alert variant="destructive">
-            <CircleAlert />
-            <AlertDescription>
-              {installConflicts?.conflicts
-                .map((item) => `${item.toolName}: ${displayPath(item.path)}`)
-                .join("；")}
-            </AlertDescription>
-          </Alert>
-          <p className="text-sm leading-6 text-muted-foreground">
-            跳过该工具；备份原内容后继续安装；取消返回上一步。
-          </p>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              onClick={() => setInstallConflicts(undefined)}
-              variant="ghost"
-            >
-              取消
-            </Button>
-            <Button
-              disabled={installState.installing}
-              onClick={() => void installSkippingConflicts()}
-              variant="outline"
-            >
-              跳过
-            </Button>
-            <Button
-              disabled={installState.installing}
-              onClick={() => void installTakingOverConflicts()}
-            >
-              备份后安装
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+      <PathConflictDialog
+        busy={installState.installing}
+        conflict={installConflict?.conflict}
+        onCancel={() => setInstallConflict(undefined)}
+        onSkip={() => setInstallConflict(undefined)}
+        onTakeover={() => {
+          const pending = installConflict;
+          setInstallConflict(undefined);
+          if (pending) void installState.install(pending.skillId, true);
+        }}
+      />
     </div>
   );
 }

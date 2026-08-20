@@ -1,21 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
-  adjustDistribution,
+  checkInstallConflict,
   checkUpdates,
-  distributeSkills,
   installSkill,
   refreshInstalled,
   rollbackSkill,
   uninstallSkill,
   updateSkill,
 } from "./api";
-import { checkDistributionConflicts } from "./api";
 import type {
-  DistributionActions,
-  DistributionConflict,
   InstalledSkill,
   InstalledSkillsList,
+  PathConflict,
   SkillProgress,
   UpdateInfo,
 } from "./types";
@@ -43,11 +40,8 @@ export function useInstalledSkills() {
   const [skills, setSkills] = useState<InstalledSkill[]>(
     () => cachedInstalledSkills?.skills ?? [],
   );
-  const [remoteRoot, setRemoteRoot] = useState(
-    () => cachedInstalledSkills?.remoteRoot,
-  );
-  const [localRoot, setLocalRoot] = useState(
-    () => cachedInstalledSkills?.localRoot,
+  const [skillsRoot, setSkillsRoot] = useState(
+    () => cachedInstalledSkills?.skillsRoot,
   );
   const [loading, setLoading] = useState(() => !cachedInstalledSkills);
   const [error, setError] = useState<string>();
@@ -60,8 +54,7 @@ export function useInstalledSkills() {
     try {
       const result = await loadInstalledSkills(force);
       if (currentRequest === requestId.current) {
-        setRemoteRoot(result.remoteRoot);
-        setLocalRoot(result.localRoot);
+        setSkillsRoot(result.skillsRoot);
         setSkills(result.skills);
       }
     } catch (reason) {
@@ -76,7 +69,7 @@ export function useInstalledSkills() {
     void refresh(false);
   }, [refresh]);
 
-  return { error, loading, localRoot, refresh, remoteRoot, setSkills, skills };
+  return { error, loading, refresh, setSkills, skills, skillsRoot };
 }
 
 export function useSkillInstall(onCompleted: () => void) {
@@ -86,11 +79,7 @@ export function useSkillInstall(onCompleted: () => void) {
   const [error, setError] = useState<string>();
 
   const install = useCallback(
-    async (
-      skillId: string,
-      agents: string[],
-      conflicts?: DistributionActions,
-    ) => {
+    async (skillId: string, takeover?: boolean) => {
       setInstalling(true);
       setStage("downloading");
       setMessage("准备下载");
@@ -108,7 +97,7 @@ export function useSkillInstall(onCompleted: () => void) {
         } catch {
           // Browser preview does not expose Tauri events.
         }
-        const result = await installSkill(skillId, agents, conflicts);
+        const result = await installSkill(skillId, takeover);
         setStage("done");
         setMessage("安装完成");
         onCompleted();
@@ -200,16 +189,6 @@ export function useSkillManagement(onCompleted: () => void) {
   );
 
   return {
-    adjust: (
-      skillId: string,
-      agents: string[],
-      conflicts?: DistributionActions,
-    ) => run(skillId, () => adjustDistribution(skillId, agents, conflicts)),
-    distribute: (
-      skillIds: string[],
-      agents: string[],
-      conflicts?: DistributionActions,
-    ) => run("batch", () => distributeSkills(skillIds, agents, conflicts)),
     error,
     pending,
     rollback: (skillId: string, version: string) =>
@@ -223,26 +202,20 @@ export function useSkillManagement(onCompleted: () => void) {
   };
 }
 
-export function useDistributionConflicts() {
+export function useInstallConflictCheck() {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string>();
-  const check = useCallback(
-    async (
-      skillName: string,
-      agents: string[],
-    ): Promise<DistributionConflict[]> => {
-      setChecking(true);
-      setError(undefined);
-      try {
-        return await checkDistributionConflicts(skillName, agents);
-      } catch (reason) {
-        setError(normalizeTauriError(reason));
-        return [];
-      } finally {
-        setChecking(false);
-      }
-    },
-    [],
-  );
+  const check = useCallback(async (name: string): Promise<PathConflict | undefined> => {
+    setChecking(true);
+    setError(undefined);
+    try {
+      return await checkInstallConflict(name);
+    } catch (reason) {
+      setError(normalizeTauriError(reason));
+      return undefined;
+    } finally {
+      setChecking(false);
+    }
+  }, []);
   return { check, checking, error };
 }

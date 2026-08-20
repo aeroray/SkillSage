@@ -1,14 +1,12 @@
-use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::core::distribute::{conflict, link, tracker::LinkTracker};
 use crate::core::paths;
+use crate::core::repo::conflict::{self, ConflictAction};
 use crate::core::repo::{atomic, layout::RepoLayout, lockfile};
 use crate::core::skill::parser::read_skill_md;
 use crate::core::store::models::SkillDetail;
-use crate::core::tools::registry::find_tool;
 use crate::error::SkillsageError;
 
 #[cfg(test)]
@@ -43,35 +41,14 @@ pub struct InstallResult {
     pub owner: String,
     pub current_version: String,
     pub current_hash: String,
-    pub distributed_to: Vec<String>,
-    pub central_path: String,
-    pub link_paths: Vec<String>,
-}
-
-pub fn install_skill_from_store_with_conflicts(
-    detail: SkillDetail,
-    agents: Vec<String>,
-    actions: BTreeMap<String, String>,
-) -> Result<InstallResult, SkillsageError> {
-    let layout = RepoLayout::from_user_home()?;
-    install_skill_from_store_at_with_conflicts(&layout, detail, agents, &actions)
+    pub install_path: String,
 }
 
 pub fn install_skill_from_store_at(
     layout: &RepoLayout,
     detail: SkillDetail,
-    agents: Vec<String>,
+    conflict_action: Option<ConflictAction>,
 ) -> Result<InstallResult, SkillsageError> {
-    install_skill_from_store_at_with_conflicts(layout, detail, agents, &BTreeMap::new())
-}
-
-pub fn install_skill_from_store_at_with_conflicts(
-    layout: &RepoLayout,
-    detail: SkillDetail,
-    agents: Vec<String>,
-    actions: &BTreeMap<String, String>,
-) -> Result<InstallResult, SkillsageError> {
-    validate_agents(&agents)?;
     let (owner, repo) = detail.source.split_once('/').ok_or_else(|| {
         SkillsageError::InvalidSkill("only GitHub-backed store skills are supported".into())
     })?;
@@ -121,81 +98,64 @@ pub fn install_skill_from_store_at_with_conflicts(
             return Err(error);
         }
     };
-    let destination = layout.remote_skill(owner, &parsed.manifest.name)?;
-    if destination.exists() {
+
+    let lock = match lockfile::load(layout) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = atomic::remove_dir(&temp_dir);
+            return Err(error);
+        }
+    };
+    if lock.skills.contains_key(&detail.id) {
         let _ = atomic::remove_dir(&temp_dir);
         return Err(SkillsageError::AlreadyInstalled(detail.id));
     }
-    if let Err(error) = atomic::commit_dir(&temp_dir, &destination) {
+    if conflict::is_tracked(&lock, &parsed.manifest.name) {
         let _ = atomic::remove_dir(&temp_dir);
-        return Err(error);
+        return Err(SkillsageError::NameConflict(parsed.manifest.name));
     }
 
-    let mut actual_agents = agents.clone();
-    let mut takeovers = Vec::new();
-    for conflict_item in conflict::find_for_skill(layout, &parsed.manifest.name, &actual_agents)? {
-        match actions.get(&conflict_item.tool_id).map(String::as_str) {
-            Some("skip") => actual_agents.retain(|agent| agent != &conflict_item.tool_id),
-            Some("takeover") => {
-                match conflict::takeover_at_transaction(
-                    layout,
-                    &conflict_item,
-                    &parsed.manifest.name,
-                ) {
-                    Ok(transaction) => takeovers.push(transaction),
+    let destination = match layout.skill(&parsed.manifest.name) {
+        Ok(path) => path,
+        Err(error) => {
+            let _ = atomic::remove_dir(&temp_dir);
+            return Err(error);
+        }
+    };
+    let pending = match conflict::check(layout, &lock, &parsed.manifest.name) {
+        Ok(None) => None,
+        Ok(Some(found)) => match conflict_action {
+            Some(ConflictAction::Takeover) => {
+                match conflict::take_over(layout, &parsed.manifest.name) {
+                    Ok(pending) => Some(pending),
                     Err(error) => {
-                        let _ = atomic::remove_dir(&destination);
-                        conflict::rollback_takeovers(layout, takeovers);
+                        let _ = atomic::remove_dir(&temp_dir);
                         return Err(error);
                     }
                 }
             }
             _ => {
-                let _ = atomic::remove_dir(&destination);
-                conflict::rollback_takeovers(layout, takeovers);
-                return Err(SkillsageError::DistributionConflict(format!(
-                    "{} 的目标路径已存在: {}",
-                    conflict_item.tool_name, conflict_item.path
+                let _ = atomic::remove_dir(&temp_dir);
+                return Err(SkillsageError::InstallConflict(format!(
+                    "{}: {}",
+                    found.name, found.path
                 )));
             }
-        }
-    }
-    let tools = match validate_agents(&actual_agents) {
-        Ok(tools) => tools,
+        },
         Err(error) => {
-            let _ = atomic::remove_dir(&destination);
-            conflict::rollback_takeovers(layout, takeovers);
+            let _ = atomic::remove_dir(&temp_dir);
             return Err(error);
         }
     };
-    let mut tracker = LinkTracker::default();
-    for tool in tools {
-        let target = tool.skills_path()?.join(&parsed.manifest.name);
-        if let Err(error) = tracker.create(&destination, target) {
-            tracker.rollback();
-            let _ = atomic::remove_dir(&destination);
-            conflict::rollback_takeovers(layout, takeovers);
-            return Err(error);
+
+    if let Err(error) = atomic::commit_dir(&temp_dir, &destination) {
+        let _ = atomic::remove_dir(&temp_dir);
+        if let Some(pending) = pending {
+            let _ = pending.restore();
         }
+        return Err(error);
     }
 
-    let mut lock = match lockfile::load(layout) {
-        Ok(value) => value,
-        Err(error) => {
-            tracker.rollback();
-            let _ = atomic::remove_dir(&destination);
-            conflict::rollback_takeovers(layout, takeovers);
-            return Err(error);
-        }
-    };
-    if lock.skills.contains_key(&detail.id) {
-        tracker.rollback();
-        let _ = atomic::remove_dir(&destination);
-        conflict::rollback_takeovers(layout, takeovers);
-        return Err(SkillsageError::AlreadyInstalled(detail.id));
-    }
-
-    let link_paths = tracker.into_paths();
     let current_version = detail
         .version
         .clone()
@@ -212,19 +172,18 @@ pub fn install_skill_from_store_at_with_conflicts(
         source: detail.url,
         current_version: current_version.clone(),
         current_hash: current_hash.clone(),
-        distributed_to: actual_agents.clone(),
         installed_at: lockfile::unix_timestamp(),
         version_history: Vec::new(),
         description: detail.description,
     };
+    let mut lock = lock;
     lock.skills.insert(detail.id.clone(), record);
 
     if let Err(error) = lockfile::save(layout, &lock) {
-        for path in &link_paths {
-            let _ = link::remove_link(path);
-        }
         let _ = atomic::remove_dir(&destination);
-        conflict::rollback_takeovers(layout, takeovers);
+        if let Some(pending) = pending {
+            let _ = pending.restore();
+        }
         return Err(error);
     }
 
@@ -234,21 +193,12 @@ pub fn install_skill_from_store_at_with_conflicts(
         owner: owner.to_string(),
         current_version,
         current_hash,
-        distributed_to: actual_agents,
-        central_path: paths::display(&destination),
-        link_paths: link_paths
-            .into_iter()
-            .map(|path| paths::display(&path))
-            .collect(),
+        install_path: paths::display(&destination),
     })
 }
 
 #[cfg(test)]
-pub fn install_test_skill_at(
-    layout: &RepoLayout,
-    agents: Vec<String>,
-) -> Result<InstallResult, SkillsageError> {
-    let tools = validate_agents(&agents)?;
+pub fn install_test_skill_at(layout: &RepoLayout) -> Result<InstallResult, SkillsageError> {
     layout.ensure_roots()?;
     let temp_dir = atomic::create_temp_dir(layout)?;
     let temporary_skill_file = temp_dir.join("SKILL.md");
@@ -268,7 +218,7 @@ pub fn install_test_skill_at(
             return Err(error);
         }
     };
-    let destination = layout.remote_skill(TEST_SKILL_OWNER, &parsed.manifest.name)?;
+    let destination = layout.skill(&parsed.manifest.name)?;
     if destination.exists() {
         let _ = atomic::remove_dir(&temp_dir);
         return Err(SkillsageError::AlreadyInstalled(TEST_SKILL_ID.to_string()));
@@ -279,31 +229,18 @@ pub fn install_test_skill_at(
         return Err(error);
     }
 
-    let mut tracker = LinkTracker::default();
-    for tool in tools {
-        let target = tool.skills_path()?.join(&parsed.manifest.name);
-        if let Err(error) = tracker.create(&destination, target) {
-            tracker.rollback();
-            let _ = atomic::remove_dir(&destination);
-            return Err(error);
-        }
-    }
-
     let mut lock = match lockfile::load(layout) {
         Ok(value) => value,
         Err(error) => {
-            tracker.rollback();
             let _ = atomic::remove_dir(&destination);
             return Err(error);
         }
     };
     if lock.skills.contains_key(TEST_SKILL_ID) {
-        tracker.rollback();
         let _ = atomic::remove_dir(&destination);
         return Err(SkillsageError::AlreadyInstalled(TEST_SKILL_ID.to_string()));
     }
 
-    let link_paths = tracker.into_paths();
     let record = lockfile::SkillLockRecord {
         id: TEST_SKILL_ID.to_string(),
         name: parsed.manifest.name.clone(),
@@ -313,7 +250,6 @@ pub fn install_test_skill_at(
         source: "builtin://phase2-fixture".to_string(),
         current_version: TEST_SKILL_COMMIT.to_string(),
         current_hash: current_hash.clone(),
-        distributed_to: agents.clone(),
         installed_at: lockfile::unix_timestamp(),
         version_history: Vec::new(),
         description: parsed.manifest.description.clone(),
@@ -321,9 +257,6 @@ pub fn install_test_skill_at(
     lock.skills.insert(TEST_SKILL_ID.to_string(), record);
 
     if let Err(error) = lockfile::save(layout, &lock) {
-        for path in &link_paths {
-            let _ = link::remove_link(path);
-        }
         let _ = atomic::remove_dir(&destination);
         return Err(error);
     }
@@ -334,12 +267,7 @@ pub fn install_test_skill_at(
         owner: TEST_SKILL_OWNER.to_string(),
         current_version: TEST_SKILL_COMMIT.to_string(),
         current_hash,
-        distributed_to: agents,
-        central_path: paths::display(&destination),
-        link_paths: link_paths
-            .into_iter()
-            .map(|path| paths::display(&path))
-            .collect(),
+        install_path: paths::display(&destination),
     })
 }
 
@@ -351,17 +279,11 @@ pub fn uninstall_skill_at(layout: &RepoLayout, skill_id: &str) -> Result<(), Ski
         .cloned()
         .ok_or_else(|| SkillsageError::NotInstalled(skill_id.to_string()))?;
 
-    for agent in &record.distributed_to {
-        let tool = find_tool(agent)?;
-        let link_path = tool.skills_path()?.join(&record.name);
-        link::remove_link(&link_path)?;
-    }
-
     let destination = destination_for_record(layout, &record)?;
     let snapshots = if record.source.starts_with("local://") {
         None
     } else {
-        Some(layout.snapshot_skill(&record.owner, &record.name)?)
+        Some(layout.snapshot_skill(&record.name)?)
     };
     atomic::remove_dir(&destination)?;
     if let Some(snapshots) = snapshots {
@@ -372,25 +294,15 @@ pub fn uninstall_skill_at(layout: &RepoLayout, skill_id: &str) -> Result<(), Ski
     Ok(())
 }
 
+/// Where a record's content lives on disk. Every skill, regardless of
+/// source (`remote://`/`https://`/`local://`), lives at the same flat
+/// `layout.skill(name)` path now — there is no more owner-namespaced
+/// "remote" tree distinct from a flat "local" tree.
 pub fn destination_for_record(
     layout: &RepoLayout,
     record: &lockfile::SkillLockRecord,
 ) -> Result<PathBuf, SkillsageError> {
-    if record.source.starts_with("local://") {
-        layout.local_skill(&record.name)
-    } else {
-        layout.remote_skill(&record.owner, &record.name)
-    }
-}
-
-fn validate_agents(
-    agents: &[String],
-) -> Result<Vec<crate::core::tools::registry::ToolDefinition>, SkillsageError> {
-    let mut tools = Vec::with_capacity(agents.len());
-    for agent in agents {
-        tools.push(find_tool(agent)?);
-    }
-    Ok(tools)
+    layout.skill(&record.name)
 }
 
 fn safe_file_path(value: &str) -> Result<PathBuf, SkillsageError> {
@@ -423,7 +335,7 @@ fn safe_file_path(value: &str) -> Result<PathBuf, SkillsageError> {
 
 #[cfg(test)]
 pub fn test_skill_path(layout: &RepoLayout) -> Result<PathBuf, SkillsageError> {
-    layout.remote_skill(TEST_SKILL_OWNER, "skillsage-phase2-test")
+    layout.skill("skillsage-phase2-test")
 }
 
 #[cfg(test)]
@@ -435,13 +347,20 @@ mod tests {
     use crate::core::repo::layout::RepoLayout;
     use crate::core::store::models::SkillFile;
 
+    fn test_layout(name: &str) -> RepoLayout {
+        let root =
+            std::env::temp_dir().join(format!("skillsage-install-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create shared test parent");
+        RepoLayout::new(root.join("central"), root.join("public"))
+    }
+
     #[test]
     fn installs_and_uninstalls_fixture_without_distribution() {
-        let root = std::env::temp_dir().join(format!("skillsage-install-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        let layout = RepoLayout::new(root.clone());
+        let layout = test_layout("basic");
+        let root = layout.root.parent().expect("root parent").to_path_buf();
 
-        let result = install_test_skill_at(&layout, Vec::new()).expect("fixture should install");
+        let result = install_test_skill_at(&layout).expect("fixture should install");
         assert_eq!(result.id, TEST_SKILL_ID);
         assert!(test_skill_path(&layout)
             .expect("path should resolve")
@@ -457,14 +376,10 @@ mod tests {
 
     #[test]
     fn uninstall_removes_version_snapshots() {
-        let root = std::env::temp_dir().join(format!(
-            "skillsage-uninstall-snapshots-{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&root);
-        let layout = RepoLayout::new(root.clone());
+        let layout = test_layout("snapshots");
+        let root = layout.root.parent().expect("root parent").to_path_buf();
 
-        install_test_skill_at(&layout, Vec::new()).expect("fixture should install");
+        install_test_skill_at(&layout).expect("fixture should install");
         apply_at(
             &layout,
             TEST_SKILL_ID,
@@ -485,7 +400,7 @@ mod tests {
             .cloned()
             .expect("fixture should be recorded");
         let snapshots = layout
-            .snapshot_skill(&record.owner, &record.name)
+            .snapshot_skill(&record.name)
             .expect("snapshot path should resolve");
         assert!(snapshots.is_dir());
 

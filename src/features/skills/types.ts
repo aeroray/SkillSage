@@ -8,7 +8,6 @@ export type InstalledSkill = {
   description: string;
   currentVersion: string;
   currentHash: string;
-  distributedTo: string[];
   installedAt: string;
   versionHistory: VersionRecord[];
 };
@@ -20,8 +19,7 @@ export type VersionRecord = {
 };
 
 export type InstalledSkillsList = {
-  remoteRoot: string;
-  localRoot: string;
+  skillsRoot: string;
   skills: InstalledSkill[];
 };
 
@@ -31,9 +29,7 @@ export type InstallResult = {
   owner: string;
   currentVersion: string;
   currentHash: string;
-  distributedTo: string[];
-  centralPath: string;
-  linkPaths: string[];
+  installPath: string;
 };
 
 export type SkillProgress = {
@@ -55,11 +51,14 @@ export type UpdateCheckList = {
   updates: UpdateInfo[];
 };
 
-export type DistributionConflict = {
-  toolId: string;
-  toolName: string;
+/** An untracked foreign path already occupying the flat slot a skill name
+ * would install into. Skip/cancel are handled entirely client-side (the
+ * caller just doesn't retry the install); only takeover reaches the
+ * backend. */
+export type PathConflict = {
+  name: string;
   path: string;
-  kind: string;
+  kind: "directory" | "link" | string;
 };
 
-export type DistributionActions = Record<string, "skip" | "takeover">;
+export type ConflictDecision = "skip" | "takeover" | "cancel";

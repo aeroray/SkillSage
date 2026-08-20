@@ -75,9 +75,9 @@ pub fn apply_at(
         )));
     }
 
-    let destination = layout.remote_skill(&current.owner, &current.name)?;
+    let destination = layout.skill(&current.name)?;
     let snapshot = layout
-        .snapshot_skill(&current.owner, &current.name)?
+        .snapshot_skill(&current.name)?
         .join(&current.current_hash);
     match std::fs::symlink_metadata(&snapshot) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -141,9 +141,7 @@ pub fn snapshot_files_at(
     record: &lockfile::SkillLockRecord,
     hash: &str,
 ) -> Result<Vec<SkillFile>, SkillsageError> {
-    let root = layout
-        .snapshot_skill(&record.owner, &record.name)?
-        .join(hash);
+    let root = layout.snapshot_skill(&record.name)?.join(hash);
     match std::fs::symlink_metadata(&root) {
         Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
         _ => return Err(SkillsageError::PathNotFound(root)),
@@ -294,8 +292,9 @@ mod tests {
     fn update_records_history_and_creates_snapshot() {
         let root = std::env::temp_dir().join(format!("skillsage-update-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
-        let layout = RepoLayout::new(root.clone());
-        install_test_skill_at(&layout, Vec::new()).expect("fixture should install");
+        fs::create_dir_all(&root).expect("create shared test parent");
+        let layout = RepoLayout::new(root.join("central"), root.join("public"));
+        install_test_skill_at(&layout).expect("fixture should install");
         let next = r#"---
 name: skillsage-phase2-test
 description: Updated fixture.

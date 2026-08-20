@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -6,20 +6,9 @@ use serde::Serialize;
 use crate::core::paths;
 use crate::core::repo::{layout::RepoLayout, lockfile};
 use crate::core::skill::parser::is_valid_skill_name;
-use crate::core::tools::detection::detect_tools;
-use crate::core::tools::registry::find_tool;
 use crate::error::SkillsageError;
 
 use super::export::{validate_settings, SyncPackage, SyncSettings, SyncSkillEntry, FORMAT_VERSION};
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SyncToolPreview {
-    pub id: String,
-    pub name: String,
-    pub detected: bool,
-    pub requested: bool,
-}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,9 +18,7 @@ pub struct SyncSkillPreview {
     pub description: String,
     pub source: String,
     pub current_version: String,
-    pub distributed_to: Vec<String>,
     pub installed: bool,
-    pub tools: Vec<SyncToolPreview>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -69,7 +56,6 @@ pub fn load(path: &str) -> Result<SyncPackage, SkillsageError> {
 pub fn preview_at(layout: &RepoLayout, path: &str) -> Result<SyncImportPreview, SkillsageError> {
     let package = load(path)?;
     let lock = lockfile::load(layout)?;
-    let detected = detect_tools()?.tools;
     let skills = package
         .skills
         .iter()
@@ -79,18 +65,8 @@ pub fn preview_at(layout: &RepoLayout, path: &str) -> Result<SyncImportPreview, 
             description: entry.description.clone(),
             source: entry.source.clone(),
             current_version: entry.current_version.clone(),
-            distributed_to: entry.distributed_to.clone(),
             installed: lock.skills.contains_key(&entry.id)
                 || lock.skills.values().any(|record| record.name == entry.name),
-            tools: detected
-                .iter()
-                .map(|tool| SyncToolPreview {
-                    id: tool.id.clone(),
-                    name: tool.name.clone(),
-                    detected: tool.detected,
-                    requested: entry.distributed_to.iter().any(|id| id == &tool.id),
-                })
-                .collect(),
         })
         .collect();
     Ok(SyncImportPreview {
@@ -129,21 +105,6 @@ pub fn selected_entries(
         entries.push(entry);
     }
     Ok(entries)
-}
-
-pub fn agents_for(
-    entry: &SyncSkillEntry,
-    choices: &BTreeMap<String, Vec<String>>,
-    detected: &[String],
-) -> Vec<String> {
-    choices.get(&entry.id).cloned().unwrap_or_else(|| {
-        entry
-            .distributed_to
-            .iter()
-            .filter(|id| detected.iter().any(|detected_id| detected_id == *id))
-            .cloned()
-            .collect()
-    })
 }
 
 fn validate(package: &SyncPackage) -> Result<(), SkillsageError> {
@@ -186,21 +147,6 @@ fn validate(package: &SyncPackage) -> Result<(), SkillsageError> {
                 "技能条目无效: {}",
                 entry.id
             )));
-        }
-        if entry.distributed_to.len() > 32 {
-            return Err(SkillsageError::SyncInvalid(format!(
-                "技能分发目标过多: {}",
-                entry.name
-            )));
-        }
-        let mut tools = HashSet::new();
-        for agent in &entry.distributed_to {
-            if !tools.insert(agent) || find_tool(agent).is_err() {
-                return Err(SkillsageError::SyncInvalid(format!(
-                    "技能包含无效的分发目标: {}",
-                    entry.name
-                )));
-            }
         }
         if let Some(skill_path) = &entry.skill_path {
             validate_skill_path(skill_path)?;

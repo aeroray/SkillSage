@@ -28,7 +28,7 @@ pub async fn cleanup_app(
         settings::clear_for_cleanup(&layout)?;
         tracing::info!(
             ?mode,
-            removed_links = result.removed_links,
+            tracked_skills_removed = result.tracked_skills_removed,
             "application cleanup completed"
         );
         Ok(result)

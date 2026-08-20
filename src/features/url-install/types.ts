@@ -24,7 +24,5 @@ export type UrlInstallResult = {
   owner: string;
   currentVersion: string;
   currentHash: string;
-  distributedTo: string[];
-  centralPath: string;
-  linkPaths: string[];
+  installedPath: string;
 };

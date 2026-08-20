@@ -1,5 +1,5 @@
 pub mod cleanup;
-pub mod distribution;
+pub mod conflict;
 pub mod files;
 pub mod import;
 pub mod install;
@@ -8,5 +8,4 @@ pub mod migrate;
 pub mod settings;
 pub mod store;
 pub mod sync;
-pub mod tools;
 pub mod url_install;

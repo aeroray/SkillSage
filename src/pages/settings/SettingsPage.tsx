@@ -19,7 +19,6 @@ import { CleanupDialog } from "./CleanupDialog";
 import { SyncImportDialog } from "../sync/SyncImportDialog";
 import { useSyncExport, type SyncSettings } from "../../features/sync";
 import { useThemeStore } from "../../features/theme/store";
-import { useDetectedTools } from "../../features/tools/hooks";
 import { useAppUpdateStore } from "../../features/update/store";
 import { displayPath } from "../../lib/paths";
 import { isBrowserPreview } from "../../lib/tauri";
@@ -35,7 +34,6 @@ function formatLastChecked(value: string | null) {
 export function SettingsPage() {
   const { error, loading, refresh, save, saving, settings } = useSettings();
   const cleanup = useAppCleanup();
-  const { tools } = useDetectedTools();
   const [githubToken, setGithubToken] = useState("");
   const [proxyUrl, setProxyUrl] = useState("");
   const [saved, setSaved] = useState(false);
@@ -188,7 +186,7 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent className="flex flex-col gap-4 pb-5">
               <div className="flex items-start justify-between gap-5 rounded-lg border border-border bg-muted/30 p-4">
-                <div className="min-w-0 flex-1"><p className="text-sm font-medium text-foreground">同步数据</p><p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">包含远程技能记录、分发目标、显示模式、主题色和代理设置。GitHub Token 不会导出。</p></div>
+                <div className="min-w-0 flex-1"><p className="text-sm font-medium text-foreground">同步数据</p><p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">包含远程技能记录、显示模式、主题色和代理设置。GitHub Token 不会导出。</p></div>
                 <div className="flex shrink-0 flex-col items-stretch gap-2"><Button onClick={() => setSyncOpen(true)} variant="outline"><Upload data-icon="inline-start" />导入同步数据</Button><Button disabled={loading || syncExport.exporting || !settings} onClick={() => void exportSyncData()}><Download data-icon="inline-start" />{syncExport.exporting ? "导出中…" : "导出同步数据"}</Button></div>
               </div>
               {syncExport.error ? <ErrorBanner error={syncExport.error} /> : null}
@@ -201,15 +199,15 @@ export function SettingsPage() {
       <Card className="mt-5 border-border">
         <CardHeader className="flex flex-row items-start gap-4">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><LogOut aria-hidden="true" className="h-5 w-5" /></div>
-          <div><CardTitle>停止管理</CardTitle><CardDescription className="mt-1">不再使用 SkillSage 管理技能时，选择保留技能，或清理 SkillSage 创建的数据。</CardDescription></div>
+          <div><CardTitle>停止管理</CardTitle><CardDescription className="mt-1">不再使用 SkillSage 管理技能时，选择保留技能文件，或删除 SkillSage 安装的技能。</CardDescription></div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 pb-5">
           {cleanup.error ? <ErrorBanner error={cleanup.error} /> : null}
-          {cleanup.result ? <Alert><CheckCircle2 /><AlertDescription>{cleanup.result.centralRemoved ? "已清理 SkillSage 创建的技能仓库、分发链接和管理数据。" : "已保留技能和现有链接，并移除 SkillSage 管理记录。"}</AlertDescription></Alert> : null}
+          {cleanup.result ? <Alert><CheckCircle2 /><AlertDescription>{cleanup.result.mode === "all" ? `已删除 ${cleanup.result.trackedSkillsRemoved} 个 SkillSage 安装的技能文件夹和管理数据，其他 AI 工具会立即失去这些技能。` : "已保留共享目录中的所有技能文件，仅移除 SkillSage 的管理记录，AI 工具不受影响。"}</AlertDescription></Alert> : null}
           <div className="flex items-center justify-between gap-5 rounded-lg border border-border bg-muted/30 p-4">
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">选择处理方式</p>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">保留技能后，AI 工具仍可继续使用；清理后，SkillSage 创建的技能仓库和链接将被移除。</p>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">保留技能后，共享目录中的文件完全不受影响，AI 工具仍可继续使用；删除技能后，SkillSage 安装的技能文件夹会从共享目录中永久移除，且不可恢复。</p>
             </div>
             <Button className="shrink-0" onClick={() => setCleanupOpen(true)} variant="outline">选择方式</Button>
           </div>
@@ -217,7 +215,7 @@ export function SettingsPage() {
       </Card>
 
       <CleanupDialog cleaning={cleanup.cleaning} onClose={() => setCleanupOpen(false)} onConfirm={(mode) => { void cleanup.run(mode); setCleanupOpen(false); }} open={cleanupOpen} />
-      <SyncImportDialog onApplySettings={applyImportedSettings} onClose={() => setSyncOpen(false)} onCompleted={() => { void refresh(); }} open={syncOpen} tools={tools} />
+      <SyncImportDialog onApplySettings={applyImportedSettings} onClose={() => setSyncOpen(false)} onCompleted={() => { void refresh(); }} open={syncOpen} />
     </div>
   );
 }

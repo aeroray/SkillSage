@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::core::lifecycle::remote;
+use crate::core::lifecycle::install::destination_for_record;
 use crate::core::repo::{layout::RepoLayout, lockfile};
 use crate::error::SkillsageError;
 
@@ -21,11 +21,7 @@ pub async fn open_skill_directory(skill_id: String) -> Result<(), SkillsageError
             .get(&skill_id)
             .cloned()
             .ok_or_else(|| SkillsageError::NotInstalled(skill_id.clone()))?;
-        let path = if remote::is_remote_record(&record) {
-            layout.remote_skill(&record.owner, &record.name)?
-        } else {
-            layout.local_skill(&record.name)?
-        };
+        let path = destination_for_record(&layout, &record)?;
         open_directory(&path)
     })
     .await

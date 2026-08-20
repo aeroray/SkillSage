@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import { Download, FolderSync, Library, Settings, Store } from "lucide-react";
+import { Download, FolderInput, Library, Settings, Store } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { useThemeStore } from "../features/theme/store";
@@ -11,12 +11,12 @@ import { cn } from "../lib/utils";
 const SettingsPage = lazy(() => import("../pages/settings/SettingsPage").then(({ SettingsPage: page }) => ({ default: page })));
 const SkillsPage = lazy(() => import("../pages/skills/SkillsPage").then(({ SkillsPage: page }) => ({ default: page })));
 const StorePage = lazy(() => import("../pages/store/StorePage").then(({ StorePage: page }) => ({ default: page })));
-const MigrationPage = lazy(() => import("../pages/migrate/MigrationPage").then(({ MigrationPage: page }) => ({ default: page })));
+const AdoptPage = lazy(() => import("../pages/adopt/AdoptPage").then(({ AdoptPage: page }) => ({ default: page })));
 
 const navigation = [
   { icon: Library, label: "我的技能", path: "/skills" },
   { icon: Store, label: "技能商店", path: "/store" },
-  { icon: FolderSync, label: "迁移技能", path: "/migrate" },
+  { icon: FolderInput, label: "采纳技能", path: "/adopt" },
 ];
 
 const settingsNavigation = [{ icon: Settings, label: "设置", path: "/settings" }];
@@ -136,7 +136,7 @@ export function AppShell() {
                 <Routes>
                   <Route element={<StorePage />} path="/store/*" />
                   <Route element={<SkillsPage />} path="/skills" />
-                  <Route element={<MigrationPage />} path="/migrate" />
+                  <Route element={<AdoptPage />} path="/adopt" />
                   <Route element={<SettingsPage />} path="/settings" />
                   <Route element={<Navigate replace to="/skills" />} path="*" />
                 </Routes>

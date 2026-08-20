@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -9,7 +9,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../components/ui/alert-dialog";
-import { Alert, AlertDescription } from "../../components/ui/alert";
 import {
   Accordion,
   AccordionContent,
@@ -18,7 +17,6 @@ import {
 } from "../../components/ui/accordion";
 import {
   ArrowRight,
-  CircleAlert,
   Download,
   FolderOpen,
   GitBranch,
@@ -27,8 +25,6 @@ import {
   MoreHorizontal,
   RefreshCw,
   Search,
-  Settings2,
-  SlidersHorizontal,
   Store,
   Trash2,
   Undo2,
@@ -75,18 +71,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "../../components/ui/tooltip";
-import { useDetectedTools } from "../../features/tools/hooks";
 import { openSkillDirectory } from "../../features/skills/api";
 import {
-  useDistributionConflicts,
   useInstalledSkills,
   useSkillManagement,
   useSkillUpdates,
 } from "../../features/skills/hooks";
-import type {
-  DistributionConflict,
-  InstalledSkill,
-} from "../../features/skills/types";
+import type { InstalledSkill } from "../../features/skills/types";
 import {
   filterAndSortSkills,
   groupByAuthor,
@@ -100,6 +91,13 @@ import { normalizeTauriError } from "../../lib/tauri";
 
 function shortVersion(version: string) {
   return version.length > 12 ? version.slice(0, 8) : version;
+}
+
+function formatInstalledAt(value: string) {
+  const numeric = Number(value);
+  const date = Number.isNaN(numeric) ? new Date(value) : new Date(numeric * 1000);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "numeric", day: "numeric" }).format(date);
 }
 
 function SkillsLoadingState() {
@@ -125,51 +123,8 @@ function SkillsLoadingState() {
   );
 }
 
-function ToolPicker({
-  agents,
-  onToggle,
-  tools,
-}: {
-  agents: string[];
-  onToggle: (id: string, checked: boolean) => void;
-  tools: { id: string; name: string; detected: boolean }[];
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      {tools.map((tool) => {
-        const checkboxId = `tool-${tool.id}`;
-        return (
-          <div
-            className="flex min-h-10 items-center justify-between gap-3 rounded-md border border-border px-3 transition-colors hover:bg-muted"
-            key={tool.id}
-          >
-            <div className="flex items-center gap-3">
-              <Checkbox
-                checked={agents.includes(tool.id)}
-                id={checkboxId}
-                onCheckedChange={(checked) =>
-                  onToggle(tool.id, checked === true)
-                }
-              />
-              <Label className="font-normal" htmlFor={checkboxId}>
-                {tool.name}
-              </Label>
-            </div>
-            {tool.detected ? (
-              <Badge variant="success">已找到</Badge>
-            ) : (
-              <Badge variant="muted">未找到</Badge>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function SkillRow({
   checked,
-  onAdjust,
   onCheck,
   onHistory,
   onOpenDirectory,
@@ -180,7 +135,6 @@ function SkillRow({
   updateAvailable,
 }: {
   checked: boolean;
-  onAdjust: (skill: InstalledSkill) => void;
   onCheck: (checked: boolean) => void;
   onHistory: (skill: InstalledSkill) => void;
   onOpenDirectory: (skill: InstalledSkill) => void;
@@ -211,11 +165,7 @@ function SkillRow({
       </div>
       <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground">
         <p>{sourceLabel(skill.source)}</p>
-        {skill.distributedTo.length > 0 ? (
-          <Badge variant="success">已分发 · {skill.distributedTo.length}</Badge>
-        ) : (
-          <Badge variant="muted">未分发</Badge>
-        )}
+        <p>安装于 {formatInstalledAt(skill.installedAt)}</p>
       </div>
       <div className="text-xs text-muted-foreground">
         <p className="font-medium text-foreground">
@@ -251,13 +201,6 @@ function SkillRow({
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={pending}
-              onSelect={() => onAdjust(skill)}
-            >
-              <Settings2 />
-              调整分发
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={pending}
               onSelect={() => onOpenDirectory(skill)}
             >
               <FolderOpen />
@@ -281,16 +224,9 @@ function SkillRow({
 export function SkillsPage() {
   const navigate = useNavigate();
   const {
-    error: toolsError,
-    loading: toolsLoading,
-    refresh: refreshTools,
-    tools,
-  } = useDetectedTools();
-  const {
     error: skillsError,
-    localRoot,
     loading: skillsLoading,
-    remoteRoot,
+    skillsRoot,
     refresh: refreshSkills,
     skills,
   } = useInstalledSkills();
@@ -302,43 +238,19 @@ export function SkillsPage() {
   } = useSkillUpdates();
   const refreshPage = useCallback(() => {
     void refreshSkills();
-    void refreshTools();
     void checkUpdatesNow();
-  }, [checkUpdatesNow, refreshSkills, refreshTools]);
+  }, [checkUpdatesNow, refreshSkills]);
   const management = useSkillManagement(refreshPage);
-  const distributionConflictCheck = useDistributionConflicts();
   const [search, setSearch] = useState("");
   const [source, setSource] = useState<SkillSourceFilter>("all");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
-  const [tool, setTool] = useState("all");
   const [sort, setSort] = useState<SkillSortMode>("recent");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [batchAgents, setBatchAgents] = useState<string[]>([]);
-  const [distributionSkill, setDistributionSkill] = useState<InstalledSkill>();
-  const [distributionAgents, setDistributionAgents] = useState<string[]>([]);
-  const [distributionConflict, setDistributionConflict] = useState<{
-    skill: InstalledSkill;
-    agents: string[];
-    conflicts: DistributionConflict[];
-    batchIds?: string[];
-  }>();
   const [historySkill, setHistorySkill] = useState<InstalledSkill>();
   const [uninstallTarget, setUninstallTarget] = useState<InstalledSkill>();
-  const [batchOpen, setBatchOpen] = useState(false);
   const [githubUrlOpen, setGithubUrlOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [directoryError, setDirectoryError] = useState<string>();
-  const initializedAgents = useRef(false);
-
-  useEffect(() => {
-    if (!initializedAgents.current && tools.length > 0) {
-      const detectedAgents = tools
-        .filter((item) => item.detected)
-        .map((item) => item.id);
-      setBatchAgents(detectedAgents);
-      initializedAgents.current = true;
-    }
-  }, [tools]);
 
   useEffect(() => {
     setSelectedIds((current) =>
@@ -361,9 +273,8 @@ export function SkillsPage() {
         sort,
         source,
         status,
-        tool,
       }),
-    [search, skills, sort, source, status, tool, updatesById],
+    [search, skills, sort, source, status, updatesById],
   );
 
   const groups = useMemo(() => {
@@ -382,17 +293,7 @@ export function SkillsPage() {
     : selectedFilteredCount > 0
       ? "indeterminate"
       : false;
-  const pageError =
-    directoryError ??
-    toolsError ??
-    skillsError ??
-    updatesError ??
-    management.error ??
-    distributionConflictCheck.error;
-  const openDistribution = (skill: InstalledSkill) => {
-    setDistributionSkill(skill);
-    setDistributionAgents(skill.distributedTo);
-  };
+  const pageError = directoryError ?? skillsError ?? updatesError ?? management.error;
   const openDirectory = async (skill: InstalledSkill) => {
     setDirectoryError(undefined);
     try {
@@ -405,89 +306,6 @@ export function SkillsPage() {
     if (!uninstallTarget) return;
     await management.uninstall(uninstallTarget.id);
     setUninstallTarget(undefined);
-  };
-  const saveDistribution = async () => {
-    if (!distributionSkill) return;
-    const conflicts = await distributionConflictCheck.check(
-      distributionSkill.name,
-      distributionAgents,
-    );
-    if (conflicts.length > 0) {
-      setDistributionConflict({
-        agents: distributionAgents,
-        conflicts,
-        skill: distributionSkill,
-      });
-      return;
-    }
-    const result = await management.adjust(
-      distributionSkill.id,
-      distributionAgents,
-    );
-    if (result) setDistributionSkill(undefined);
-  };
-  const skipDistributionConflicts = async () => {
-    if (!distributionConflict) return;
-    const blocked = new Set(
-      distributionConflict.conflicts.map((item) => item.toolId),
-    );
-    const result = await management.adjust(
-      distributionConflict.skill.id,
-      distributionConflict.agents.filter((agent) => !blocked.has(agent)),
-    );
-    if (result) {
-      setSelectedIds((current) =>
-        current.filter((id) => id !== distributionConflict.skill.id),
-      );
-      setDistributionConflict(undefined);
-      setDistributionSkill(undefined);
-    }
-  };
-  const takeoverDistributionConflicts = async () => {
-    if (!distributionConflict) return;
-    const actions = Object.fromEntries(
-      distributionConflict.conflicts.map((item) => [
-        item.toolId,
-        "takeover" as const,
-      ]),
-    );
-    const result = await management.adjust(
-      distributionConflict.skill.id,
-      distributionConflict.agents,
-      actions,
-    );
-    if (result) {
-      setSelectedIds((current) =>
-        current.filter((id) => id !== distributionConflict.skill.id),
-      );
-      setDistributionConflict(undefined);
-      setDistributionSkill(undefined);
-    }
-  };
-  const startBatchDistribution = async () => {
-    const pendingSkills = selectedIds
-      .map((id) => skills.find((skill) => skill.id === id))
-      .filter((skill): skill is InstalledSkill => Boolean(skill));
-    for (const skill of pendingSkills) {
-      const conflicts = await distributionConflictCheck.check(
-        skill.name,
-        batchAgents,
-      );
-      if (conflicts.length > 0) {
-        setDistributionConflict({
-          agents: batchAgents,
-          batchIds: selectedIds,
-          conflicts,
-          skill,
-        });
-        return;
-      }
-    }
-    const result = await management.distribute(selectedIds, batchAgents);
-    if (result) {
-      setBatchOpen(false);
-      setSelectedIds([]);
-    }
   };
   const checkSelectedUpdates = () => {
     if (selectedIds.length === 0) return;
@@ -513,7 +331,7 @@ export function SkillsPage() {
             </Button>
           </div>
         }
-        description="查看、更新、回滚和分发已安装技能。"
+        description="查看、更新、回滚已安装技能。"
         title="我的技能"
       />
       <ErrorBanner
@@ -530,11 +348,11 @@ export function SkillsPage() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <CardTitle>中央仓库</CardTitle>
+              <CardTitle>技能目录</CardTitle>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    aria-label="查看中央仓库目录"
+                    aria-label="查看技能目录"
                     className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                     type="button"
                   >
@@ -543,17 +361,11 @@ export function SkillsPage() {
                 </TooltipTrigger>
                 <TooltipContent className="max-w-md p-3" sideOffset={6}>
                   <div className="flex max-w-md min-w-0 flex-col gap-1.5">
-                    <p className="font-medium">远程技能目录</p>
+                    <p className="font-medium">共享技能目录</p>
                     <p className="break-all font-mono text-xs text-background/80">
-                      {remoteRoot
-                        ? displayPath(remoteRoot)
-                        : "正在读取中央仓库路径…"}
-                    </p>
-                    <p className="mt-1 font-medium">本地技能目录</p>
-                    <p className="break-all font-mono text-xs text-background/80">
-                      {localRoot
-                        ? displayPath(localRoot)
-                        : "正在读取本地技能路径…"}
+                      {skillsRoot
+                        ? displayPath(skillsRoot)
+                        : "正在读取技能目录路径…"}
                     </p>
                   </div>
                 </TooltipContent>
@@ -565,14 +377,14 @@ export function SkillsPage() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Button
-              aria-label="刷新技能和工具"
-              disabled={skillsLoading || toolsLoading || updatesChecking}
+              aria-label="刷新技能"
+              disabled={skillsLoading || updatesChecking}
               onClick={refreshPage}
               size="sm"
               variant="outline"
             >
               <RefreshCw data-icon="inline-start" />
-              刷新技能和工具
+              刷新技能
             </Button>
           </div>
         </CardHeader>
@@ -610,21 +422,6 @@ export function SkillsPage() {
                     <SelectItem value="all">全部状态</SelectItem>
                     <SelectItem value="update">有可用更新</SelectItem>
                     <SelectItem value="current">已是最新</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <Select onValueChange={setTool} value={tool}>
-                <SelectTrigger aria-label="工具筛选" className="w-36">
-                  <SelectValue placeholder="工具" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="all">全部工具</SelectItem>
-                    {tools.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.name}
-                      </SelectItem>
-                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -694,16 +491,6 @@ export function SkillsPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
-                  disabled={
-                    selectedIds.length === 0 || Boolean(management.pending)
-                  }
-                  onClick={() => setBatchOpen(true)}
-                  variant="outline"
-                >
-                  <SlidersHorizontal data-icon="inline-start" />
-                  批量分发
-                </Button>
-                <Button
                   disabled={selectedIds.length === 0 || updatesChecking}
                   onClick={checkSelectedUpdates}
                   variant="secondary"
@@ -767,7 +554,6 @@ export function SkillsPage() {
                           <SkillRow
                             checked={selectedIds.includes(skill.id)}
                             key={skill.id}
-                            onAdjust={openDistribution}
                             onCheck={(checked) =>
                               setSelectedIds((current) =>
                                 checked
@@ -797,77 +583,6 @@ export function SkillsPage() {
         </CardContent>
       </Card>
 
-      <Dialog
-        description="选择要使用这个技能的工具。"
-        onClose={() => setDistributionSkill(undefined)}
-        open={Boolean(distributionSkill)}
-        title="选择分发工具"
-      >
-        <ToolPicker
-          agents={distributionAgents}
-          onToggle={(id, checked) =>
-            setDistributionAgents((current) =>
-              checked
-                ? [...new Set([...current, id])]
-                : current.filter((item) => item !== id),
-            )
-          }
-          tools={tools}
-        />
-        <div className="mt-6 flex justify-end gap-2">
-          <Button
-            onClick={() => setDistributionSkill(undefined)}
-            variant="ghost"
-          >
-            取消
-          </Button>
-          <Button
-            disabled={
-              !distributionSkill ||
-              Boolean(management.pending) ||
-              distributionConflictCheck.checking
-            }
-            onClick={() => void saveDistribution()}
-          >
-            {distributionConflictCheck.checking ? "检查冲突…" : "保存"}
-          </Button>
-        </div>
-      </Dialog>
-      <Dialog
-        description={`将为 ${selectedIds.length} 个技能设置分发工具。`}
-        onClose={() => setBatchOpen(false)}
-        open={batchOpen}
-        title="批量分发"
-      >
-        <ToolPicker
-          agents={batchAgents}
-          onToggle={(id, checked) =>
-            setBatchAgents((current) =>
-              checked
-                ? [...new Set([...current, id])]
-                : current.filter((item) => item !== id),
-            )
-          }
-          tools={tools}
-        />
-        <div className="mt-6 flex justify-end gap-2">
-          <Button onClick={() => setBatchOpen(false)} variant="ghost">
-            取消
-          </Button>
-          <Button
-            disabled={
-              selectedIds.length === 0 ||
-              Boolean(management.pending) ||
-              distributionConflictCheck.checking
-            }
-            onClick={() => void startBatchDistribution()}
-          >
-            {distributionConflictCheck.checking
-              ? "检查冲突…"
-              : "应用到选中技能"}
-          </Button>
-        </div>
-      </Dialog>
       <Dialog
         description="查看版本记录并回滚。"
         onClose={() => setHistorySkill(undefined)}
@@ -909,47 +624,6 @@ export function SkillsPage() {
             ))}
         </div>
       </Dialog>
-      <Dialog
-        description="目标工具已有同名内容。"
-        onClose={() => setDistributionConflict(undefined)}
-        open={Boolean(distributionConflict)}
-        title="处理分发冲突"
-      >
-        <div className="flex flex-col gap-4">
-          <Alert variant="destructive">
-            <CircleAlert />
-            <AlertDescription>
-              {distributionConflict?.conflicts
-                .map((item) => `${item.toolName}: ${displayPath(item.path)}`)
-                .join("；")}
-            </AlertDescription>
-          </Alert>
-          <p className="text-sm leading-6 text-muted-foreground">
-            跳过该工具；备份原内容后继续分发；取消返回上一步。
-          </p>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              onClick={() => setDistributionConflict(undefined)}
-              variant="ghost"
-            >
-              取消
-            </Button>
-            <Button
-              disabled={Boolean(management.pending)}
-              onClick={() => void skipDistributionConflicts()}
-              variant="outline"
-            >
-              跳过
-            </Button>
-            <Button
-              disabled={Boolean(management.pending)}
-              onClick={() => void takeoverDistributionConflicts()}
-            >
-              备份后分发
-            </Button>
-          </div>
-        </div>
-      </Dialog>
       <AlertDialog
         onOpenChange={(open) => !open && setUninstallTarget(undefined)}
         open={Boolean(uninstallTarget)}
@@ -958,7 +632,7 @@ export function SkillsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>确认卸载</AlertDialogTitle>
             <AlertDialogDescription>
-              会删除这个技能的分发链接、仓库文件和记录，不影响其他技能。
+              会删除这个技能在共享目录中的文件夹和记录，所有读取该目录的 AI 工具会立即失去这个技能，不影响其他技能。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <p className="text-sm leading-6 text-muted-foreground">
@@ -981,13 +655,11 @@ export function SkillsPage() {
         onCompleted={refreshPage}
         onOpenSettings={() => navigate("/settings")}
         open={githubUrlOpen}
-        tools={tools}
       />
       <ImportDialog
         onClose={() => setImportOpen(false)}
         onCompleted={refreshPage}
         open={importOpen}
-        tools={tools}
       />
     </div>
   );

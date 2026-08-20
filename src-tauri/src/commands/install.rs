@@ -1,10 +1,9 @@
-use std::collections::BTreeMap;
-
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::core::github::{client::GitHubClient, download::fetch_skill_files};
 use crate::core::lifecycle::install::{self, InstallResult};
+use crate::core::repo::conflict::ConflictAction;
 use crate::core::store::client::StoreClient;
 use crate::core::{repo::layout::RepoLayout, settings};
 use crate::error::SkillsageError;
@@ -21,8 +20,7 @@ pub struct SkillProgress {
 #[tauri::command]
 pub async fn install_skill(
     skill_id: String,
-    agents: Vec<String>,
-    conflicts: Option<BTreeMap<String, String>>,
+    conflict_action: Option<ConflictAction>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<InstallResult, SkillsageError> {
@@ -54,18 +52,15 @@ pub async fn install_skill(
         &app,
         &skill_id,
         "distributing",
-        "Creating tool distribution links",
+        "Storing skill in the shared skills directory",
     )?;
     let result = tokio::task::spawn_blocking(move || {
-        install::install_skill_from_store_with_conflicts(
-            detail,
-            agents,
-            conflicts.unwrap_or_default(),
-        )
+        let layout = RepoLayout::from_user_home()?;
+        install::install_skill_from_store_at(&layout, detail, conflict_action)
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))??;
-    emit_progress(&app, &skill_id, "done", "Skill stored and distributed")?;
+    emit_progress(&app, &skill_id, "done", "Skill installed")?;
     Ok(result)
 }
 

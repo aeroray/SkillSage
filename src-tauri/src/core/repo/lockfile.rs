@@ -16,6 +16,13 @@ pub struct VersionRecord {
     pub recorded_at: String,
 }
 
+/// The lockfile format version this build reads and writes. Bumped from 1 to
+/// 2 alongside the single-shared-directory redesign: `distributed_to` is
+/// gone, and a version-1 file on disk is deliberately NOT parsed (see
+/// `load()`) rather than silently accepted with a missing field — this is
+/// the clean-slate cutover, not a migration.
+pub const LOCK_FORMAT_VERSION: u32 = 2;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillLockRecord {
@@ -30,8 +37,6 @@ pub struct SkillLockRecord {
     pub current_version: String,
     #[serde(alias = "current_hash")]
     pub current_hash: String,
-    #[serde(alias = "distributed_to", default)]
-    pub distributed_to: Vec<String>,
     #[serde(alias = "installed_at")]
     pub installed_at: String,
     #[serde(default, alias = "version_history")]
@@ -50,7 +55,7 @@ pub struct SkillLockFile {
 impl Default for SkillLockFile {
     fn default() -> Self {
         Self {
-            version: 1,
+            version: LOCK_FORMAT_VERSION,
             skills: BTreeMap::new(),
         }
     }
@@ -66,7 +71,19 @@ pub fn load(layout: &RepoLayout) -> Result<SkillLockFile, SkillsageError> {
         Err(error) => return Err(error.into()),
     }
     let content = std::fs::read_to_string(path)?;
-    Ok(serde_json::from_str(&content)?)
+    let parsed: SkillLockFile = serde_json::from_str(&content)?;
+    if parsed.version != LOCK_FORMAT_VERSION {
+        // A pre-cutover (version 1) lock file describes skills that were
+        // distributed via per-tool symlinks under the old model; those
+        // records no longer map to anything under the new flat
+        // `layout.skill(name)` scheme. Rather than silently accept the old
+        // JSON (serde would just ignore the now-removed `distributedTo`
+        // field) and produce lock records pointing at nothing, treat it as
+        // absent. The old ~/.skillsage content and tool symlinks are left
+        // untouched on disk, just untracked, per the clean-slate cutover.
+        return Ok(SkillLockFile::default());
+    }
+    Ok(parsed)
 }
 
 pub fn save(layout: &RepoLayout, lockfile: &SkillLockFile) -> Result<(), SkillsageError> {

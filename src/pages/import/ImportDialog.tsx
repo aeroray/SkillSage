@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { CircleAlert, FolderOpen, SearchCheck } from "lucide-react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
@@ -10,47 +10,38 @@ import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Skeleton } from "../../components/ui/skeleton";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
-import { ToolSelection, type ToolOption } from "../../components/common/ToolSelection";
+import { PathConflictDialog } from "../../components/common/PathConflictDialog";
 import { useImport } from "../../features/import/hooks";
-import { useDistributionConflicts } from "../../features/skills/hooks";
-import type { DistributionConflict } from "../../features/skills/types";
+import { useInstallConflictCheck } from "../../features/skills/hooks";
+import type { PathConflict } from "../../features/skills/types";
 
 type ImportDialogProps = {
   onClose: () => void;
   onCompleted: () => void;
   open: boolean;
-  tools: ToolOption[];
 };
 
-export function ImportDialog({ onClose, onCompleted, open, tools }: ImportDialogProps) {
+export function ImportDialog({ onClose, onCompleted, open }: ImportDialogProps) {
   const [path, setPath] = useState("");
-  const [agents, setAgents] = useState<string[]>([]);
   const [conflict, setConflict] = useState("reject");
   const [renameTo, setRenameTo] = useState("");
-  const [distributionConflicts, setDistributionConflicts] = useState<DistributionConflict[]>();
-  const initializedAgents = useRef(false);
-  const handleCompleted = useCallback(() => {
+  const [pathConflict, setPathConflict] = useState<PathConflict>();
+  const handleCompleted = () => {
     onCompleted();
     onClose();
-  }, [onClose, onCompleted]);
+  };
   const { error, importing, loading, preview, previewPath, reset, runImport } = useImport(handleCompleted);
-  const conflictCheck = useDistributionConflicts();
+  const conflictCheck = useInstallConflictCheck();
 
   useEffect(() => {
-    if (open && !initializedAgents.current && tools.length > 0) {
-      setAgents(tools.filter((tool) => tool.detected).map((tool) => tool.id));
-      initializedAgents.current = true;
-    }
     if (!open) {
       setPath("");
-      setAgents([]);
       setConflict("reject");
       setRenameTo("");
-      setDistributionConflicts(undefined);
-      initializedAgents.current = false;
+      setPathConflict(undefined);
       reset();
     }
-  }, [open, reset, tools]);
+  }, [open, reset]);
 
   const choosePath = async (directory: boolean) => {
     try {
@@ -69,27 +60,15 @@ export function ImportDialog({ onClose, onCompleted, open, tools }: ImportDialog
     }
   };
 
-  const canImport = Boolean(preview) && !preview?.remoteConflict && agents.length > 0 && (!preview?.existingLocal || conflict !== "reject") && (conflict !== "rename" || renameTo.trim().length > 0);
+  const canImport = Boolean(preview) && !preview?.remoteConflict && (!preview?.existingLocal || conflict !== "reject") && (conflict !== "rename" || renameTo.trim().length > 0);
   const startImport = async () => {
     if (!preview) return;
-    const conflicts = await conflictCheck.check(preview.name, agents);
-    if (conflicts.length > 0) {
-      setDistributionConflicts(conflicts);
+    const found = await conflictCheck.check(preview.name);
+    if (found) {
+      setPathConflict(found);
       return;
     }
-    await runImport(path, agents, conflict, renameTo);
-  };
-  const importSkippingConflicts = async () => {
-    if (!preview || !distributionConflicts) return;
-    const blocked = new Set(distributionConflicts.map((item) => item.toolId));
-    setDistributionConflicts(undefined);
-    await runImport(path, agents.filter((agent) => !blocked.has(agent)), conflict, renameTo);
-  };
-  const importTakingOverConflicts = async () => {
-    if (!preview || !distributionConflicts) return;
-    const actions = Object.fromEntries(distributionConflicts.map((item) => [item.toolId, "takeover" as const]));
-    setDistributionConflicts(undefined);
-    await runImport(path, agents, conflict, renameTo, actions);
+    await runImport(path, conflict, renameTo);
   };
 
   return (
@@ -109,7 +88,7 @@ export function ImportDialog({ onClose, onCompleted, open, tools }: ImportDialog
           <Button className="self-start" disabled={!path.trim() || loading || importing} onClick={() => void previewPath(path)} variant="secondary">{loading ? "读取中…" : "查看预览"}</Button>
         </FieldGroup>
 
-        <ErrorBanner error={error} />
+        <ErrorBanner error={error ?? conflictCheck.error} />
         {loading ? <div aria-busy="true" className="flex flex-col gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-20" /></div> : null}
         {preview ? <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/40 p-4">
           <div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-sm font-semibold text-foreground">{preview.name}</h3><Badge variant="muted">{preview.sourceKind === "file" ? "单文件" : "目录"}</Badge></div><p className="mt-2 text-sm leading-6 text-muted-foreground">{preview.description}</p></div><Badge variant="success">{preview.fileCount} 个文件</Badge></div>
@@ -117,11 +96,16 @@ export function ImportDialog({ onClose, onCompleted, open, tools }: ImportDialog
           {preview.existingLocal ? <Field><FieldLabel htmlFor="import-conflict">同名技能处理</FieldLabel><Select onValueChange={setConflict} value={conflict}><SelectTrigger id="import-conflict"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="reject">保留现有技能</SelectItem><SelectItem value="overwrite">覆盖现有技能</SelectItem><SelectItem value="rename">导入为新名称</SelectItem></SelectGroup></SelectContent></Select>{conflict === "rename" ? <Input aria-label="新名称" className="mt-2" onChange={(event) => setRenameTo(event.target.value)} placeholder="例如 local-research-copy" value={renameTo} /> : null}</Field> : null}
         </div> : null}
 
-        <ToolSelection agents={agents} disabled={importing} onToggle={(id, checked) => setAgents((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))} tools={tools} />
-        <div className="flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{agents.length > 0 ? `已选择 ${agents.length} 个工具` : "至少选择一个工具"}</p><Button disabled={!canImport || importing || conflictCheck.checking} onClick={() => void startImport()}>{importing ? "导入中…" : conflictCheck.checking ? "检查冲突…" : "开始导入"}</Button></div>
+        <div className="flex items-center justify-end gap-3"><Button disabled={!canImport || importing || conflictCheck.checking} onClick={() => void startImport()}>{importing ? "导入中…" : conflictCheck.checking ? "检查冲突…" : "开始导入"}</Button></div>
       </div>
       </Dialog>
-    <Dialog description="目标工具已有同名内容。" onClose={() => setDistributionConflicts(undefined)} open={Boolean(distributionConflicts)} title="处理导入冲突"><div className="flex flex-col gap-4"><Alert variant="destructive"><CircleAlert /><AlertDescription>{distributionConflicts?.map((item) => `${item.toolName}: ${item.path}`).join("；")}</AlertDescription></Alert><p className="text-sm leading-6 text-muted-foreground">跳过该工具；备份原内容后继续导入；取消返回上一步。</p><div className="flex flex-wrap justify-end gap-2"><Button onClick={() => setDistributionConflicts(undefined)} variant="ghost">取消</Button><Button disabled={importing} onClick={() => void importSkippingConflicts()} variant="outline">跳过</Button><Button disabled={importing} onClick={() => void importTakingOverConflicts()}>备份后导入</Button></div></div></Dialog>
+      <PathConflictDialog
+        busy={importing}
+        conflict={pathConflict}
+        onCancel={() => setPathConflict(undefined)}
+        onSkip={() => { setPathConflict(undefined); onClose(); }}
+        onTakeover={() => { setPathConflict(undefined); void runImport(path, conflict, renameTo, true); }}
+      />
     </>
   );
 }

@@ -4,8 +4,7 @@ export type CleanupMode = "all" | "keep-skills";
 
 export type CleanupResult = {
   mode: CleanupMode;
-  removedLinks: number;
-  centralRemoved: boolean;
+  trackedSkillsRemoved: number;
   managementDataRemoved: boolean;
 };
 

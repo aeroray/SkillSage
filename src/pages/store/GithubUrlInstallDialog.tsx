@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { CircleAlert, GitBranch, Link2 } from "lucide-react";
-import { Alert, AlertDescription } from "../../components/ui/alert";
+import { useEffect, useState } from "react";
+import { GitBranch, Link2 } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Dialog } from "../../components/ui/dialog";
@@ -9,9 +8,9 @@ import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Skeleton } from "../../components/ui/skeleton";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
-import { ToolSelection, type ToolOption } from "../../components/common/ToolSelection";
-import { useDistributionConflicts } from "../../features/skills/hooks";
-import type { DistributionConflict } from "../../features/skills/types";
+import { PathConflictDialog } from "../../components/common/PathConflictDialog";
+import { useInstallConflictCheck } from "../../features/skills/hooks";
+import type { PathConflict } from "../../features/skills/types";
 import { useGithubUrlInstall } from "../../features/url-install/hooks";
 
 type GithubUrlInstallDialogProps = {
@@ -19,36 +18,27 @@ type GithubUrlInstallDialogProps = {
   onCompleted: () => void;
   onOpenSettings?: () => void;
   open: boolean;
-  tools: ToolOption[];
 };
 
-export function GithubUrlInstallDialog({ onClose, onCompleted, onOpenSettings, open, tools }: GithubUrlInstallDialogProps) {
+export function GithubUrlInstallDialog({ onClose, onCompleted, onOpenSettings, open }: GithubUrlInstallDialogProps) {
   const [url, setUrl] = useState("");
   const [selectedPath, setSelectedPath] = useState("");
-  const [agents, setAgents] = useState<string[]>([]);
-  const [conflicts, setConflicts] = useState<DistributionConflict[]>();
-  const initializedAgents = useRef(false);
-  const handleCompleted = useCallback(() => {
+  const [pathConflict, setPathConflict] = useState<PathConflict>();
+  const handleCompleted = () => {
     onCompleted();
     onClose();
-  }, [onClose, onCompleted]);
+  };
   const { error, inspect, inspection, installing, loading, reset, install } = useGithubUrlInstall(handleCompleted);
-  const conflictCheck = useDistributionConflicts();
+  const conflictCheck = useInstallConflictCheck();
 
   useEffect(() => {
-    if (open && !initializedAgents.current && tools.length > 0) {
-      setAgents(tools.filter((tool) => tool.detected).map((tool) => tool.id));
-      initializedAgents.current = true;
-    }
     if (!open) {
       setUrl("");
       setSelectedPath("");
-      setAgents([]);
-      setConflicts(undefined);
-      initializedAgents.current = false;
+      setPathConflict(undefined);
       reset();
     }
-  }, [open, reset, tools]);
+  }, [open, reset]);
 
   useEffect(() => {
     const first = inspection?.skills[0]?.skillPath;
@@ -56,27 +46,15 @@ export function GithubUrlInstallDialog({ onClose, onCompleted, onOpenSettings, o
   }, [inspection]);
 
   const selectedSkill = inspection?.skills.find((skill) => skill.skillPath === selectedPath);
-  const canInstall = Boolean(inspection && selectedSkill && agents.length > 0);
+  const canInstall = Boolean(inspection && selectedSkill);
   const startInstall = async () => {
     if (!inspection || !selectedSkill) return;
-    const nextConflicts = await conflictCheck.check(selectedSkill.name, agents);
-    if (nextConflicts.length > 0) {
-      setConflicts(nextConflicts);
+    const found = await conflictCheck.check(selectedSkill.name);
+    if (found) {
+      setPathConflict(found);
       return;
     }
-    await install(url, selectedPath || undefined, agents);
-  };
-  const installSkippingConflicts = async () => {
-    if (!selectedSkill || !conflicts) return;
-    const blocked = new Set(conflicts.map((item) => item.toolId));
-    setConflicts(undefined);
-    await install(url, selectedPath || undefined, agents.filter((agent) => !blocked.has(agent)));
-  };
-  const installTakingOverConflicts = async () => {
-    if (!selectedSkill || !conflicts) return;
-    const actions = Object.fromEntries(conflicts.map((item) => [item.toolId, "takeover" as const]));
-    setConflicts(undefined);
-    await install(url, selectedPath || undefined, agents, actions);
+    await install(url, selectedPath || undefined);
   };
 
   return (
@@ -91,8 +69,7 @@ export function GithubUrlInstallDialog({ onClose, onCompleted, onOpenSettings, o
           </Field>
         </FieldGroup>
 
-        <ErrorBanner error={error} onOpenSettings={onOpenSettings} />
-        <ErrorBanner error={conflictCheck.error} onOpenSettings={onOpenSettings} />
+        <ErrorBanner error={error ?? conflictCheck.error} onOpenSettings={onOpenSettings} />
         {loading ? <div aria-busy="true" className="flex flex-col gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-16" /></div> : null}
         {inspection ? <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/40 p-4">
           <div className="flex items-center gap-2"><GitBranch aria-hidden="true" className="h-4 w-4" /><p className="text-sm font-medium text-foreground">{inspection.parsed.owner}/{inspection.parsed.repo}</p><Badge variant="muted">{inspection.skills.length} 个技能</Badge></div>
@@ -100,11 +77,16 @@ export function GithubUrlInstallDialog({ onClose, onCompleted, onOpenSettings, o
           {selectedSkill ? <div className="rounded-md border border-border bg-card p-3"><div className="flex items-center gap-2"><Link2 aria-hidden="true" className="h-4 w-4 text-primary" /><p className="text-sm font-medium text-foreground">{selectedSkill.name}</p></div><p className="mt-2 text-sm leading-6 text-muted-foreground">{selectedSkill.description}</p><p className="mt-2 text-xs text-muted-foreground">路径：{selectedSkill.skillPath || "仓库根目录"}</p></div> : null}
         </div> : null}
 
-        <ToolSelection agents={agents} disabled={installing} onToggle={(id, checked) => setAgents((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))} tools={tools} />
-        <div className="flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{agents.length > 0 ? `已选择 ${agents.length} 个工具` : "至少选择一个工具"}</p><Button disabled={!canInstall || installing || conflictCheck.checking} onClick={() => void startInstall()}><GitBranch data-icon="inline-start" />{installing ? "安装中…" : conflictCheck.checking ? "检查冲突…" : "开始安装"}</Button></div>
+        <div className="flex items-center justify-end gap-3"><Button disabled={!canInstall || installing || conflictCheck.checking} onClick={() => void startInstall()}><GitBranch data-icon="inline-start" />{installing ? "安装中…" : conflictCheck.checking ? "检查冲突…" : "开始安装"}</Button></div>
       </div>
       </Dialog>
-      <Dialog description="目标工具已有同名内容。" onClose={() => setConflicts(undefined)} open={Boolean(conflicts)} title="处理安装冲突"><div className="flex flex-col gap-4"><Alert variant="destructive"><CircleAlert /><AlertDescription>{conflicts?.map((item) => `${item.toolName}: ${item.path}`).join("；")}</AlertDescription></Alert><p className="text-sm leading-6 text-muted-foreground">跳过该工具；备份原内容后继续安装；取消返回上一步。</p><div className="flex flex-wrap justify-end gap-2"><Button onClick={() => setConflicts(undefined)} variant="ghost">取消</Button><Button disabled={installing} onClick={() => void installSkippingConflicts()} variant="outline">跳过</Button><Button disabled={installing} onClick={() => void installTakingOverConflicts()}>备份后安装</Button></div></div></Dialog>
+      <PathConflictDialog
+        busy={installing}
+        conflict={pathConflict}
+        onCancel={() => setPathConflict(undefined)}
+        onSkip={() => { setPathConflict(undefined); onClose(); }}
+        onTakeover={() => { setPathConflict(undefined); void install(url, selectedPath || undefined, true); }}
+      />
     </>
   );
 }

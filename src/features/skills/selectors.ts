@@ -23,7 +23,6 @@ export function filterAndSortSkills(
     search: string;
     source: SkillSourceFilter;
     status: SkillStatusFilter;
-    tool: string;
     sort: SkillSortMode;
   },
 ) {
@@ -39,8 +38,7 @@ export function filterAndSortSkills(
       const matchesStatus = filters.status === "all"
         || (filters.status === "update" && updateAvailable)
         || (filters.status === "current" && !updateAvailable);
-      const matchesTool = filters.tool === "all" || skill.distributedTo.includes(filters.tool);
-      return matchesQuery && matchesSource && matchesStatus && matchesTool;
+      return matchesQuery && matchesSource && matchesStatus;
     })
     .sort((left, right) => {
       if (filters.sort === "name") return left.name.localeCompare(right.name);

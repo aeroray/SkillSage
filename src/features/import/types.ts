@@ -16,7 +16,5 @@ export type ImportResult = {
   owner: string;
   currentVersion: string;
   currentHash: string;
-  distributedTo: string[];
-  centralPath: string;
-  linkPaths: string[];
+  installedPath: string;
 };

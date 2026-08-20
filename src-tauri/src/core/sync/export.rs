@@ -49,7 +49,6 @@ pub struct SyncSkillEntry {
     pub source: String,
     pub current_version: String,
     pub current_hash: String,
-    pub distributed_to: Vec<String>,
     pub description: String,
 }
 
@@ -64,7 +63,6 @@ impl SyncSkillEntry {
             source: record.source.clone(),
             current_version: record.current_version.clone(),
             current_hash: record.current_hash.clone(),
-            distributed_to: record.distributed_to.clone(),
             description: record.description.clone(),
         }
     }
@@ -155,7 +153,8 @@ mod tests {
         let root =
             std::env::temp_dir().join(format!("skillsage-sync-export-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
-        let layout = RepoLayout::new(root.clone());
+        fs::create_dir_all(&root).expect("create shared test parent");
+        let layout = RepoLayout::new(root.join("central"), root.join("public"));
         let mut lock = lockfile::SkillLockFile::default();
         lock.skills.insert(
             "acme/skill".into(),
@@ -168,7 +167,6 @@ mod tests {
                 source: "https://github.com/acme/skills/tree/main/skill".into(),
                 current_version: "abc123".into(),
                 current_hash: "hash".into(),
-                distributed_to: Vec::new(),
                 installed_at: "1".into(),
                 version_history: Vec::new(),
                 description: "Remote".into(),
@@ -185,7 +183,6 @@ mod tests {
                 source: "local://local-skill".into(),
                 current_version: "local".into(),
                 current_hash: "hash".into(),
-                distributed_to: Vec::new(),
                 installed_at: "1".into(),
                 version_history: Vec::new(),
                 description: "Local".into(),

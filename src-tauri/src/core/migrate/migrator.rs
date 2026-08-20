@@ -1,70 +1,94 @@
 use serde::{Deserialize, Serialize};
 
-use crate::core::distribute::{link, tracker::LinkTracker};
-use crate::core::import::source as import_source;
-use crate::core::repo::{layout::RepoLayout, lockfile};
+use crate::core::lifecycle::remote;
+use crate::core::repo::conflict;
+use crate::core::repo::layout::RepoLayout;
+use crate::core::repo::lockfile;
 use crate::core::skill::parser::read_skill_md;
-use crate::core::tools::registry::find_tool;
 use crate::error::SkillsageError;
 
-use super::scanner::{scan, MigrateItem};
+use super::classifier::{find_legacy_remote, LegacyRemoteSource};
+use super::scanner::{scan, AdoptableItem};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MigrateSelection {
-    pub source_path: String,
-    #[serde(default)]
-    pub agents: Vec<String>,
-    #[serde(default)]
-    pub manual: bool,
-    pub target_name: Option<String>,
+pub struct AdoptSelection {
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MigrateFailure {
-    pub source_path: String,
+pub struct AdoptFailure {
+    pub name: String,
     pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MigrateResult {
-    pub migrated: Vec<String>,
+pub struct AdoptResult {
+    pub adopted: Vec<String>,
     pub skipped: Vec<String>,
-    pub failed: Vec<MigrateFailure>,
+    pub failed: Vec<AdoptFailure>,
 }
 
-pub fn execute_at(
+/// Brings each selected untracked public-directory folder under SkillSage's
+/// tracking. No `fs::rename`, no link rebuild — the content is already at
+/// the right path, so adoption is a near-pure metadata write: parse
+/// SKILL.md, hash the folder, write a lock record pointing at the existing
+/// path.
+pub async fn execute_at(
     layout: &RepoLayout,
-    selections: Vec<MigrateSelection>,
-) -> Result<MigrateResult, SkillsageError> {
-    let scan = scan(layout)?;
-    let mut result = MigrateResult {
-        migrated: Vec::new(),
+    selections: Vec<AdoptSelection>,
+) -> Result<AdoptResult, SkillsageError> {
+    let scan_result = scan(layout)?;
+    let home = dirs::home_dir();
+    let mut result = AdoptResult {
+        adopted: Vec::new(),
         skipped: Vec::new(),
         failed: Vec::new(),
     };
+
     for selection in selections {
-        let Some(item) = scan
+        let Some(item) = scan_result
             .items
             .iter()
-            .find(|item| item.source_path == selection.source_path)
+            .find(|item| item.name == selection.name)
         else {
-            result.failed.push(MigrateFailure {
-                source_path: selection.source_path,
+            result.failed.push(AdoptFailure {
+                name: selection.name,
                 reason: "找不到扫描条目，可能已被移动".into(),
             });
             continue;
         };
-        if !(item.can_takeover || selection.manual && item.can_manual_handle) {
+        if !item.valid {
+            result.failed.push(AdoptFailure {
+                name: item.name.clone(),
+                reason: "未找到有效的 SKILL.md，无法采纳".into(),
+            });
+            continue;
+        }
+
+        // Re-check right before writing — a race guard against a concurrent
+        // install/adopt of the same name between the scan above and now.
+        let lock = match lockfile::load(layout) {
+            Ok(lock) => lock,
+            Err(error) => {
+                result.failed.push(AdoptFailure {
+                    name: item.name.clone(),
+                    reason: error.to_string(),
+                });
+                continue;
+            }
+        };
+        if conflict::is_tracked(&lock, &item.name) {
             result.skipped.push(item.name.clone());
             continue;
         }
-        match migrate_item(layout, item, &selection) {
-            Ok(name) => result.migrated.push(name),
-            Err(error) => result.failed.push(MigrateFailure {
-                source_path: item.source_path.clone(),
+
+        match adopt_item(layout, item, home.as_deref()).await {
+            Ok(name) => result.adopted.push(name),
+            Err(error) => result.failed.push(AdoptFailure {
+                name: item.name.clone(),
                 reason: error.to_string(),
             }),
         }
@@ -72,175 +96,142 @@ pub fn execute_at(
     Ok(result)
 }
 
-fn migrate_item(
+async fn adopt_item(
     layout: &RepoLayout,
-    item: &MigrateItem,
-    selection: &MigrateSelection,
+    item: &AdoptableItem,
+    home: Option<&std::path::Path>,
 ) -> Result<String, SkillsageError> {
-    let source = std::path::PathBuf::from(&item.source_path);
-    import_source::validate_tree(&source)?;
-    let parsed = read_skill_md(&source.join("SKILL.md"))?;
-    let target_name = selection
-        .target_name
-        .clone()
-        .filter(|name| !name.trim().is_empty())
-        .unwrap_or_else(|| parsed.manifest.name.clone());
-    if !crate::core::skill::parser::is_valid_skill_name(&target_name) {
-        return Err(SkillsageError::MigrateFailed(
-            "技能名称必须使用 kebab-case".into(),
-        ));
-    }
-    let mut agents = if selection.agents.is_empty() {
-        item.tool_ids.clone()
-    } else {
-        selection.agents.clone()
+    let path = layout.skill(&item.name)?;
+    let parsed = read_skill_md(&path.join("SKILL.md"))?;
+    let current_hash = lockfile::content_hash(&path)?;
+
+    let legacy = home.and_then(|home| find_legacy_remote(home, &item.name));
+    let verified = match legacy {
+        Some(candidate) => verify_legacy_source(&item.name, &candidate, &current_hash).await,
+        None => None,
     };
-    agents.sort();
-    agents.dedup();
-    for agent in &agents {
-        find_tool(agent)?;
-    }
 
     let mut lock = lockfile::load(layout)?;
-    if lock
-        .skills
-        .values()
-        .any(|record| record.name == target_name)
-    {
-        return Err(SkillsageError::NameConflict(format!(
-            "中央仓库已有同名技能：{target_name}"
-        )));
-    }
-    let is_remote = item.classification == "remote"
-        && item.remote_owner.is_some()
-        && item.remote_repo.is_some();
-    let destination = if is_remote {
-        layout.remote_skill(
-            item.remote_owner.as_deref().unwrap_or("legacy"),
-            &target_name,
-        )?
-    } else {
-        layout.local_skill(&target_name)?
+    // Folder name is authoritative: every other module resolves a record's
+    // content via `layout.skill(&record.name)`, so an adopted record's name
+    // must be the folder name, never the (possibly different) SKILL.md
+    // declared name.
+    let record = match verified {
+        Some(candidate) => lockfile::SkillLockRecord {
+            id: format!("{}/{}", candidate.owner, item.name),
+            name: item.name.clone(),
+            owner: candidate.owner,
+            repo: candidate.repo,
+            skill_path: candidate.skill_path,
+            source: candidate.source,
+            current_version: candidate.version,
+            current_hash,
+            installed_at: lockfile::unix_timestamp(),
+            version_history: Vec::new(),
+            description: parsed.manifest.description,
+        },
+        None => lockfile::SkillLockRecord {
+            id: format!("local/{}", item.name),
+            name: item.name.clone(),
+            owner: "local".into(),
+            repo: "local".into(),
+            skill_path: None,
+            source: format!("local://{}", item.name),
+            current_version: "adopted".into(),
+            current_hash,
+            installed_at: lockfile::unix_timestamp(),
+            version_history: Vec::new(),
+            description: parsed.manifest.description,
+        },
     };
-    if destination.exists() {
-        return Err(SkillsageError::NameConflict(format!(
-            "中央仓库已有此路径：{}",
-            destination.display()
-        )));
-    }
-    let current_hash = lockfile::content_hash(&source)?;
-    layout.ensure_roots()?;
-    let mut removed_links = Vec::new();
-    for link_path in &item.link_paths {
-        if let Err(error) = link::remove_link(link_path) {
-            restore_links(&source, &removed_links);
-            return Err(error);
-        }
-        removed_links.push(link_path.clone());
-    }
-    if let Err(error) = std::fs::rename(&source, &destination) {
-        restore_links(&source, &removed_links);
-        return Err(SkillsageError::MigrateFailed(format!(
-            "无法移动 {}：{}",
-            source.display(),
-            error
-        )));
-    }
-
-    let mut tracker = LinkTracker::default();
-    for agent in &agents {
-        let tool = find_tool(agent)?;
-        if let Err(error) = tracker.create(&destination, tool.skills_path()?.join(&target_name)) {
-            tracker.rollback();
-            let _ = std::fs::rename(&destination, &source);
-            restore_links(&source, &removed_links);
-            return Err(error);
-        }
-    }
-    let id = if is_remote {
-        format!(
-            "{}/{}",
-            item.remote_owner.as_deref().unwrap_or("legacy"),
-            target_name
-        )
-    } else {
-        format!("local/{target_name}")
-    };
-    let record = lockfile::SkillLockRecord {
-        id: id.clone(),
-        name: target_name.clone(),
-        owner: if is_remote {
-            item.remote_owner.clone().unwrap_or_else(|| "legacy".into())
-        } else {
-            "local".into()
-        },
-        repo: if is_remote {
-            item.remote_repo.clone().unwrap_or_else(|| "legacy".into())
-        } else {
-            "local".into()
-        },
-        skill_path: if is_remote {
-            item.remote_skill_path.clone()
-        } else {
-            None
-        },
-        source: if is_remote {
-            item.remote_source.clone().unwrap_or_else(|| {
-                format!(
-                    "https://github.com/{}/{}",
-                    item.remote_owner.as_deref().unwrap_or("legacy"),
-                    item.remote_repo.as_deref().unwrap_or("legacy")
-                )
-            })
-        } else {
-            format!("local://{target_name}")
-        },
-        current_version: if is_remote {
-            item.remote_version
-                .clone()
-                .unwrap_or_else(|| "migrated".into())
-        } else {
-            "migrated".into()
-        },
-        current_hash,
-        distributed_to: agents,
-        installed_at: lockfile::unix_timestamp(),
-        version_history: Vec::new(),
-        description: parsed.manifest.description,
-    };
+    let id = record.id.clone();
     lock.skills.insert(id, record);
-    if let Err(error) = lockfile::save(layout, &lock) {
-        tracker.rollback();
-        let _ = std::fs::rename(&destination, &source);
-        restore_links(&source, &removed_links);
-        return Err(error);
-    }
-    Ok(target_name)
+    lockfile::save(layout, &lock)?;
+    Ok(item.name.clone())
 }
 
-pub fn remove_unknown_link_at(
-    layout: &RepoLayout,
-    source_path: &str,
-) -> Result<(), SkillsageError> {
-    let scan = scan(layout)?;
-    let item = scan
-        .items
-        .iter()
-        .find(|item| item.source_path == source_path)
-        .ok_or_else(|| SkillsageError::MigrateFailed("找不到该链接，可能已被移除".into()))?;
-    if !item.can_remove {
-        return Err(SkillsageError::MigrateFailed(
-            "只能删除无效的未知来源链接".into(),
+/// A cheap, purely-additive safety net: only trust `classifier`'s cross-tool
+/// lock-sniffed provenance guess if re-fetching that exact commit produces
+/// content that hashes identically to what's actually on disk. Trusting an
+/// unverified guess risks a future "update" silently overwriting this
+/// folder with unrelated bytes from the wrong repository. Worst case (no
+/// match, or offline) falls back to an unversioned `local://` record —
+/// identical to skipping cross-tool recovery entirely.
+async fn verify_legacy_source(
+    name: &str,
+    candidate: &LegacyRemoteSource,
+    current_hash: &str,
+) -> Option<LegacyRemoteSource> {
+    let probe = lockfile::SkillLockRecord {
+        id: String::new(),
+        name: name.to_string(),
+        owner: candidate.owner.clone(),
+        repo: candidate.repo.clone(),
+        skill_path: candidate.skill_path.clone(),
+        source: candidate.source.clone(),
+        current_version: candidate.version.clone(),
+        current_hash: String::new(),
+        installed_at: String::new(),
+        version_history: Vec::new(),
+        description: String::new(),
+    };
+    let files = remote::fetch_at(&probe, &candidate.version).await.ok()?;
+    let fetched_hash = lockfile::content_hash_files(
+        &files
+            .iter()
+            .map(|file| (file.path.replace('\\', "/"), file.contents.clone()))
+            .collect::<Vec<_>>(),
+    );
+    (fetched_hash == current_hash).then(|| candidate.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::{execute_at, AdoptSelection};
+    use crate::core::repo::{layout::RepoLayout, lockfile};
+
+    fn test_layout(name: &str) -> RepoLayout {
+        let root = std::env::temp_dir().join(format!(
+            "skillsage-adopt-execute-{name}-{}",
+            std::process::id()
         ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create shared test parent");
+        RepoLayout::new(root.join("central"), root.join("public"))
     }
-    for link_path in &item.link_paths {
-        link::remove_link(link_path)?;
-    }
-    Ok(())
-}
 
-fn restore_links(source: &std::path::Path, paths: &[std::path::PathBuf]) {
-    for path in paths {
-        let _ = link::create_link(source, path);
+    #[tokio::test]
+    async fn adopts_an_untracked_skill_in_place_without_moving_it() {
+        let layout = test_layout("basic");
+        layout.ensure_roots().expect("create layout");
+        let folder = layout.public_root.join("found-skill");
+        fs::create_dir_all(&folder).expect("create dir");
+        fs::write(
+            folder.join("SKILL.md"),
+            "---\nname: found-skill\ndescription: Found on disk.\n---\n",
+        )
+        .expect("write manifest");
+
+        let result = execute_at(
+            &layout,
+            vec![AdoptSelection {
+                name: "found-skill".into(),
+            }],
+        )
+        .await
+        .expect("adopt should succeed");
+        assert_eq!(result.adopted, vec!["found-skill".to_string()]);
+        assert!(folder.is_dir(), "content must stay exactly where it was");
+
+        let lock = lockfile::load(&layout).expect("lock should load");
+        assert!(lock
+            .skills
+            .values()
+            .any(|record| record.name == "found-skill" && record.source == "local://found-skill"));
+
+        fs::remove_dir_all(&layout.root).expect("remove central root");
+        fs::remove_dir_all(&layout.public_root).expect("remove public root");
     }
 }

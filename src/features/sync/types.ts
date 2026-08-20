@@ -6,22 +6,13 @@ export type SyncSettings = {
   proxyUrl?: string;
 };
 
-export type SyncToolPreview = {
-  id: string;
-  name: string;
-  detected: boolean;
-  requested: boolean;
-};
-
 export type SyncSkillPreview = {
   id: string;
   name: string;
   description: string;
   source: string;
   currentVersion: string;
-  distributedTo: string[];
   installed: boolean;
-  tools: SyncToolPreview[];
 };
 
 export type SyncImportPreview = {
@@ -34,7 +25,6 @@ export type SyncImportPreview = {
 export type SyncImportOptions = {
   applySettings: boolean;
   selectedIds: string[];
-  agentsBySkill: Record<string, string[]>;
 };
 
 export type SyncImportFailure = {
