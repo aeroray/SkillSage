@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use crate::error::SkillsageError;
 
+use super::super::limits::{MAX_REMOTE_JSON_BYTES, MAX_REMOTE_TEXT_BYTES};
 use super::tree::GitTreeResponse;
 
 #[derive(Debug, serde::Deserialize)]
@@ -69,7 +70,10 @@ impl GitHubClient {
             tracing::warn!(status, "GitHub request returned an error status");
             return Err(SkillsageError::github_status(status, self.token.is_some()));
         }
-        Ok(response.text().await?)
+        let bytes = bounded_bytes(response, MAX_REMOTE_TEXT_BYTES, "GitHub 文本").await?;
+        String::from_utf8(bytes).map_err(|error| {
+            SkillsageError::InvalidStoreData(format!("GitHub 返回了非 UTF-8 内容: {error}"))
+        })
     }
 
     pub async fn get_default_branch(
@@ -112,7 +116,10 @@ impl GitHubClient {
             tracing::warn!(status, "GitHub request returned an error status");
             return Err(SkillsageError::github_status(status, self.token.is_some()));
         }
-        Ok(response.json().await?)
+        let bytes = bounded_bytes(response, MAX_REMOTE_JSON_BYTES, "GitHub JSON").await?;
+        serde_json::from_slice(&bytes).map_err(|error| {
+            SkillsageError::InvalidStoreData(format!("GitHub 返回的数据无法解析: {error}"))
+        })
     }
 
     fn authorized(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
@@ -121,6 +128,30 @@ impl GitHubClient {
             None => request,
         }
     }
+}
+
+async fn bounded_bytes(
+    response: reqwest::Response,
+    limit: usize,
+    label: &str,
+) -> Result<Vec<u8>, SkillsageError> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > limit as u64)
+    {
+        return Err(SkillsageError::ResponseTooLarge(format!(
+            "{label}超过 {} MiB",
+            limit / 1024 / 1024
+        )));
+    }
+    let bytes = response.bytes().await?;
+    if bytes.len() > limit {
+        return Err(SkillsageError::ResponseTooLarge(format!(
+            "{label}超过 {} MiB",
+            limit / 1024 / 1024
+        )));
+    }
+    Ok(bytes.to_vec())
 }
 
 fn validate_component(value: &str, label: &str) -> Result<(), SkillsageError> {

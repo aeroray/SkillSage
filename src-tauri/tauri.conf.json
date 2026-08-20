@@ -37,7 +37,7 @@
     "createUpdaterArtifacts": true,
     "category": "Utility",
     "shortDescription": "SkillSage AI Agent 技能管理器",
-    "longDescription": "SkillSage 是一款面向 Windows 和 macOS 的 AI Agent 技能管理器，支持技能商店、本地导入、GitHub 安装、版本管理和多工具分发。",
+    "longDescription": "SkillSage 是一款面向 Windows 和 macOS 的 AI Agent 技能管理器，支持技能商店、本地导入、GitHub 安装、共享技能目录和版本管理。",
     "copyright": "Copyright © 2026 SkillSage contributors. MIT License.",
     "icon": [
       "icons/32x32.png",
@@ -63,7 +63,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ1NzlCQzdERjhGNjNFQUMKUldTc1B2YjRmYng1UmFzMXF1cVpJdXJobDJLSUJEeit0ZXdSeEpCK1NpcWZxRE1HYjlrWGR6RE0K",
       "endpoints": [
-        "https://github.com/REPLACE_WITH_GITHUB_OWNER/SkillSage/releases/latest/download/latest.json"
+        "https://github.com/aeroray/SkillSage/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "quiet"

@@ -148,13 +148,20 @@ pub fn install_skill_from_store_at(
         }
     };
 
-    if let Err(error) = atomic::commit_dir(&temp_dir, &destination) {
-        let _ = atomic::remove_dir(&temp_dir);
-        if let Some(pending) = pending {
-            let _ = pending.restore();
+    let replacement = match atomic::replace_dir_transaction(&temp_dir, &destination) {
+        Ok(replacement) => replacement,
+        Err(error) => {
+            let mut recovery = atomic::remove_dir(&temp_dir).err();
+            if let Some(pending) = pending {
+                if let Err(error) = pending.restore() {
+                    if recovery.is_none() {
+                        recovery = Some(error);
+                    }
+                }
+            }
+            return Err(with_recovery(error, recovery));
         }
-        return Err(error);
-    }
+    };
 
     let current_version = detail
         .version
@@ -180,11 +187,17 @@ pub fn install_skill_from_store_at(
     lock.skills.insert(detail.id.clone(), record);
 
     if let Err(error) = lockfile::save(layout, &lock) {
-        let _ = atomic::remove_dir(&destination);
-        if let Some(pending) = pending {
-            let _ = pending.restore();
+        let rollback = replacement.rollback();
+        let takeover = pending.map(|pending| pending.restore());
+        return Err(with_recovery(error, first_error(rollback, takeover)));
+    }
+    if let Err(error) = replacement.finalize() {
+        tracing::warn!(error = %error, "无法清理远程安装的旧技能备份");
+    }
+    if let Some(pending) = pending {
+        if let Err(error) = pending.finalize() {
+            tracing::warn!(error = %error, "无法清理被接管的旧技能目录备份");
         }
-        return Err(error);
     }
 
     Ok(InstallResult {
@@ -195,6 +208,20 @@ pub fn install_skill_from_store_at(
         current_hash,
         install_path: paths::display(&destination),
     })
+}
+
+fn first_error(
+    first: Result<(), SkillsageError>,
+    second: Option<Result<(), SkillsageError>>,
+) -> Option<SkillsageError> {
+    first.err().or_else(|| second.and_then(Result::err))
+}
+
+fn with_recovery(primary: SkillsageError, recovery: Option<SkillsageError>) -> SkillsageError {
+    match recovery {
+        Some(recovery) => SkillsageError::Io(format!("{primary}; 恢复失败: {recovery}")),
+        None => primary,
+    }
 }
 
 #[cfg(test)]

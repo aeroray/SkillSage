@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::core::repo::{layout::RepoLayout, lockfile};
+use crate::core::repo::{atomic, layout::RepoLayout, lockfile};
 use crate::core::settings;
 use crate::error::SkillsageError;
 
@@ -117,7 +117,7 @@ pub fn export_at(
         }
     }
     let content = serde_json::to_string_pretty(&package)?;
-    std::fs::write(&path, format!("{content}\n"))
+    atomic::write_file(&path, format!("{content}\n").as_bytes())
         .map_err(|error| SkillsageError::ExportFailed(error.to_string()))?;
     Ok(path)
 }

@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -15,25 +13,16 @@ import {
 } from "lucide-react";
 
 import { cn } from "../../lib/utils";
-
-type ToastVariant = "success" | "error" | "info" | "warning";
-
-type ToastOptions = {
-  description: string;
-  title: string;
-  variant?: ToastVariant;
-  duration?: number;
-};
+import {
+  ToastContext,
+  type ToastOptions,
+  type ToastVariant,
+} from "./toast-context";
 
 type ToastItem = ToastOptions & {
   id: number;
 };
 
-type ToastContextValue = {
-  toast: (options: ToastOptions) => void;
-};
-
-const ToastContext = createContext<ToastContextValue | null>(null);
 let nextToastId = 0;
 
 const variantStyles: Record<ToastVariant, string> = {
@@ -49,14 +38,6 @@ const variantIcons = {
   success: CheckCircle2,
   warning: TriangleAlert,
 } satisfies Record<ToastVariant, typeof Info>;
-
-export function useToast() {
-  const context = useContext(ToastContext);
-  if (!context) {
-    throw new Error("useToast must be used within ToastProvider");
-  }
-  return context;
-}
 
 function ToastCard({
   item,

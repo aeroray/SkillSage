@@ -62,18 +62,36 @@ impl RepoLayout {
         ensure_real_directory(&self.lock_root(), "lock 目录")?;
         ensure_real_directory(&self.snapshots_root(), "快照目录")?;
         ensure_real_directory(&self.tmp_root(), "临时目录")?;
-        // public_root is commonly two levels below home (~/.agents/skills) and
-        // ~/.agents may not exist yet on a machine with no other AI tool
-        // installed. ensure_real_directory only creates a single level, so the
-        // parent needs an unguarded create_dir_all first. We don't manage
-        // ~/.agents itself (another tool might own it), only our own `skills`
-        // child gets the same symlink-rejection guard every other managed
-        // root has.
-        if let Some(parent) = self.public_root.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        ensure_real_directory(&self.public_root, "公共技能目录")?;
+        // Validate and create every missing ancestor one component at a time.
+        // This prevents a user-controlled `.agents` symlink from redirecting
+        // writes outside the intended home directory.
+        ensure_directory_chain(&self.public_root, "公共技能目录")?;
         Ok(())
+    }
+}
+
+fn ensure_directory_chain(path: &Path, label: &str) -> Result<(), SkillsageError> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(SkillsageError::Io(format!(
+            "{label}路径不能是符号链接: {}",
+            path.display()
+        ))),
+        Ok(metadata) if !metadata.is_dir() => Err(SkillsageError::Io(format!(
+            "{label}路径不是目录: {}",
+            path.display()
+        ))),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let parent = path.parent().ok_or_else(|| {
+                SkillsageError::Io(format!("无法创建{label}: {}", path.display()))
+            })?;
+            if parent != path {
+                ensure_directory_chain(parent, label)?;
+            }
+            std::fs::create_dir(path)?;
+            Ok(())
+        }
+        Err(error) => Err(error.into()),
     }
 }
 

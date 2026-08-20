@@ -24,7 +24,6 @@ pub async fn install_skill(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<InstallResult, SkillsageError> {
-    let _write_guard = state.write_lock.lock().await;
     emit_progress(
         &app,
         &skill_id,
@@ -54,6 +53,7 @@ pub async fn install_skill(
         "distributing",
         "Storing skill in the shared skills directory",
     )?;
+    let _write_guard = state.write_lock.lock().await;
     let result = tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
         install::install_skill_from_store_at(&layout, detail, conflict_action)

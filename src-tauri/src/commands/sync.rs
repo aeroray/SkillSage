@@ -67,7 +67,6 @@ pub async fn import_package(
     options: Option<SyncImportOptions>,
     state: State<'_, AppState>,
 ) -> Result<SyncImportResult, SkillsageError> {
-    let _write_guard = state.write_lock.lock().await;
     let layout = RepoLayout::from_user_home()?;
     let package = import::load(&path)?;
     let options = options.unwrap_or_default();
@@ -77,10 +76,10 @@ pub async fn import_package(
         None
     };
     if let Some(sync_settings) = &settings {
+        let _write_guard = state.write_lock.lock().await;
         crate::core::settings::save(&layout, sync_settings.proxy_url.clone(), None, false)?;
     }
     let selected = import::selected_entries(&package, &options.selected_ids)?;
-    let existing = lockfile::load(&layout)?;
     let mut result = SyncImportResult {
         imported: Vec::new(),
         skipped: Vec::new(),
@@ -89,12 +88,16 @@ pub async fn import_package(
     };
 
     for entry in selected {
-        if existing.skills.contains_key(&entry.id)
-            || existing
-                .skills
-                .values()
-                .any(|record| record.name == entry.name)
-        {
+        let already_installed = {
+            let _write_guard = state.write_lock.lock().await;
+            let existing = lockfile::load(&layout)?;
+            existing.skills.contains_key(&entry.id)
+                || existing
+                    .skills
+                    .values()
+                    .any(|record| record.name == entry.name)
+        };
+        if already_installed {
             result.skipped.push(entry.id);
             continue;
         }
@@ -137,6 +140,17 @@ pub async fn import_package(
             version: Some(entry.current_version.clone()),
             files,
         };
+        let _write_guard = state.write_lock.lock().await;
+        let latest_lock = lockfile::load(&layout)?;
+        if latest_lock.skills.contains_key(&entry.id)
+            || latest_lock
+                .skills
+                .values()
+                .any(|record| record.name == entry.name)
+        {
+            result.skipped.push(entry.id);
+            continue;
+        }
         match install::install_skill_from_store_at(&layout, detail, None) {
             Ok(installed) => result.imported.push(installed),
             Err(error) => result.failed.push(SyncImportFailure {

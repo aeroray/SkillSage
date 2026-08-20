@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::core::lifecycle::install::{uninstall_skill_at, InstallResult};
+use crate::core::lifecycle::install::InstallResult;
 use crate::core::paths;
 use crate::core::repo::conflict::{self, ConflictAction};
 use crate::core::repo::{atomic, layout::RepoLayout, lockfile};
@@ -65,6 +65,7 @@ pub fn import_at(
         .values()
         .find(|record| record.name == target_name)
         .cloned();
+    let mut overwrite_id = None;
 
     // Axis one: does a lock record we already track own this name? Resolved
     // by the caller's explicit reject/overwrite/rename choice, same as
@@ -77,7 +78,7 @@ pub fn import_at(
             )));
         }
         match conflict {
-            "overwrite" => uninstall_skill_at(layout, &record.id)?,
+            "overwrite" => overwrite_id = Some(record.id.clone()),
             "rename" => {
                 target_name = validate_rename(rename_to)?;
             }
@@ -106,9 +107,9 @@ pub fn import_at(
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        if let Err(error) = std::fs::copy(&file.source_path, &target) {
+        if let Err(error) = source::copy_regular_file(&file.source_path, &target) {
             let _ = atomic::remove_dir(&temp_dir);
-            return Err(error.into());
+            return Err(error);
         }
     }
 
@@ -136,7 +137,9 @@ pub fn import_at(
             return Err(error);
         }
     };
-    if conflict::is_tracked(&lock, &parsed.manifest.name) {
+    if conflict::is_tracked(&lock, &parsed.manifest.name)
+        && overwrite_id.as_deref() != existing.as_ref().map(|record| record.id.as_str())
+    {
         let _ = atomic::remove_dir(&temp_dir);
         return Err(SkillsageError::NameConflict(parsed.manifest.name));
     }
@@ -178,19 +181,36 @@ pub fn import_at(
     let current_hash = match lockfile::content_hash(&temp_dir) {
         Ok(value) => value,
         Err(error) => {
-            let _ = atomic::remove_dir(&temp_dir);
+            let mut recovery = atomic::remove_dir(&temp_dir).err();
             if let Some(pending) = pending {
-                let _ = pending.restore();
+                if let Err(error) = pending.restore() {
+                    if recovery.is_none() {
+                        recovery = Some(error);
+                    }
+                }
             }
-            return Err(error);
+            return Err(with_recovery(error, recovery));
         }
     };
-    if let Err(error) = atomic::commit_dir(&temp_dir, &destination) {
-        let _ = atomic::remove_dir(&temp_dir);
-        if let Some(pending) = pending {
-            let _ = pending.restore();
+    let replacement = match atomic::replace_dir_transaction(&temp_dir, &destination) {
+        Ok(replacement) => replacement,
+        Err(error) => {
+            let mut recovery = atomic::remove_dir(&temp_dir).err();
+            if let Some(pending) = pending {
+                if let Err(error) = pending.restore() {
+                    if recovery.is_none() {
+                        recovery = Some(error);
+                    }
+                }
+            }
+            return Err(with_recovery(error, recovery));
         }
-        return Err(error);
+    };
+
+    if overwrite_id.is_some() {
+        if let Some(existing_id) = overwrite_id.as_deref() {
+            lock.skills.remove(existing_id);
+        }
     }
 
     let id = format!("local/{}", parsed.manifest.name);
@@ -211,11 +231,18 @@ pub fn import_at(
         },
     );
     if let Err(error) = lockfile::save(layout, &lock) {
-        let _ = atomic::remove_dir(&destination);
-        if let Some(pending) = pending {
-            let _ = pending.restore();
+        let rollback = replacement.rollback();
+        let takeover = pending.map(|pending| pending.restore());
+        let recovery = first_error(rollback, takeover);
+        return Err(with_recovery(error, recovery));
+    }
+    if let Err(error) = replacement.finalize() {
+        tracing::warn!(error = %error, "无法清理本地导入的旧技能备份");
+    }
+    if let Some(pending) = pending {
+        if let Err(error) = pending.finalize() {
+            tracing::warn!(error = %error, "无法清理被接管的旧技能目录备份");
         }
-        return Err(error);
     }
 
     Ok(InstallResult {
@@ -226,6 +253,20 @@ pub fn import_at(
         current_hash,
         install_path: paths::display(&destination),
     })
+}
+
+fn first_error(
+    first: Result<(), SkillsageError>,
+    second: Option<Result<(), SkillsageError>>,
+) -> Option<SkillsageError> {
+    first.err().or_else(|| second.and_then(Result::err))
+}
+
+fn with_recovery(primary: SkillsageError, recovery: Option<SkillsageError>) -> SkillsageError {
+    match recovery {
+        Some(recovery) => SkillsageError::Io(format!("{primary}; 恢复失败: {recovery}")),
+        None => primary,
+    }
 }
 
 fn validate_rename(rename_to: Option<String>) -> Result<String, SkillsageError> {

@@ -11,7 +11,7 @@
   </p>
 </div>
 
-SkillSage 用一个私有中央仓库管理 AI Agent 技能，再通过 Windows junction 或 macOS symlink 将技能分发到用户选择的工具目录。它适合需要统一安装、更新、迁移和维护多套 AI 工具技能的个人开发者与团队。
+SkillSage 将 AI Agent 技能直接安装到各工具共用的 `~/.agents/skills/` 目录，并在本地维护版本、来源和快照信息。它适合需要统一安装、更新、迁移和维护技能的个人开发者与团队。
 
 > [!NOTE]
 > SkillSage 是桌面端软件，主窗口默认及最小尺寸为 `1200×800`，支持最大化，不面向移动端布局。
@@ -21,10 +21,10 @@ SkillSage 用一个私有中央仓库管理 AI Agent 技能，再通过 Windows 
 - **我的技能**：查看已安装技能，执行更新、回退、卸载、分发调整和批量分发。
 - **技能商店**：搜索 skills.sh，查看技能详情，并从商店或 GitHub 安装技能。
 - **本地导入**：导入 `SKILL.md` 文件、技能目录，或包含单个技能目录的父目录。
-- **多工具分发**：支持 Claude Code、Cursor、GitHub Copilot、OpenAI Codex CLI 和 OpenCode。
-- **存量迁移**：扫描已注册工具目录和 `~/.agents/skills/`，识别可接管、冲突或失效的旧技能链接。
-- **跨设备同步**：导出远程技能记录、分发目标和非敏感应用设置，在另一台设备上重新获取指定提交并恢复。
-- **设置与清理**：配置代理、保存 GitHub Token 到系统密钥环，并在卸载前选择清理范围。
+- **共享目录管理**：Claude Code、Cursor、GitHub Copilot、OpenAI Codex CLI 和 OpenCode 可直接读取同一份技能内容。
+- **存量技能接管**：扫描 `~/.agents/skills/`，识别可接管、冲突或失效的旧技能目录链接。
+- **跨设备同步**：导出远程技能记录和非敏感应用设置，在另一台设备上重新获取指定提交并恢复。
+- **设置与清理**：配置代理、保存 GitHub Token 到系统密钥环，并选择清理管理数据或同时移除已跟踪技能。
 - **可诊断性**：统一的加载/错误状态，以及写入平台应用日志目录的普通日志和 tracing 日志。
 
 ## 快速开始
@@ -65,18 +65,18 @@ pnpm sync:branding
 
 ## 用户数据与安全边界
 
-SkillSage 默认使用用户目录下的中央仓库：
+SkillSage 将技能内容与管理数据分开保存：
 
 | 数据 | 位置 |
 | --- | --- |
-| 远程技能 | `~/.skillsage/remote/` |
-| 本地技能 | `~/.skillsage/local/` |
+| 共享技能目录 | `~/.agents/skills/` |
 | 技能锁定记录 | `~/.skillsage/lock/skill-lock.json` |
+| 更新快照与临时文件 | `~/.skillsage/lock/snapshots/`、`~/.skillsage/tmp/` |
 | 同步数据文件 | 用户在导出时选择的位置 |
 | 代理配置 | `~/.skillsage/settings.json` |
 
-- Windows 使用 junction，macOS 使用 symlink；分发不会复制技能内容。
-- 同步数据包含远程技能记录、分发目标和非敏感应用设置；GitHub Token 使用 Windows 凭据管理器或 macOS Keychain 保存，不写入同步文件、设置文件或日志。
+- 技能会直接写入共享目录，不创建按工具区分的 junction、symlink 或复制品。
+- 同步数据包含远程技能记录和非敏感应用设置；GitHub Token 使用 Windows 凭据管理器或 macOS Keychain 保存，不写入同步文件、设置文件或日志。
 - 远程更新按 Git 提交记录版本，更新前创建快照，网络不可用时可回退到本地快照。
 - 卸载清理支持“清理全部”和“保留技能”两种模式；保留模式不会删除现有链接依赖的中央技能文件。
 
@@ -165,4 +165,4 @@ xattr -rd com.apple.quarantine /Applications/SkillSage.app
 - [开发阶段规划](./docs/specs/06-开发阶段规划.md)
 - [跨平台 QA 指南](./docs/guides/cross-platform-qa.md)
 
-当前实现覆盖 Phase 1–7：从项目壳和核心生命周期，到商店、GitHub/本地导入、设置、同步、存量迁移、冲突处理、清理流程和跨平台 QA。
+当前实现覆盖 Phase 1–7 的核心能力，并采用单一共享技能目录模型：商店、GitHub/本地导入、版本管理、设置、同步、存量技能接管、冲突处理和清理流程均已接入桌面端。

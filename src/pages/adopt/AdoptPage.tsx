@@ -16,7 +16,7 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { Skeleton } from "../../components/ui/skeleton";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PageHeader } from "../../components/common/PageHeader";
-import { useToast } from "../../components/ui/toast";
+import { useToast } from "../../components/ui/toast-context";
 import { openAdoptPath, useAdoptExecute, useAdoptScan } from "../../features/adopt";
 import type { AdoptableItem } from "../../features/adopt";
 import { copyText } from "../../lib/clipboard";

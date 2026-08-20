@@ -142,6 +142,7 @@ fn validate(package: &SyncPackage) -> Result<(), SkillsageError> {
             || !is_safe_reference(&entry.current_version)
             || entry.current_hash.is_empty()
             || !is_allowed_source(&entry.source)
+            || !has_consistent_identity(entry)
         {
             return Err(SkillsageError::SyncInvalid(format!(
                 "技能条目无效: {}",
@@ -153,6 +154,28 @@ fn validate(package: &SyncPackage) -> Result<(), SkillsageError> {
         }
     }
     Ok(())
+}
+
+fn has_consistent_identity(entry: &SyncSkillEntry) -> bool {
+    let id_has_owner_and_name = entry.id.starts_with(&format!("{}/", entry.owner))
+        && entry.id.ends_with(&format!("/{}", entry.name));
+    if !id_has_owner_and_name {
+        return false;
+    }
+    let Ok(source) = url::Url::parse(&entry.source) else {
+        return false;
+    };
+    let segments = source
+        .path_segments()
+        .map(|segments| {
+            segments
+                .filter(|segment| !segment.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    segments
+        .windows(2)
+        .any(|pair| pair == [entry.owner.as_str(), entry.repo.as_str()])
 }
 
 fn is_safe_component(value: &str) -> bool {

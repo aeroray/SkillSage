@@ -1,6 +1,8 @@
 use crate::error::SkillsageError;
 use std::time::Duration;
 
+use crate::core::limits::{MAX_REMOTE_JSON_BYTES, MAX_REMOTE_TEXT_BYTES};
+
 use super::{detail, models::SkillDetail, search};
 
 const BASE_URL: &str = "https://www.skills.sh";
@@ -56,7 +58,10 @@ impl StoreClient {
             tracing::warn!(status, "skills.sh request returned an error status");
             return Err(SkillsageError::store_status(status));
         }
-        Ok(response.text().await?)
+        let bytes = bounded_bytes(response, MAX_REMOTE_TEXT_BYTES, "skills.sh 文本").await?;
+        String::from_utf8(bytes).map_err(|error| {
+            SkillsageError::InvalidStoreData(format!("skills.sh 返回了非 UTF-8 内容: {error}"))
+        })
     }
 
     pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(
@@ -79,13 +84,40 @@ impl StoreClient {
             tracing::warn!(status, "skills.sh request returned an error status");
             return Err(SkillsageError::store_status(status));
         }
-        Ok(response.json().await?)
+        let bytes = bounded_bytes(response, MAX_REMOTE_JSON_BYTES, "skills.sh JSON").await?;
+        serde_json::from_slice(&bytes).map_err(|error| {
+            SkillsageError::InvalidStoreData(format!("skills.sh 返回的数据无法解析: {error}"))
+        })
     }
 
     pub(crate) fn detail_path(skill_id: &str) -> Result<String, SkillsageError> {
         validate_skill_id(skill_id)?;
         Ok(format!("/{skill_id}"))
     }
+}
+
+async fn bounded_bytes(
+    response: reqwest::Response,
+    limit: usize,
+    label: &str,
+) -> Result<Vec<u8>, SkillsageError> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > limit as u64)
+    {
+        return Err(SkillsageError::ResponseTooLarge(format!(
+            "{label}超过 {} MiB",
+            limit / 1024 / 1024
+        )));
+    }
+    let bytes = response.bytes().await?;
+    if bytes.len() > limit {
+        return Err(SkillsageError::ResponseTooLarge(format!(
+            "{label}超过 {} MiB",
+            limit / 1024 / 1024
+        )));
+    }
+    Ok(bytes.to_vec())
 }
 
 fn validate_skill_id(skill_id: &str) -> Result<(), SkillsageError> {

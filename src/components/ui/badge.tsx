@@ -29,5 +29,3 @@ export function Badge({ className, variant, asChild = false, ...props }: BadgePr
   const Comp = asChild ? Slot.Root : "span";
   return <Comp className={cn(badgeVariants({ variant }), className)} data-slot="badge" {...props} />;
 }
-
-export { badgeVariants };

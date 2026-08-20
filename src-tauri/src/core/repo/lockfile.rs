@@ -64,6 +64,12 @@ impl Default for SkillLockFile {
 pub fn load(layout: &RepoLayout) -> Result<SkillLockFile, SkillsageError> {
     let path = layout.lock_path();
     match std::fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(SkillsageError::Io("lock 文件不能是符号链接".into()))
+        }
+        Ok(metadata) if !metadata.is_file() => {
+            return Err(SkillsageError::Io("lock 路径不是普通文件".into()))
+        }
         Ok(_) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(SkillLockFile::default());

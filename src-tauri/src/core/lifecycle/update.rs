@@ -99,17 +99,28 @@ pub fn apply_at(
             if let Some(parent) = snapshot.parent() {
                 std::fs::create_dir_all(parent)?;
             }
-            copy_dir(&destination, &snapshot)?;
+            if let Err(error) = copy_dir(&destination, &snapshot) {
+                let mut recovery = atomic::remove_dir(&snapshot).err();
+                if let Err(error) = atomic::remove_dir(&temp_dir) {
+                    if recovery.is_none() {
+                        recovery = Some(error);
+                    }
+                }
+                return Err(with_recovery(error, recovery));
+            }
         }
         Err(error) => {
             let _ = atomic::remove_dir(&temp_dir);
             return Err(error.into());
         }
     }
-    if let Err(error) = atomic::replace_dir(&temp_dir, &destination) {
-        let _ = atomic::remove_dir(&temp_dir);
-        return Err(error);
-    }
+    let replacement = match atomic::replace_dir_transaction(&temp_dir, &destination) {
+        Ok(replacement) => replacement,
+        Err(error) => {
+            let recovery = atomic::remove_dir(&temp_dir).err();
+            return Err(with_recovery(error, recovery));
+        }
+    };
 
     let mut next = current.clone();
     next.current_version = version;
@@ -128,12 +139,19 @@ pub fn apply_at(
     }
     lock.skills.insert(skill_id.to_string(), next.clone());
     if let Err(error) = lockfile::save(layout, &lock) {
-        let _ = atomic::remove_dir(&destination);
-        let _ = std::fs::create_dir_all(&destination);
-        let _ = copy_dir(&snapshot, &destination);
-        return Err(error);
+        return Err(with_recovery(error, replacement.rollback().err()));
+    }
+    if let Err(error) = replacement.finalize() {
+        tracing::warn!(error = %error, "无法清理更新时生成的旧版本备份");
     }
     Ok(next)
+}
+
+fn with_recovery(primary: SkillsageError, recovery: Option<SkillsageError>) -> SkillsageError {
+    match recovery {
+        Some(recovery) => SkillsageError::Io(format!("{primary}; 恢复失败: {recovery}")),
+        None => primary,
+    }
 }
 
 pub fn snapshot_files_at(

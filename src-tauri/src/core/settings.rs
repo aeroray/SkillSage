@@ -52,45 +52,41 @@ pub fn save(
     clear_github_token: bool,
 ) -> Result<SettingsView, SkillsageError> {
     let proxy_url = normalize_proxy(proxy_url)?;
-    if let Some(token) = github_token {
-        let token = token.trim();
-        if !token.is_empty() {
-            write_token(token)?;
-        }
-    }
-    if clear_github_token {
-        delete_token()?;
-    }
-
     layout.ensure_roots()?;
+    let previous_token = read_token()?;
+    let previous_file = read_settings_file(layout)?;
+    let desired_token = if clear_github_token {
+        None
+    } else {
+        github_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|token| !token.is_empty())
+            .map(ToOwned::to_owned)
+            .or_else(|| previous_token.clone())
+    };
     let stored = StoredSettings { proxy_url };
-    let temporary_path = layout.settings_path().with_extension("json.tmp");
-    if let Ok(metadata) = std::fs::symlink_metadata(&temporary_path) {
-        if metadata.file_type().is_symlink() {
-            return Err(SkillsageError::Settings(
-                "设置文件临时路径不能是符号链接".to_string(),
-            ));
-        }
-        std::fs::remove_file(&temporary_path)?;
+    write_stored(layout, &stored)?;
+    if let Err(error) = set_token(desired_token.as_deref()) {
+        let restore_file = restore_settings_file(layout, previous_file);
+        let restore_token = set_token(previous_token.as_deref());
+        let recovery = restore_file.err().or(restore_token.err());
+        return Err(with_recovery(error, recovery));
     }
-    let content = serde_json::to_string_pretty(&stored)?;
-    std::fs::write(&temporary_path, format!("{content}\n"))?;
-    atomic::replace_file(&temporary_path, &layout.settings_path())?;
     load_view(layout)
 }
 
 pub fn clear_for_cleanup(layout: &RepoLayout) -> Result<(), SkillsageError> {
-    match std::fs::symlink_metadata(layout.settings_path()) {
-        Ok(metadata) if metadata.file_type().is_symlink() => {
-            return Err(SkillsageError::Settings(
-                "设置文件不能是符号链接".to_string(),
-            ))
-        }
-        Ok(_) => std::fs::remove_file(layout.settings_path())?,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error.into()),
+    let previous_file = read_settings_file(layout)?;
+    let previous_token = read_token()?;
+    remove_settings_file(layout)?;
+    if let Err(error) = delete_token() {
+        let restore_file = restore_settings_file(layout, previous_file);
+        let restore_token = set_token(previous_token.as_deref());
+        let recovery = restore_file.err().or(restore_token.err());
+        return Err(with_recovery(error, recovery));
     }
-    delete_token()
+    Ok(())
 }
 
 pub fn normalize_proxy(proxy_url: Option<String>) -> Result<Option<String>, SkillsageError> {
@@ -123,6 +119,73 @@ fn load_stored(layout: &RepoLayout) -> Result<StoredSettings, SkillsageError> {
     Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
 }
 
+fn read_settings_file(layout: &RepoLayout) -> Result<Option<Vec<u8>>, SkillsageError> {
+    match std::fs::symlink_metadata(layout.settings_path()) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(SkillsageError::Settings(
+            "设置文件不能是符号链接".to_string(),
+        )),
+        Ok(metadata) if !metadata.is_file() => {
+            Err(SkillsageError::Settings("设置路径不是普通文件".to_string()))
+        }
+        Ok(_) => Ok(Some(std::fs::read(layout.settings_path())?)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn write_stored(layout: &RepoLayout, stored: &StoredSettings) -> Result<(), SkillsageError> {
+    let temporary_path = layout.settings_path().with_extension("json.tmp");
+    match std::fs::symlink_metadata(&temporary_path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(SkillsageError::Settings(
+                "设置文件临时路径不能是符号链接".to_string(),
+            ))
+        }
+        Ok(metadata) if !metadata.is_file() => {
+            return Err(SkillsageError::Settings(
+                "设置文件临时路径不是普通文件".to_string(),
+            ))
+        }
+        Ok(_) => std::fs::remove_file(&temporary_path)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    let content = serde_json::to_string_pretty(stored)?;
+    std::fs::write(&temporary_path, format!("{content}\n"))?;
+    atomic::replace_file(&temporary_path, &layout.settings_path())
+}
+
+fn restore_settings_file(
+    layout: &RepoLayout,
+    previous: Option<Vec<u8>>,
+) -> Result<(), SkillsageError> {
+    match previous {
+        Some(content) => {
+            let temporary_path = layout.settings_path().with_extension("json.restore.tmp");
+            std::fs::write(&temporary_path, content)?;
+            atomic::replace_file(&temporary_path, &layout.settings_path())
+        }
+        None => remove_settings_file(layout),
+    }
+}
+
+fn remove_settings_file(layout: &RepoLayout) -> Result<(), SkillsageError> {
+    match std::fs::symlink_metadata(layout.settings_path()) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(SkillsageError::Settings(
+                "设置文件不能是符号链接".to_string(),
+            ));
+        }
+        Ok(metadata) if !metadata.is_file() => {
+            return Err(SkillsageError::Settings("设置路径不是普通文件".to_string()));
+        }
+        Ok(_) => std::fs::remove_file(layout.settings_path())?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    Ok(())
+}
+
 fn keyring_entry() -> Result<keyring::Entry, SkillsageError> {
     keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
         .map_err(|error| SkillsageError::Settings(error.to_string()))
@@ -143,6 +206,20 @@ fn write_token(token: &str) -> Result<(), SkillsageError> {
     keyring_entry()?
         .set_password(token)
         .map_err(|error| SkillsageError::Settings(error.to_string()))
+}
+
+fn set_token(token: Option<&str>) -> Result<(), SkillsageError> {
+    match token {
+        Some(token) => write_token(token),
+        None => delete_token(),
+    }
+}
+
+fn with_recovery(primary: SkillsageError, recovery: Option<SkillsageError>) -> SkillsageError {
+    match recovery {
+        Some(recovery) => SkillsageError::Settings(format!("{primary}; 恢复失败: {recovery}")),
+        None => primary,
+    }
 }
 
 fn delete_token() -> Result<(), SkillsageError> {

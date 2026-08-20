@@ -81,7 +81,6 @@ pub async fn update_skill(
     skill_id: String,
     state: State<'_, AppState>,
 ) -> Result<SkillLockRecord, SkillsageError> {
-    let _write_guard = state.write_lock.lock().await;
     let layout = RepoLayout::from_user_home()?;
     let record = load_record(&layout, &skill_id)?;
     if !remote::is_remote_record(&record) {
@@ -90,6 +89,7 @@ pub async fn update_skill(
         ));
     }
     let (version, files) = remote::fetch_latest(&record).await?;
+    let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || update::apply_at(&layout, &skill_id, version, files))
         .await
         .map_err(|error| SkillsageError::Task(error.to_string()))?
@@ -101,7 +101,6 @@ pub async fn rollback_skill(
     version: String,
     state: State<'_, AppState>,
 ) -> Result<SkillLockRecord, SkillsageError> {
-    let _write_guard = state.write_lock.lock().await;
     let layout = RepoLayout::from_user_home()?;
     let record = load_record(&layout, &skill_id)?;
     if !remote::is_remote_record(&record) {
@@ -132,6 +131,7 @@ pub async fn rollback_skill(
             .map_err(|error| SkillsageError::Task(error.to_string()))??
         }
     };
+    let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || rollback::apply_at(&layout, &skill_id, version, files))
         .await
         .map_err(|error| SkillsageError::Task(error.to_string()))?

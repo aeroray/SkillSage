@@ -109,6 +109,12 @@ impl PendingTakeover {
         std::fs::rename(&self.backup_path, &self.original_path)?;
         Ok(())
     }
+
+    /// Permanently remove the displaced foreign path after the new install
+    /// and lockfile have both been committed.
+    pub fn finalize(self) -> Result<(), SkillsageError> {
+        super::atomic::remove_dir(&self.backup_path)
+    }
 }
 
 fn path_exists(path: &Path) -> bool {

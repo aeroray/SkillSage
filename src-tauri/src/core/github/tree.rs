@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 use crate::error::SkillsageError;
 
+use super::super::limits::MAX_GITHUB_TREE_ENTRIES;
 use super::client::GitHubClient;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -29,6 +30,16 @@ pub async fn find_skill_files(
 ) -> Result<Vec<String>, SkillsageError> {
     validate_skill_path(skill_path)?;
     let tree = client.get_tree(owner, repo, commit).await?;
+    if tree.truncated {
+        return Err(SkillsageError::ResponseTooLarge(
+            "GitHub 仓库目录过大，API 返回了不完整的目录树".into(),
+        ));
+    }
+    if tree.tree.len() > MAX_GITHUB_TREE_ENTRIES {
+        return Err(SkillsageError::ResponseTooLarge(format!(
+            "GitHub 仓库目录超过 {MAX_GITHUB_TREE_ENTRIES} 个条目"
+        )));
+    }
     let prefix = skill_path.trim_matches('/');
     let exact_skill_file = if prefix.is_empty() {
         "SKILL.md".to_string()
@@ -64,16 +75,18 @@ pub async fn find_skill_files(
             .ok_or_else(|| SkillsageError::PathNotFound(exact_skill_file.clone().into()))?
     };
     let actual_prefix = skill_file.strip_suffix("/SKILL.md").unwrap_or("");
-    Ok(tree
-        .tree
+    tree.tree
         .into_iter()
         .filter(|entry| {
             entry.entry_type == "blob"
                 && (entry.path == skill_file
                     || entry.path.starts_with(&format!("{actual_prefix}/")))
         })
-        .map(|entry| entry.path)
-        .collect())
+        .map(|entry| {
+            validate_tree_path(&entry.path)?;
+            Ok(entry.path)
+        })
+        .collect()
 }
 
 fn validate_skill_path(value: &str) -> Result<(), SkillsageError> {
@@ -88,6 +101,23 @@ fn validate_skill_path(value: &str) -> Result<(), SkillsageError> {
     {
         return Err(SkillsageError::InvalidGithubUrl(
             "技能路径包含不安全片段".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_tree_path(value: &str) -> Result<(), SkillsageError> {
+    if value.is_empty() || value.starts_with('/') || value.contains('\\') {
+        return Err(SkillsageError::InvalidGithubUrl(
+            "GitHub 文件路径包含不安全片段".into(),
+        ));
+    }
+    if value
+        .split('/')
+        .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err(SkillsageError::InvalidGithubUrl(
+            "GitHub 文件路径包含不安全片段".into(),
         ));
     }
     Ok(())

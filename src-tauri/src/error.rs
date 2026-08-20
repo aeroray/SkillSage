@@ -13,6 +13,8 @@ pub enum SkillsageError {
     StoreApi(u16),
     #[error("skills.sh 返回的数据无法识别：{0}")]
     InvalidStoreData(String),
+    #[error("远程响应过大，已停止处理：{0}")]
+    ResponseTooLarge(String),
     #[error("GitHub API 需要 Token，请在设置中配置")]
     GithubAuthMissing,
     #[error("GitHub Token 无效或已过期，请在设置中更新")]

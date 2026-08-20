@@ -20,7 +20,6 @@ pub async fn execute_migrate(
     items: Vec<migrator::AdoptSelection>,
     state: State<'_, AppState>,
 ) -> Result<migrator::AdoptResult, SkillsageError> {
-    let _write_guard = state.write_lock.lock().await;
     let layout = RepoLayout::from_user_home()?;
-    migrator::execute_at(&layout, items).await
+    migrator::execute_at_with_lock(&layout, items, &state.write_lock).await
 }

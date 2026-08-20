@@ -28,24 +28,79 @@ pub fn cleanup_at(layout: &RepoLayout, mode: CleanupMode) -> Result<CleanupResul
     match mode {
         CleanupMode::All => {
             let lock = lockfile::load(layout)?;
-            let mut removed = 0;
-            let mut failures = Vec::new();
+            let quarantine = layout.public_root.join(format!(
+                ".skillsage-cleanup-{}-{}",
+                std::process::id(),
+                lockfile::unix_timestamp()
+            ));
+            if std::fs::symlink_metadata(&quarantine).is_ok() {
+                return Err(SkillsageError::CleanupFailed(format!(
+                    "清理暂存目录已存在，拒绝覆盖: {}",
+                    quarantine.display()
+                )));
+            }
+            std::fs::create_dir(&quarantine)?;
+            let mut moved = Vec::new();
             for record in lock.skills.values() {
-                let result = layout
-                    .skill(&record.name)
-                    .and_then(|path| atomic::remove_dir(&path));
-                match result {
-                    Ok(()) => removed += 1,
-                    Err(error) => failures.push(error.to_string()),
+                let source = layout.skill(&record.name)?;
+                match std::fs::symlink_metadata(&source) {
+                    Ok(metadata) if metadata.file_type().is_symlink() => {
+                        rollback_cleanup(&quarantine, &moved)?;
+                        return Err(SkillsageError::CleanupFailed(format!(
+                            "拒绝清理符号链接目录: {}",
+                            source.display()
+                        )));
+                    }
+                    Ok(metadata) if !metadata.is_dir() => {
+                        rollback_cleanup(&quarantine, &moved)?;
+                        return Err(SkillsageError::CleanupFailed(format!(
+                            "技能路径不是目录: {}",
+                            source.display()
+                        )));
+                    }
+                    Ok(_) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(error) => {
+                        rollback_cleanup(&quarantine, &moved)?;
+                        return Err(error.into());
+                    }
+                };
+                let target = quarantine.join(
+                    source
+                        .file_name()
+                        .ok_or_else(|| SkillsageError::CleanupFailed("技能名称无效".into()))?,
+                );
+                if std::fs::symlink_metadata(&target).is_ok() {
+                    rollback_cleanup(&quarantine, &moved)?;
+                    return Err(SkillsageError::CleanupFailed(format!(
+                        "清理暂存目标已存在: {}",
+                        target.display()
+                    )));
                 }
+                if let Err(error) = std::fs::rename(&source, &target) {
+                    rollback_cleanup(&quarantine, &moved)?;
+                    return Err(error.into());
+                }
+                moved.push((source, target));
             }
-            if !failures.is_empty() {
-                return Err(SkillsageError::CleanupFailed(format_failures(&failures)));
+
+            if let Err(error) = atomic::remove_dir(&layout.root) {
+                let recovery = rollback_cleanup(&quarantine, &moved).err();
+                return match recovery {
+                    Some(recovery) => Err(SkillsageError::CleanupFailed(format!(
+                        "清理管理数据失败: {error}; 恢复失败: {recovery}"
+                    ))),
+                    None => Err(error),
+                };
             }
-            atomic::remove_dir(&layout.root)?;
+            if let Err(error) = atomic::remove_dir(&quarantine) {
+                return Err(SkillsageError::CleanupFailed(format!(
+                    "管理数据已清理，但技能暂存目录仍保留: {error}"
+                )));
+            }
             Ok(CleanupResult {
                 mode,
-                tracked_skills_removed: removed,
+                tracked_skills_removed: moved.len(),
                 management_data_removed: true,
             })
         }
@@ -63,6 +118,26 @@ pub fn cleanup_at(layout: &RepoLayout, mode: CleanupMode) -> Result<CleanupResul
                 management_data_removed: true,
             })
         }
+    }
+}
+
+fn rollback_cleanup(
+    quarantine: &std::path::Path,
+    moved: &[(std::path::PathBuf, std::path::PathBuf)],
+) -> Result<(), SkillsageError> {
+    let mut failures = Vec::new();
+    for (source, target) in moved.iter().rev() {
+        if let Err(error) = std::fs::rename(target, source) {
+            failures.push(error.to_string());
+        }
+    }
+    if let Err(error) = atomic::remove_dir(quarantine) {
+        failures.push(error.to_string());
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(SkillsageError::CleanupFailed(format_failures(&failures)))
     }
 }
 

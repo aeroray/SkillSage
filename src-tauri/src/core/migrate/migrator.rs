@@ -36,9 +36,19 @@ pub struct AdoptResult {
 /// the right path, so adoption is a near-pure metadata write: parse
 /// SKILL.md, hash the folder, write a lock record pointing at the existing
 /// path.
+#[cfg(test)]
 pub async fn execute_at(
     layout: &RepoLayout,
     selections: Vec<AdoptSelection>,
+) -> Result<AdoptResult, SkillsageError> {
+    let write_lock = tokio::sync::Mutex::new(());
+    execute_at_with_lock(layout, selections, &write_lock).await
+}
+
+pub async fn execute_at_with_lock(
+    layout: &RepoLayout,
+    selections: Vec<AdoptSelection>,
+    write_lock: &tokio::sync::Mutex<()>,
 ) -> Result<AdoptResult, SkillsageError> {
     let scan_result = scan(layout)?;
     let home = dirs::home_dir();
@@ -68,10 +78,8 @@ pub async fn execute_at(
             continue;
         }
 
-        // Re-check right before writing — a race guard against a concurrent
-        // install/adopt of the same name between the scan above and now.
-        let lock = match lockfile::load(layout) {
-            Ok(lock) => lock,
+        let prepared = match prepare_adoption(layout, item, home.as_deref()).await {
+            Ok(prepared) => prepared,
             Err(error) => {
                 result.failed.push(AdoptFailure {
                     name: item.name.clone(),
@@ -80,13 +88,10 @@ pub async fn execute_at(
                 continue;
             }
         };
-        if conflict::is_tracked(&lock, &item.name) {
-            result.skipped.push(item.name.clone());
-            continue;
-        }
-
-        match adopt_item(layout, item, home.as_deref()).await {
+        let _write_guard = write_lock.lock().await;
+        match commit_adoption(layout, prepared) {
             Ok(name) => result.adopted.push(name),
+            Err(SkillsageError::NameConflict(_)) => result.skipped.push(item.name.clone()),
             Err(error) => result.failed.push(AdoptFailure {
                 name: item.name.clone(),
                 reason: error.to_string(),
@@ -96,11 +101,17 @@ pub async fn execute_at(
     Ok(result)
 }
 
-async fn adopt_item(
+struct PreparedAdoption {
+    name: String,
+    record: lockfile::SkillLockRecord,
+    current_hash: String,
+}
+
+async fn prepare_adoption(
     layout: &RepoLayout,
     item: &AdoptableItem,
     home: Option<&std::path::Path>,
-) -> Result<String, SkillsageError> {
+) -> Result<PreparedAdoption, SkillsageError> {
     let path = layout.skill(&item.name)?;
     let parsed = read_skill_md(&path.join("SKILL.md"))?;
     let current_hash = lockfile::content_hash(&path)?;
@@ -111,7 +122,6 @@ async fn adopt_item(
         None => None,
     };
 
-    let mut lock = lockfile::load(layout)?;
     // Folder name is authoritative: every other module resolves a record's
     // content via `layout.skill(&record.name)`, so an adopted record's name
     // must be the folder name, never the (possibly different) SKILL.md
@@ -125,7 +135,7 @@ async fn adopt_item(
             skill_path: candidate.skill_path,
             source: candidate.source,
             current_version: candidate.version,
-            current_hash,
+            current_hash: current_hash.clone(),
             installed_at: lockfile::unix_timestamp(),
             version_history: Vec::new(),
             description: parsed.manifest.description,
@@ -138,16 +148,40 @@ async fn adopt_item(
             skill_path: None,
             source: format!("local://{}", item.name),
             current_version: "adopted".into(),
-            current_hash,
+            current_hash: current_hash.clone(),
             installed_at: lockfile::unix_timestamp(),
             version_history: Vec::new(),
             description: parsed.manifest.description,
         },
     };
-    let id = record.id.clone();
-    lock.skills.insert(id, record);
+    Ok(PreparedAdoption {
+        name: item.name.clone(),
+        record,
+        current_hash,
+    })
+}
+
+fn commit_adoption(
+    layout: &RepoLayout,
+    prepared: PreparedAdoption,
+) -> Result<String, SkillsageError> {
+    let path = layout.skill(&prepared.name)?;
+    let actual_hash = lockfile::content_hash(&path)?;
+    if actual_hash != prepared.current_hash {
+        return Err(SkillsageError::Io(format!(
+            "技能在采纳前发生变化，请重新扫描: {}",
+            path.display()
+        )));
+    }
+    let mut lock = lockfile::load(layout)?;
+    if conflict::is_tracked(&lock, &prepared.name) {
+        return Err(SkillsageError::NameConflict(prepared.name));
+    }
+    let name = prepared.name.clone();
+    let id = prepared.record.id.clone();
+    lock.skills.insert(id.clone(), prepared.record);
     lockfile::save(layout, &lock)?;
-    Ok(item.name.clone())
+    Ok(name)
 }
 
 /// A cheap, purely-additive safety net: only trust `classifier`'s cross-tool

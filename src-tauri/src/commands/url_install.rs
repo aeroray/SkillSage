@@ -31,10 +31,10 @@ pub async fn url_install(
     conflict_action: Option<ConflictAction>,
     state: State<'_, AppState>,
 ) -> Result<InstallResult, SkillsageError> {
-    let _write_guard = state.write_lock.lock().await;
     let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
     let client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
     let detail = url_install::resolve_detail(&client, &url, skill_path).await?;
+    let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
         crate::core::lifecycle::install::install_skill_from_store_at(

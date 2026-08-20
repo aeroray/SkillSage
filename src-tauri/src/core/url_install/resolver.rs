@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use crate::core::github::{client::GitHubClient, download::fetch_skill_files};
+use crate::core::limits::MAX_REMOTE_SKILL_CANDIDATES;
 use crate::core::skill::parser::parse_skill_md;
 use crate::core::store::models::{SkillDetail, SkillFile};
 use crate::error::SkillsageError;
@@ -44,6 +45,11 @@ pub async fn resolve_skills(
         .collect::<Vec<_>>();
     paths.sort();
     paths.dedup();
+    if paths.len() > MAX_REMOTE_SKILL_CANDIDATES {
+        return Err(SkillsageError::ResponseTooLarge(format!(
+            "仓库包含超过 {MAX_REMOTE_SKILL_CANDIDATES} 个可安装技能"
+        )));
+    }
 
     let mut candidates = Vec::with_capacity(paths.len());
     for path in paths {
