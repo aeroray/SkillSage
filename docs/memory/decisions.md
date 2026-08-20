@@ -217,3 +217,8 @@ Reason: They duplicate current decisions or describe superseded architecture, so
 
 Decision: `package.json.version` is the sole app release version; Tauri reads it directly and Cargo metadata is synchronized by `pnpm sync:version`. The official Chinese product name is 技匠, shown with the SkillSage brand where appropriate.
 Reason: One release field prevents version drift, while a stable bilingual identity keeps the app recognizable across installers, UI, and documentation.
+
+## 2026-08-20 - English packaging identity
+
+Decision: Keep `SkillSage` as Tauri's technical `productName` so installer filenames, bundle names, and default installation directories remain stable and ASCII-compatible. Use 技匠（SkillSage） for the visible product identity in the UI, titles, and documentation.
+Reason: Chinese display branding should not make release assets lose their base name or create inconsistent installer paths.

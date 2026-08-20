@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "技匠",
+  "productName": "SkillSage",
   "version": "../package.json",
   "identifier": "com.skillsage.desktop",
   "build": {
