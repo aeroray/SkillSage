@@ -22,7 +22,9 @@
 - **我的技能**：查看已安装技能，执行更新、回退、卸载和按选择检查更新。
 - **技能商店**：搜索 skills.sh，查看技能详情，并从商店或 GitHub 安装技能。
 - **本地导入**：导入 `SKILL.md` 文件、技能目录，或包含单个技能目录的父目录。
-- **共享目录管理**：Claude Code、Cursor、GitHub Copilot、OpenAI Codex CLI 和 OpenCode 可直接读取同一份技能内容。
+- **本地技能在线匹配**：对 `local://` 技能主动搜索 skills.sh 的名称匹配候选，并用本地目录指纹核对远端当前内容；完全一致的候选会优先推荐。确认后只链接远端来源记录，不替换现有本地文件，并启用后续更新与回滚。
+- **共享目录管理**：Cursor、GitHub Copilot、OpenAI Codex CLI 和 OpenCode 可直接读取 `~/.agents/skills/` 中的技能内容。
+- **Claude 兼容分发**：Claude Code 可在每个技能菜单中单独分发或取消分发，使用 `~/.claude/skills/<name>` 的目录链接读取同一份内容。
 - **采纳技能**：扫描 `~/.agents/skills/` 中未登记的真实技能目录，按 `SKILL.md` 名称安全采纳，并处理名称不一致或无效目录。
 - **设置与同步**：配置代理、保存 GitHub Token 到系统密钥环，并导入或导出远程技能记录和非敏感应用设置。
 - **可诊断性**：统一的加载/错误状态，以及写入平台应用日志目录的普通日志和 tracing 日志。
@@ -86,15 +88,17 @@ pnpm sync:branding
 
 SkillSage 将技能内容与管理数据分开保存：
 
-| 数据 | 位置 |
-| --- | --- |
-| 共享技能目录 | `~/.agents/skills/` |
-| 技能锁定记录 | `~/.skillsage/lock/skill-lock.json` |
+| 数据               | 位置                                                |
+| ------------------ | --------------------------------------------------- |
+| 共享技能目录       | `~/.agents/skills/`                                 |
+| Claude 技能链接    | `~/.claude/skills/<name>`                           |
+| 技能锁定记录       | `~/.skillsage/lock/skill-lock.json`                 |
 | 更新快照与临时文件 | `~/.skillsage/lock/snapshots/`、`~/.skillsage/tmp/` |
-| 同步数据文件 | 用户在导出时选择的位置 |
-| 代理配置 | `~/.skillsage/settings.json` |
+| 同步数据文件       | 用户在导出时选择的位置                              |
+| 代理配置           | `~/.skillsage/settings.json`                        |
 
-- 技能会直接写入共享目录，不创建按工具区分的 junction、symlink 或复制品。
+- 技能内容直接写入共享目录；只有用户明确选择 Claude 分发时，才会在 `~/.claude/skills/<name>` 创建指向共享目录的目录链接，不复制技能内容。
+- Claude 分发在 Windows 使用 directory junction，在 macOS 使用 symlink；取消分发或卸载时只删除 SkillSage 确认归属的链接。
 - 同步数据包含远程技能记录和非敏感应用设置；GitHub Token 使用 Windows 凭据管理器或 macOS Keychain 保存，不写入同步文件、设置文件或日志。
 - 远程更新按 Git 提交记录版本，更新前创建快照，网络不可用时可回退到本地快照。
 - 移除应用不会修改共享技能目录；如需删除技能，请在“我的技能”中单独卸载。

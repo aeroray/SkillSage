@@ -156,6 +156,7 @@ mod tests {
             installed_at: "1".into(),
             version_history: Vec::new(),
             description: String::new(),
+            claude_distributed: false,
         }
     }
 

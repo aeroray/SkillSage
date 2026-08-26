@@ -9,6 +9,13 @@ pub async fn fetch_latest(
 ) -> Result<(String, Vec<SkillFile>), SkillsageError> {
     let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
     let client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
+    fetch_latest_with_client(&client, record).await
+}
+
+pub async fn fetch_latest_with_client(
+    client: &GitHubClient,
+    record: &SkillLockRecord,
+) -> Result<(String, Vec<SkillFile>), SkillsageError> {
     let branch = client
         .get_default_branch(&record.owner, &record.repo)
         .await?;

@@ -7,7 +7,6 @@ use super::client::GitHubClient;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct GitTreeResponse {
-    pub sha: String,
     pub tree: Vec<GitTreeEntry>,
     #[serde(default)]
     pub truncated: bool,
@@ -18,7 +17,6 @@ pub struct GitTreeEntry {
     pub path: String,
     #[serde(rename = "type")]
     pub entry_type: String,
-    pub sha: Option<String>,
 }
 
 pub async fn find_skill_files(

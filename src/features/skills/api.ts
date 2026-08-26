@@ -3,6 +3,7 @@ import type {
   InstallResult,
   InstalledSkill,
   InstalledSkillsList,
+  LocalSkillMatch,
   PathConflict,
   UpdateCheckList,
 } from "./types";
@@ -26,6 +27,26 @@ export function uninstallSkill(skillId: string) {
   return invokeCommand<void>("uninstall_skill", { skillId });
 }
 
+export function setClaudeDistribution(skillId: string, distributed: boolean) {
+  return invokeCommand<InstalledSkill>("set_claude_distribution", {
+    skillId,
+    distributed,
+  });
+}
+
+export function searchLocalSkillMatches(skillId: string) {
+  return invokeCommand<LocalSkillMatch[]>("search_local_skill_matches", {
+    skillId,
+  });
+}
+
+export function linkLocalSkill(skillId: string, remoteSkillId: string) {
+  return invokeCommand<InstalledSkill>("link_local_skill", {
+    remoteSkillId,
+    skillId,
+  });
+}
+
 export function checkUpdates(skillId?: string, skillIds?: string[]) {
   return invokeCommand<UpdateCheckList>("check_updates", { skillId, skillIds });
 }
@@ -39,7 +60,9 @@ export function rollbackSkill(skillId: string, version: string) {
 }
 
 export function checkInstallConflict(name: string) {
-  return invokeCommand<PathConflict | undefined>("check_install_conflict", { name });
+  return invokeCommand<PathConflict | undefined>("check_install_conflict", {
+    name,
+  });
 }
 
 export function openSkillDirectory(skillId: string) {

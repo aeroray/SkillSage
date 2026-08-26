@@ -1,6 +1,6 @@
 # Do Not Use
 
-## Per-tool symlink/junction distribution + tool detection/registry (removed 2026-08-20)
+## Multi-tool symlink/junction distribution + tool detection/registry (removed 2026-08-20)
 
 Do not reintroduce: a private central repository (`~/.skillsage/remote|local`) that gets
 fanned out via symlinks (macOS) or directory junctions (Windows) into a hardcoded registry
@@ -22,9 +22,10 @@ guarantee that doesn't actually hold was pure complexity with no real benefit. S
 entry for the replacement design (direct install into `~/.agents/skills/`, no tool
 concept at all).
 
-If a future need for genuine per-tool isolation resurfaces, treat it as a new problem to
-design fresh — don't resurrect this implementation; it was removed on principle, not
-just refactored.
+The current product has one deliberate compatibility exception: an installed skill may
+create a managed link in Claude's `~/.claude/skills/<name>` directory. This does not
+restore the old registry or multi-tool distribution model; do not generalize it into
+tool detection, batch distribution, or per-tool isolation.
 
 ## Historical specification files retired
 

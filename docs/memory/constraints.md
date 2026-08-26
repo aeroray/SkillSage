@@ -1,7 +1,7 @@
 # Constraints
 
 - Do not call `npx skills`; download, parse, install, update, and uninstall are Rust-owned.
-- All skills install as real content directly into the single shared public directory (`~/.agents/skills/`, flat, no per-owner subfolder). No per-tool symlinks/junctions, no tool detection or registration — see the 2026-08-20 decision below.
+- All skills install as real content directly into the single shared public directory (`~/.agents/skills/`, flat, no per-owner subfolder). Claude compatibility distribution is the only supported link adapter: it creates a managed directory link at `~/.claude/skills/<name>` and never copies content; there is no general tool detection or registry.
 - The application is desktop-only: the main window must open at 1200×800, never resize below 1200×800, and may be maximized; do not add mobile-specific layout requirements.
 - The old Phase 1 shell is historical; the shipped application includes the completed store, lifecycle, adopt, sync, and settings flows. There is no app-level cleanup/stop-management flow.
 - UI uses Slate Blue primary colors, system fonts, CSS radius variables (`--radius`, `--radius-lg`), 4px spacing increments, `shadow-sm`/`shadow-lg` only, Lucide icons, and shadcn-style primitives.

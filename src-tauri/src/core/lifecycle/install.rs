@@ -182,6 +182,7 @@ pub fn install_skill_from_store_at(
         installed_at: lockfile::unix_timestamp(),
         version_history: Vec::new(),
         description: detail.description,
+        claude_distributed: false,
     };
     let mut lock = lock;
     lock.skills.insert(detail.id.clone(), record);
@@ -280,6 +281,7 @@ pub fn install_test_skill_at(layout: &RepoLayout) -> Result<InstallResult, Skill
         installed_at: lockfile::unix_timestamp(),
         version_history: Vec::new(),
         description: parsed.manifest.description.clone(),
+        claude_distributed: false,
     };
     lock.skills.insert(TEST_SKILL_ID.to_string(), record);
 
@@ -307,6 +309,7 @@ pub fn uninstall_skill_at(layout: &RepoLayout, skill_id: &str) -> Result<(), Ski
         .ok_or_else(|| SkillsageError::NotInstalled(skill_id.to_string()))?;
 
     let destination = destination_for_record(layout, &record)?;
+    crate::core::claude::remove_link_at(layout, &record)?;
     let snapshots = if record.source.starts_with("local://") {
         None
     } else {

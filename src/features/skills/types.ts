@@ -1,3 +1,5 @@
+import type { SkillSearchResult } from "../store/types";
+
 export type InstalledSkill = {
   id: string;
   name: string;
@@ -10,6 +12,13 @@ export type InstalledSkill = {
   currentHash: string;
   installedAt: string;
   versionHistory: VersionRecord[];
+  claudeDistributed: boolean;
+};
+
+export type LocalSkillMatch = SkillSearchResult & {
+  verification: "exact" | "different" | "unavailable" | string;
+  remoteVersion?: string;
+  remoteHash?: string;
 };
 
 export type VersionRecord = {

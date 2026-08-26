@@ -23,10 +23,6 @@ pub struct GitHubClient {
 }
 
 impl GitHubClient {
-    pub fn new(token: Option<String>) -> Result<Self, SkillsageError> {
-        Self::new_with_config(token, None)
-    }
-
     pub fn new_with_config(
         token: Option<String>,
         proxy_url: Option<String>,

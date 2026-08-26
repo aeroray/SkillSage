@@ -184,13 +184,18 @@ Reason: The store should show more results at a glance without leaving large bla
 Decision: Store security-audit failures are represented by a red warning icon beside the audit heading, with the detailed warning exposed through a tooltip instead of a full-width alert below the audit cards.
 Reason: Audit problems remain discoverable without interrupting the detail flow or adding a large block of repeated status text.
 
+## 2026-08-20 - Explicit remote matching for local skills
+
+Decision: A `local://` installed skill may be explicitly matched to a validated skills.sh/GitHub candidate from its row menu. Matching verifies candidate current content against the local directory fingerprint, ranks exact matches first, and returns the verification state plus repository metadata. Linking updates only the lock record's remote metadata and preserves the existing local directory and content hash; it does not download or replace files.
+Reason: Skills installed by CLI or copied into the shared directory should be able to enter the existing update and rollback chain without silently changing local content. A name match is not proof of identical contents, while an exact current-directory fingerprint is strong evidence and gives the user a fast, explainable recommendation. Search and linking remain user-triggered.
+
 ## 2026-08-20 - Single shared public-directory install model (supersedes per-tool distribution)
 
-Decision: Skills no longer install into a private central repository (`~/.skillsage/{remote,local}`) and get symlinked/junctioned out to per-tool directories. Every skill — from the store, a GitHub URL, or local import — installs as real content directly into one shared directory, `~/.agents/skills/<name>/` (flat, no owner subfolder). This supersedes the "Central repository," "Supported tools," and "Windows link invocation" decisions above, and directly reverses the old requirements' original "minimum privilege" principle and its explicit listing of Amp-style shared-directory tools as unsupported.
+Decision: Skills no longer install into a private central repository (`~/.skillsage/{remote,local}`) and get distributed to a general tool registry. Every skill installs as real content directly into `~/.agents/skills/<name>/`; Claude may separately receive a managed compatibility link. This supersedes the old central-repository, supported-tools, and Windows-link decisions.
 Reason: Investigation found the promised per-tool isolation doesn't hold in practice — other AI tools already read from shared locations (this exact `~/.agents/skills/` path was already referenced in this codebase as a migration-scan source) regardless of whether SkillSage links into their own directory. Maintaining platform-specific symlink/junction/conflict/takeover machinery in service of an isolation guarantee that doesn't actually hold added real complexity and attack surface for no real benefit.
 
-Decision: Tool detection, the 5-tool registry, and all "adjust distribution"/"batch distribution" functionality are removed entirely — a skill is just installed or not, with no per-tool dimension.
-Reason: Nothing left to detect or adjust once there's only one install target.
+Decision: Tool detection, the 5-tool registry, and general "adjust distribution"/"batch distribution" functionality remain removed; only the explicit Claude compatibility link is supported per skill.
+Reason: Claude needs a separate readable path, but a narrow adapter avoids recreating a general tool-management subsystem.
 
 Decision: `~/.skillsage/` shrinks to lock file, snapshots, tmp, and settings only — never skill content. `SkillLockRecord.distributed_to` is removed; `RepoLayout` gained `public_root` and one flat `skill(name)` accessor replacing the owner-namespaced `remote_skill()`/flat `local_skill()` split.
 Reason: Keeps the private directory's purpose to "our own bookkeeping," matching the new single-content-location model.
@@ -198,7 +203,7 @@ Reason: Keeps the private directory's purpose to "our own bookkeeping," matching
 Decision: Clean-slate cutover — no automatic migration of existing `~/.skillsage/` content or old per-tool symlinks. The lockfile format version bumped to 2; a pre-cutover (version 1) lock file is treated as absent rather than partially parsed. Old data is left on disk, untracked.
 Reason: This is an early-stage product; a real migration path wasn't worth the complexity it would add.
 
-Decision: Installing into a name already occupied by an untracked foreign directory/link asks skip / takeover / cancel (one shared `PathConflictDialog`, not a per-tool conflict list); takeover renames the foreign entity aside (`<name>.skillsage-backup-<timestamp>`) and never deletes or adopts it in place. A name already owned by a *tracked* record is a separate, harder `NameConflict` — not takeover-eligible, since renaming aside another tracked record would orphan its lock entry.
+Decision: Installing into a name already occupied by an untracked foreign directory/link asks skip / takeover / cancel (one shared `PathConflictDialog`, not a per-tool conflict list); takeover renames the foreign entity aside (`<name>.skillsage-backup-<timestamp>`) and never deletes or adopts it in place. A name already owned by a _tracked_ record is a separate, harder `NameConflict` — not takeover-eligible, since renaming aside another tracked record would orphan its lock entry.
 Reason: Preserves the app's existing non-destructive safety habits with much less code than the old per-tool `TakeoverTransaction` (no more `unique_name()` auto-numbering, no link rebuild, no SKILL.md-parse-and-validate on the displaced content).
 
 Decision: The Migrate feature is replaced by "Adopt" — scanning only the public directory for untracked real directories with a valid SKILL.md, and registering them in place after the folder agrees with the SKILL.md declared name. The declared name is authoritative; a mismatch can be resolved by an explicit safe folder rename, and an invalid safe directory can be removed. Cross-tool lock-sniffed provenance recovery (`classifier.rs`) is kept, but only trusted after re-fetching the guessed commit and confirming a matching content hash — otherwise the adopted skill records as an unversioned `local://` source.
@@ -207,6 +212,11 @@ Note: the Rust module path and Tauri command names (`core/migrate/`, `scan_migra
 
 Decision: The individual skill uninstall action deletes the real folder every AI tool reads from directly, not a disposable link; there is no global cleanup command.
 Reason: A single-skill confirmation can explain the blast radius while avoiding a broad app-level deletion control.
+
+## 2026-08-26 - Claude compatibility distribution
+
+Decision: A skill can optionally link from `~/.claude/skills/<name>` to its real `~/.agents/skills/<name>` directory; Windows uses a junction and macOS uses a symlink, and uninstall removes the owned link first.
+Reason: Claude currently does not read the shared directory, while a link preserves one skill copy and keeps removal safe.
 
 ## 2026-08-20 - Historical specifications retired
 

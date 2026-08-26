@@ -4,8 +4,10 @@ import {
   checkInstallConflict,
   checkUpdates,
   installSkill,
+  linkLocalSkill as linkLocalSkillApi,
   refreshInstalled,
   rollbackSkill,
+  setClaudeDistribution,
   uninstallSkill,
   updateSkill,
 } from "./api";
@@ -198,6 +200,10 @@ export function useSkillManagement(onCompleted: () => void) {
         await uninstallSkill(skillId);
         return true;
       }),
+    setClaudeDistribution: (skillId: string, distributed: boolean) =>
+      run(skillId, () => setClaudeDistribution(skillId, distributed)),
+    linkLocalSkill: (skillId: string, remoteSkillId: string) =>
+      run(skillId, () => linkLocalSkillApi(skillId, remoteSkillId)),
     update: (skillId: string) => run(skillId, () => updateSkill(skillId)),
   };
 }
@@ -205,17 +211,20 @@ export function useSkillManagement(onCompleted: () => void) {
 export function useInstallConflictCheck() {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string>();
-  const check = useCallback(async (name: string): Promise<PathConflict | undefined> => {
-    setChecking(true);
-    setError(undefined);
-    try {
-      return await checkInstallConflict(name);
-    } catch (reason) {
-      setError(normalizeTauriError(reason));
-      return undefined;
-    } finally {
-      setChecking(false);
-    }
-  }, []);
+  const check = useCallback(
+    async (name: string): Promise<PathConflict | undefined> => {
+      setChecking(true);
+      setError(undefined);
+      try {
+        return await checkInstallConflict(name);
+      } catch (reason) {
+        setError(normalizeTauriError(reason));
+        return undefined;
+      } finally {
+        setChecking(false);
+      }
+    },
+    [],
+  );
   return { check, checking, error };
 }

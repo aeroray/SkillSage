@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,15 +18,18 @@ import {
 import {
   ArrowRight,
   Download,
+  FileText,
   FolderOpen,
   GitBranch,
   Library,
+  Link2,
   MoreHorizontal,
   RefreshCw,
   ScanSearch,
   Search,
   Store,
   Trash2,
+  Unlink2,
   Undo2,
   X,
 } from "lucide-react";
@@ -38,10 +41,7 @@ import { ImportDialog } from "../import/ImportDialog";
 import { GithubUrlInstallDialog } from "../store/GithubUrlInstallDialog";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import {
-  Card,
-  CardContent,
-} from "../../components/ui/card";
+import { Card, CardContent } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Dialog } from "../../components/ui/dialog";
 import {
@@ -63,13 +63,20 @@ import {
 } from "../../components/ui/select";
 import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
-import { openSkillDirectory, openSkillsRoot } from "../../features/skills/api";
+import {
+  openSkillDirectory,
+  openSkillsRoot,
+  searchLocalSkillMatches,
+} from "../../features/skills/api";
 import {
   useInstalledSkills,
   useSkillManagement,
   useSkillUpdates,
 } from "../../features/skills/hooks";
-import type { InstalledSkill } from "../../features/skills/types";
+import type {
+  InstalledSkill,
+  LocalSkillMatch,
+} from "../../features/skills/types";
 import {
   filterAndSortSkills,
   groupByAuthor,
@@ -86,9 +93,15 @@ function shortVersion(version: string) {
 
 function formatInstalledAt(value: string) {
   const numeric = Number(value);
-  const date = Number.isNaN(numeric) ? new Date(value) : new Date(numeric * 1000);
+  const date = Number.isNaN(numeric)
+    ? new Date(value)
+    : new Date(numeric * 1000);
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "numeric", day: "numeric" }).format(date);
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).format(date);
 }
 
 function SkillsLoadingState() {
@@ -114,9 +127,241 @@ function SkillsLoadingState() {
   );
 }
 
+function SkillDetailField({
+  label,
+  value,
+  wide = false,
+}: {
+  label: string;
+  value: string;
+  wide?: boolean;
+}) {
+  return (
+    <div className={wide ? "sm:col-span-2" : undefined}>
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-sm leading-6 text-foreground">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function SkillDetailContent({
+  skill,
+  skillsRoot,
+}: {
+  skill: InstalledSkill;
+  skillsRoot?: string;
+}) {
+  const skillPath = skill.skillPath
+    ? skill.skillPath
+    : skill.skillPath === ""
+      ? "仓库根目录"
+      : "未记录";
+  const installedAt =
+    formatInstalledAt(skill.installedAt) || skill.installedAt || "未记录";
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-start justify-between gap-4 border-b border-border pb-5">
+        <p className="min-w-0 text-sm leading-6 text-muted-foreground">
+          {skill.description || "暂无描述"}
+        </p>
+        <Badge variant={skill.claudeDistributed ? "success" : "muted"}>
+          {skill.claudeDistributed ? "已分发至 Claude" : "未分发至 Claude"}
+        </Badge>
+      </div>
+      <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
+        <SkillDetailField label="技能 ID" value={skill.id || "未记录"} />
+        <SkillDetailField label="作者" value={skill.owner || "未记录"} />
+        <SkillDetailField label="仓库" value={skill.repo || "未记录"} />
+        <SkillDetailField label="来源路径" value={skillPath} />
+        <SkillDetailField
+          label="技能根目录"
+          value={skillsRoot || "未记录"}
+          wide
+        />
+        <SkillDetailField label="来源" value={skill.source || "未记录"} wide />
+        <SkillDetailField
+          label="当前版本"
+          value={skill.currentVersion || "未记录"}
+        />
+        <SkillDetailField label="安装时间" value={installedAt} />
+        <SkillDetailField
+          label="内容指纹"
+          value={skill.currentHash || "未记录"}
+          wide
+        />
+      </dl>
+      <section>
+        <h3 className="text-sm font-semibold text-foreground">版本历史</h3>
+        {skill.versionHistory.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">暂无版本记录。</p>
+        ) : (
+          <div className="mt-3 flex flex-col gap-3">
+            {skill.versionHistory
+              .slice()
+              .reverse()
+              .map((version) => (
+                <div
+                  className="rounded-md border border-border p-3"
+                  key={`${version.commit}-${version.hash}`}
+                >
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <SkillDetailField label="版本提交" value={version.commit} />
+                    <SkillDetailField
+                      label="记录时间"
+                      value={version.recordedAt}
+                    />
+                    <SkillDetailField
+                      label="内容指纹"
+                      value={version.hash}
+                      wide
+                    />
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function LocalMatchContent({
+  candidates,
+  error,
+  loading,
+  onLink,
+  pending,
+  skill,
+}: {
+  candidates: LocalSkillMatch[];
+  error?: string;
+  loading: boolean;
+  onLink: (candidate: LocalSkillMatch) => void;
+  pending: boolean;
+  skill: InstalledSkill;
+}) {
+  const exactCandidate = candidates.find(
+    (candidate) => candidate.verification === "exact",
+  );
+  const verificationLabel = (candidate: LocalSkillMatch) => {
+    if (candidate.verification === "exact") return "内容完全一致";
+    if (candidate.verification === "different") return "最新内容不一致";
+    return "内容未验证";
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="rounded-md bg-muted/50 p-4">
+        <p className="text-sm leading-6 text-muted-foreground">
+          将为“{skill.name}”搜索名称匹配的远端技能。确认匹配后只更新来源记录，
+          不会替换本地文件。
+        </p>
+      </div>
+      {loading ? (
+        <div
+          aria-busy="true"
+          className="flex items-center gap-3 text-sm text-muted-foreground"
+        >
+          <Search className="size-4 animate-pulse" />
+          正在查询远端技能…
+        </div>
+      ) : error ? (
+        <p className="text-sm leading-6 text-destructive" role="alert">
+          {error}
+        </p>
+      ) : candidates.length === 0 ? (
+        <p className="text-sm leading-6 text-muted-foreground">
+          未找到名称完全匹配的远端技能。
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3" role="list">
+          <div
+            className={`rounded-md border p-4 ${
+              exactCandidate
+                ? "border-success/30 bg-success/5"
+                : "border-border bg-muted/50"
+            }`}
+          >
+            <p className="text-sm font-medium text-foreground">
+              {exactCandidate
+                ? "已找到与本地目录内容完全一致的候选，已优先置顶。"
+                : "未找到当前内容完全一致的候选，请根据作者和仓库来源确认。"}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              名称相同不代表来源相同；“内容完全一致”只表示当前远端目录指纹一致。
+            </p>
+          </div>
+          <p className="text-sm font-medium text-foreground">
+            找到 {candidates.length} 个候选
+          </p>
+          {candidates.map((candidate, index) => (
+            <div
+              className="flex items-start justify-between gap-4 rounded-md border border-border p-4"
+              key={candidate.id}
+              role="listitem"
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {candidate.name}
+                  </p>
+                  {index === 0 ? (
+                    <Badge
+                      className="border-primary/30 text-primary"
+                      variant="outline"
+                    >
+                      {exactCandidate ? "推荐" : "优先候选"}
+                    </Badge>
+                  ) : null}
+                  <Badge
+                    variant={
+                      candidate.verification === "exact" ? "success" : "muted"
+                    }
+                  >
+                    {verificationLabel(candidate)}
+                  </Badge>
+                </div>
+                <p className="mt-2 truncate text-xs text-muted-foreground">
+                  仓库 {candidate.source} · 路径 {candidate.slug}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  安装量 {candidate.installs.toLocaleString("zh-CN")}
+                  {candidate.remoteVersion
+                    ? ` · 远端版本 ${shortVersion(candidate.remoteVersion)}`
+                    : " · 暂无远端版本"}
+                </p>
+                {candidate.remoteHash ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    远端指纹 {candidate.remoteHash.slice(0, 12)}
+                  </p>
+                ) : null}
+              </div>
+              <Button
+                disabled={pending}
+                onClick={() => onLink(candidate)}
+                size="sm"
+                variant="outline"
+              >
+                <Link2 data-icon="inline-start" />
+                {index === 0 && exactCandidate ? "采用推荐" : "匹配"}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SkillRow({
   checked,
   onCheck,
+  onClaudeDistribution,
+  onDetail,
+  onOnlineMatch,
   onHistory,
   onOpenDirectory,
   onUninstall,
@@ -127,6 +372,9 @@ function SkillRow({
 }: {
   checked: boolean;
   onCheck: (checked: boolean) => void;
+  onClaudeDistribution: (skill: InstalledSkill) => void;
+  onDetail: (skill: InstalledSkill) => void;
+  onOnlineMatch: (skill: InstalledSkill) => void;
   onHistory: (skill: InstalledSkill) => void;
   onOpenDirectory: (skill: InstalledSkill) => void;
   onUninstall: (skill: InstalledSkill) => void;
@@ -177,6 +425,22 @@ function SkillRow({
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
             <DropdownMenuItem
+              disabled={pending}
+              onSelect={() => onDetail(skill)}
+            >
+              <FileText />
+              查看技能详情
+            </DropdownMenuItem>
+            {skill.source.startsWith("local://") ? (
+              <DropdownMenuItem
+                disabled={pending}
+                onSelect={() => onOnlineMatch(skill)}
+              >
+                <Search />
+                在线匹配
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem
               disabled={pending || !updateAvailable}
               onSelect={() => onUpdate(skill)}
             >
@@ -196,6 +460,13 @@ function SkillRow({
             >
               <FolderOpen />
               打开技能目录
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={pending}
+              onSelect={() => onClaudeDistribution(skill)}
+            >
+              {skill.claudeDistributed ? <Unlink2 /> : <Link2 />}
+              {skill.claudeDistributed ? "取消分发" : "分发至 Claude"}
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={pending}
@@ -229,8 +500,7 @@ export function SkillsPage() {
   } = useSkillUpdates();
   const refreshPage = useCallback(() => {
     void refreshSkills();
-    void checkUpdatesNow();
-  }, [checkUpdatesNow, refreshSkills]);
+  }, [refreshSkills]);
   const rescanSkills = useCallback(() => {
     void refreshSkills();
   }, [refreshSkills]);
@@ -240,6 +510,14 @@ export function SkillsPage() {
   const [status, setStatus] = useState<SkillStatusFilter>("all");
   const [sort, setSort] = useState<SkillSortMode>("recent");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [detailSkill, setDetailSkill] = useState<InstalledSkill>();
+  const [matchSkill, setMatchSkill] = useState<InstalledSkill>();
+  const [matchCandidates, setMatchCandidates] = useState<LocalSkillMatch[]>(
+    [],
+  );
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [matchError, setMatchError] = useState<string>();
+  const matchRequestId = useRef(0);
   const [historySkill, setHistorySkill] = useState<InstalledSkill>();
   const [uninstallTarget, setUninstallTarget] = useState<InstalledSkill>();
   const [githubUrlOpen, setGithubUrlOpen] = useState(false);
@@ -251,10 +529,6 @@ export function SkillsPage() {
       current.filter((id) => skills.some((skill) => skill.id === id)),
     );
   }, [skills]);
-
-  useEffect(() => {
-    if (!skillsLoading) void checkUpdatesNow();
-  }, [checkUpdatesNow, skillsLoading]);
 
   const updatesById = useMemo(
     () => new Map(updates.map((item) => [item.id, item])),
@@ -287,7 +561,8 @@ export function SkillsPage() {
     : selectedFilteredCount > 0
       ? "indeterminate"
       : false;
-  const pageError = directoryError ?? skillsError ?? updatesError ?? management.error;
+  const pageError =
+    directoryError ?? skillsError ?? updatesError ?? management.error;
   const openDirectory = async (skill: InstalledSkill) => {
     setDirectoryError(undefined);
     try {
@@ -304,6 +579,34 @@ export function SkillsPage() {
   const checkSelectedUpdates = () => {
     if (selectedIds.length === 0) return;
     void checkUpdatesNow(undefined, selectedIds);
+  };
+  const closeOnlineMatch = () => {
+    matchRequestId.current += 1;
+    setMatchSkill(undefined);
+    setMatchCandidates([]);
+    setMatchError(undefined);
+  };
+  const openOnlineMatch = async (skill: InstalledSkill) => {
+    const requestId = ++matchRequestId.current;
+    setMatchSkill(skill);
+    setMatchCandidates([]);
+    setMatchError(undefined);
+    setMatchLoading(true);
+    try {
+      const result = await searchLocalSkillMatches(skill.id);
+      if (requestId === matchRequestId.current) setMatchCandidates(result);
+    } catch (reason) {
+      if (requestId === matchRequestId.current) {
+        setMatchError(normalizeTauriError(reason));
+      }
+    } finally {
+      if (requestId === matchRequestId.current) setMatchLoading(false);
+    }
+  };
+  const confirmOnlineMatch = async (candidate: LocalSkillMatch) => {
+    if (!matchSkill) return;
+    const result = await management.linkLocalSkill(matchSkill.id, candidate.id);
+    if (result) closeOnlineMatch();
   };
   const openRootDirectory = async () => {
     if (!skillsRoot) return;
@@ -435,7 +738,10 @@ export function SkillsPage() {
                     )
                   }
                 />
-                <Label className="font-normal text-muted-foreground" htmlFor="select-filtered">
+                <Label
+                  className="font-normal text-muted-foreground"
+                  htmlFor="select-filtered"
+                >
                   全选
                 </Label>
               </div>
@@ -531,6 +837,14 @@ export function SkillsPage() {
                                   : current.filter((id) => id !== skill.id),
                               )
                             }
+                            onClaudeDistribution={(item) =>
+                              void management.setClaudeDistribution(
+                                item.id,
+                                !item.claudeDistributed,
+                              )
+                            }
+                            onDetail={setDetailSkill}
+                            onOnlineMatch={(item) => void openOnlineMatch(item)}
                             onHistory={setHistorySkill}
                             onOpenDirectory={(item) => void openDirectory(item)}
                             onUninstall={setUninstallTarget}
@@ -553,6 +867,33 @@ export function SkillsPage() {
         </CardContent>
       </Card>
 
+      <Dialog
+        description="查询远端候选，匹配后保留本地文件并启用更新。"
+        onClose={closeOnlineMatch}
+        open={Boolean(matchSkill)}
+        title={`在线匹配：${matchSkill?.name ?? "技能"}`}
+      >
+        {matchSkill ? (
+          <LocalMatchContent
+            candidates={matchCandidates}
+            error={matchError ?? management.error}
+            loading={matchLoading}
+            onLink={(candidate) => void confirmOnlineMatch(candidate)}
+            pending={Boolean(management.pending)}
+            skill={matchSkill}
+          />
+        ) : null}
+      </Dialog>
+      <Dialog
+        description="查看本地已安装信息，不会联网。"
+        onClose={() => setDetailSkill(undefined)}
+        open={Boolean(detailSkill)}
+        title={detailSkill?.name ?? "技能详情"}
+      >
+        {detailSkill ? (
+          <SkillDetailContent skill={detailSkill} skillsRoot={skillsRoot} />
+        ) : null}
+      </Dialog>
       <Dialog
         description="查看版本记录并回滚。"
         onClose={() => setHistorySkill(undefined)}
@@ -602,7 +943,8 @@ export function SkillsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>确认卸载</AlertDialogTitle>
             <AlertDialogDescription>
-              会删除这个技能在共享目录中的文件夹和记录，所有读取该目录的 AI 工具会立即失去这个技能，不影响其他技能。
+              会删除这个技能在共享目录中的文件夹和记录，所有读取该目录的 AI
+              工具会立即失去这个技能，不影响其他技能。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <p className="text-sm leading-6 text-muted-foreground">

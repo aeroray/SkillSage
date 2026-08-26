@@ -170,6 +170,7 @@ mod tests {
                 installed_at: "1".into(),
                 version_history: Vec::new(),
                 description: "Remote".into(),
+                claude_distributed: false,
             },
         );
         lock.skills.insert(
@@ -186,6 +187,7 @@ mod tests {
                 installed_at: "1".into(),
                 version_history: Vec::new(),
                 description: "Local".into(),
+                claude_distributed: false,
             },
         );
         lockfile::save(&layout, &lock).expect("save lock");

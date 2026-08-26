@@ -114,6 +114,7 @@ pub async fn import_package(
             installed_at: String::new(),
             version_history: Vec::new(),
             description: entry.description.clone(),
+            claude_distributed: false,
         };
         let files = match remote::fetch_at(&record, &entry.current_version).await {
             Ok(files) => files,

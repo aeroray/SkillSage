@@ -64,6 +64,18 @@ const previewSkills = [
 ];
 
 let previewSettings = { proxyUrl: "", githubTokenConfigured: false };
+const previewClaudeDistributed = new Set<string>();
+const previewMatchedLocalSkills = new Set<string>();
+const previewLocalMatch = {
+  id: "vercel-labs/agent-skills/local-research",
+  slug: "local-research",
+  name: "local-research",
+  source: "vercel-labs/agent-skills",
+  installs: 12800,
+  sourceType: "github",
+  url: "https://www.skills.sh/vercel-labs/agent-skills/local-research",
+  isDuplicate: false,
+};
 
 export function isBrowserPreview() {
   return (
@@ -112,20 +124,73 @@ async function previewInvoke<T>(
     } as T;
   }
   if (command === "list_installed" || command === "refresh_installed") {
+    const localMatched = previewMatchedLocalSkills.has("local/local-research");
     return {
       skillsRoot: "C:\\Users\\PC\\.agents\\skills",
-      skills: previewSkills.slice(0, 3).map((skill, index) => ({
-        id: skill.id,
-        name: skill.name,
-        owner: skill.source.split("/")[0],
-        repo: skill.source.split("/")[1],
-        source: "skills.sh",
-        description: "用于界面设计和组件规范。",
-        currentVersion: index === 0 ? "a1b2c3d" : "d4e5f6a",
-        currentHash: "9c8b7a6d5e4f3210",
-        installedAt: "2026-08-18T08:00:00Z",
-        versionHistory: [],
-      })),
+      skills: [
+        ...previewSkills.slice(0, 3).map((skill, index) => ({
+          id: skill.id,
+          name: skill.name,
+          owner: skill.source.split("/")[0],
+          repo: skill.source.split("/")[1],
+          source: "skills.sh",
+          description: "用于界面设计和组件规范。",
+          currentVersion: index === 0 ? "a1b2c3d" : "d4e5f6a",
+          currentHash: "9c8b7a6d5e4f3210",
+          installedAt: "2026-08-18T08:00:00Z",
+          versionHistory: [],
+          claudeDistributed: previewClaudeDistributed.has(skill.id),
+        })),
+        {
+          id: localMatched ? previewLocalMatch.id : "local/local-research",
+          name: "local-research",
+          owner: localMatched ? "vercel-labs" : "local",
+          repo: localMatched ? "agent-skills" : "local",
+          skillPath: localMatched ? previewLocalMatch.slug : undefined,
+          source: localMatched
+            ? previewLocalMatch.url
+            : "local://local-research",
+          description: "用于整理本地研究资料。",
+          currentVersion: localMatched ? "local-match" : "local",
+          currentHash: "preview-local",
+          installedAt: "2026-08-18T08:00:00Z",
+          versionHistory: [],
+          claudeDistributed: false,
+        },
+      ],
+    } as T;
+  }
+  if (command === "set_claude_distribution") {
+    const skillId = String(args?.skillId ?? "");
+    if (args?.distributed) previewClaudeDistributed.add(skillId);
+    else previewClaudeDistributed.delete(skillId);
+    return undefined as T;
+  }
+  if (command === "search_local_skill_matches") {
+    return [
+      {
+        ...previewLocalMatch,
+        verification: "exact",
+        remoteVersion: "preview-remote",
+        remoteHash: "preview-local",
+      },
+    ] as T;
+  }
+  if (command === "link_local_skill") {
+    previewMatchedLocalSkills.add(String(args?.skillId ?? ""));
+    return {
+      id: previewLocalMatch.id,
+      name: "local-research",
+      owner: "vercel-labs",
+      repo: "agent-skills",
+      skillPath: previewLocalMatch.slug,
+      source: previewLocalMatch.url,
+      description: "用于整理本地研究资料。",
+      currentVersion: "local-match",
+      currentHash: "preview-local",
+      installedAt: "2026-08-18T08:00:00Z",
+      versionHistory: [],
+      claudeDistributed: false,
     } as T;
   }
   if (command === "get_settings") return previewSettings as T;

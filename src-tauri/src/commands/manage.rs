@@ -1,9 +1,13 @@
 use serde::Serialize;
 use tauri::State;
 
-use crate::core::lifecycle::{remote, rollback, uninstall, update};
+use crate::core::claude;
+use crate::core::github::client::GitHubClient;
+use crate::core::lifecycle::{match_local, remote, rollback, uninstall, update};
 use crate::core::paths;
 use crate::core::repo::{layout::RepoLayout, lockfile::SkillLockRecord};
+use crate::core::settings;
+use crate::core::store::client::StoreClient;
 use crate::error::SkillsageError;
 use crate::state::AppState;
 
@@ -19,9 +23,17 @@ pub async fn list_installed() -> Result<InstalledSkillsList, SkillsageError> {
     tokio::task::spawn_blocking(|| {
         let layout = RepoLayout::from_user_home()?;
         let lock = crate::core::repo::lockfile::load(&layout)?;
+        let skills = lock
+            .skills
+            .into_values()
+            .map(|mut record| {
+                record.claude_distributed = claude::is_distributed_at(&layout, &record)?;
+                Ok(record)
+            })
+            .collect::<Result<Vec<_>, SkillsageError>>()?;
         Ok(InstalledSkillsList {
             skills_root: paths::display(&layout.public_root),
-            skills: lock.skills.into_values().collect(),
+            skills,
         })
     })
     .await
@@ -31,6 +43,61 @@ pub async fn list_installed() -> Result<InstalledSkillsList, SkillsageError> {
 #[tauri::command]
 pub async fn refresh_installed() -> Result<InstalledSkillsList, SkillsageError> {
     list_installed().await
+}
+
+#[tauri::command]
+pub async fn search_local_skill_matches(
+    skill_id: String,
+) -> Result<Vec<match_local::LocalSkillMatch>, SkillsageError> {
+    let (name, local_hash) = tokio::task::spawn_blocking(move || {
+        let layout = RepoLayout::from_user_home()?;
+        let record = load_record(&layout, &skill_id)?;
+        if !record.source.starts_with("local://") {
+            return Err(SkillsageError::InvalidSkill(
+                "只有本地来源技能可以进行在线匹配".into(),
+            ));
+        }
+        let destination = layout.skill(&record.name)?;
+        let local_hash = crate::core::repo::lockfile::content_hash(&destination)?;
+        Ok::<_, SkillsageError>((record.name, local_hash))
+    })
+    .await
+    .map_err(|error| SkillsageError::Task(error.to_string()))??;
+    let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
+    let store_client = StoreClient::new_with_proxy(runtime.proxy_url.clone())?;
+    let github_client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
+    match_local::search(&store_client, &github_client, &name, &local_hash).await
+}
+
+#[tauri::command]
+pub async fn link_local_skill(
+    skill_id: String,
+    remote_skill_id: String,
+    state: State<'_, AppState>,
+) -> Result<SkillLockRecord, SkillsageError> {
+    let layout = RepoLayout::from_user_home()?;
+    let name = {
+        let layout = layout.clone();
+        let skill_id = skill_id.clone();
+        tokio::task::spawn_blocking(move || {
+            let record = load_record(&layout, &skill_id)?;
+            if !record.source.starts_with("local://") {
+                return Err(SkillsageError::InvalidSkill(
+                    "只有本地来源技能可以进行在线匹配".into(),
+                ));
+            }
+            Ok::<_, SkillsageError>(record.name)
+        })
+        .await
+        .map_err(|error| SkillsageError::Task(error.to_string()))??
+    };
+    let runtime = settings::load_runtime(&layout)?;
+    let client = StoreClient::new_with_proxy(runtime.proxy_url)?;
+    let candidate = match_local::find(&client, &name, &remote_skill_id).await?;
+    let _write_guard = state.write_lock.lock().await;
+    tokio::task::spawn_blocking(move || match_local::link_at(&layout, &skill_id, &candidate))
+        .await
+        .map_err(|error| SkillsageError::Task(error.to_string()))?
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -146,6 +213,21 @@ pub async fn uninstall_skill(
     tokio::task::spawn_blocking(move || uninstall::uninstall(&skill_id))
         .await
         .map_err(|error| SkillsageError::Task(error.to_string()))?
+}
+
+#[tauri::command]
+pub async fn set_claude_distribution(
+    skill_id: String,
+    distributed: bool,
+    state: State<'_, AppState>,
+) -> Result<SkillLockRecord, SkillsageError> {
+    let _write_guard = state.write_lock.lock().await;
+    tokio::task::spawn_blocking(move || {
+        let layout = RepoLayout::from_user_home()?;
+        claude::set_at(&layout, &skill_id, distributed)
+    })
+    .await
+    .map_err(|error| SkillsageError::Task(error.to_string()))?
 }
 
 fn load_record(layout: &RepoLayout, skill_id: &str) -> Result<SkillLockRecord, SkillsageError> {

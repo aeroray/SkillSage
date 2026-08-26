@@ -17,10 +17,8 @@ pub struct VersionRecord {
 }
 
 /// The lockfile format version this build reads and writes. Bumped from 1 to
-/// 2 alongside the single-shared-directory redesign: `distributed_to` is
-/// gone, and a version-1 file on disk is deliberately NOT parsed (see
-/// `load()`) rather than silently accepted with a missing field — this is
-/// the clean-slate cutover, not a migration.
+/// 2 alongside the single-shared-directory redesign; Claude compatibility
+/// distribution is an optional field within this format.
 pub const LOCK_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +41,8 @@ pub struct SkillLockRecord {
     pub version_history: Vec<VersionRecord>,
     #[serde(default)]
     pub description: String,
+    #[serde(default)]
+    pub claude_distributed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

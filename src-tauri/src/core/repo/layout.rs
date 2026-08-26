@@ -5,25 +5,40 @@ use crate::error::SkillsageError;
 /// `root` holds only SkillSage's own bookkeeping (lock file, snapshots, tmp,
 /// settings) — never skill content. `public_root` is the single shared
 /// directory (`~/.agents/skills`) every skill installs into directly, flat,
-/// with no per-tool or per-owner subfolders. Every AI tool that reads skills
-/// from this location reads real content here, not a link into `root`.
+/// with no per-owner subfolders. Claude's compatibility links live below
+/// `claude_root` and always point back to a real directory in `public_root`.
 #[derive(Debug, Clone)]
 pub struct RepoLayout {
     pub root: PathBuf,
     pub public_root: PathBuf,
+    pub claude_root: PathBuf,
 }
 
 impl RepoLayout {
     pub fn from_user_home() -> Result<Self, SkillsageError> {
         let home = dirs::home_dir().ok_or(SkillsageError::HomeDirectoryUnavailable)?;
-        Ok(Self::new(
+        Ok(Self::with_claude_root(
             home.join(".skillsage"),
             home.join(".agents").join("skills"),
+            home.join(".claude").join("skills"),
         ))
     }
 
+    #[cfg(test)]
     pub fn new(root: PathBuf, public_root: PathBuf) -> Self {
-        Self { root, public_root }
+        let claude_root = root
+            .parent()
+            .map(|parent| parent.join(".claude").join("skills"))
+            .unwrap_or_else(|| PathBuf::from(".claude").join("skills"));
+        Self::with_claude_root(root, public_root, claude_root)
+    }
+
+    pub fn with_claude_root(root: PathBuf, public_root: PathBuf, claude_root: PathBuf) -> Self {
+        Self {
+            root,
+            public_root,
+            claude_root,
+        }
     }
 
     /// The single flat path a skill named `name` lives at. Replaces the old
@@ -31,6 +46,10 @@ impl RepoLayout {
     /// skill, regardless of source, lands at the same kind of path now.
     pub fn skill(&self, name: &str) -> Result<PathBuf, SkillsageError> {
         Ok(self.public_root.join(safe_component(name)?))
+    }
+
+    pub fn claude_skill(&self, name: &str) -> Result<PathBuf, SkillsageError> {
+        Ok(self.claude_root.join(safe_component(name)?))
     }
 
     pub fn lock_root(&self) -> PathBuf {
@@ -67,6 +86,10 @@ impl RepoLayout {
         // writes outside the intended home directory.
         ensure_directory_chain(&self.public_root, "公共技能目录")?;
         Ok(())
+    }
+
+    pub fn ensure_claude_root(&self) -> Result<(), SkillsageError> {
+        ensure_directory_chain(&self.claude_root, "Claude 技能目录")
     }
 }
 
