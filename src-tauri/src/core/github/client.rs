@@ -98,6 +98,22 @@ impl GitHubClient {
         Ok(response.sha)
     }
 
+    pub async fn get_latest_commit_sha(
+        &self,
+        owner: &str,
+        repo: &str,
+    ) -> Result<String, SkillsageError> {
+        validate_component(owner, "owner")?;
+        validate_component(repo, "repository")?;
+        let url = format!("https://api.github.com/repos/{owner}/{repo}/commits?per_page=1");
+        let commits: Vec<GitHubCommit> = self.get_json(&url).await?;
+        commits
+            .into_iter()
+            .next()
+            .map(|commit| commit.sha)
+            .ok_or_else(|| SkillsageError::InvalidStoreData("GitHub 仓库没有提交记录".into()))
+    }
+
     async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T, SkillsageError> {
         let response = self
             .authorized(self.http.get(url))

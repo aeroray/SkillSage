@@ -40,9 +40,14 @@ export function searchLocalSkillMatches(skillId: string) {
   });
 }
 
-export function linkLocalSkill(skillId: string, remoteSkillId: string) {
+export function linkLocalSkill(
+  skillId: string,
+  remoteSkillId: string,
+  remoteVersion?: string,
+) {
   return invokeCommand<InstalledSkill>("link_local_skill", {
     remoteSkillId,
+    remoteVersion,
     skillId,
   });
 }

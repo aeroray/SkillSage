@@ -16,7 +16,17 @@ export type InstalledSkill = {
 };
 
 export type LocalSkillMatch = SkillSearchResult & {
-  verification: "exact" | "different" | "unavailable" | string;
+  verification:
+    | "exact"
+    | "different"
+    | "rate-limited"
+    | "auth-required"
+    | "not-found"
+    | "path-not-found"
+    | "network-error"
+    | "too-large"
+    | "unavailable"
+    | string;
   remoteVersion?: string;
   remoteHash?: string;
 };

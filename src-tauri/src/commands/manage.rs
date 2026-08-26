@@ -49,7 +49,7 @@ pub async fn refresh_installed() -> Result<InstalledSkillsList, SkillsageError> 
 pub async fn search_local_skill_matches(
     skill_id: String,
 ) -> Result<Vec<match_local::LocalSkillMatch>, SkillsageError> {
-    let (name, local_hash) = tokio::task::spawn_blocking(move || {
+    let (name, local_hash, local_skill_md) = tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
         let record = load_record(&layout, &skill_id)?;
         if !record.source.starts_with("local://") {
@@ -59,20 +59,29 @@ pub async fn search_local_skill_matches(
         }
         let destination = layout.skill(&record.name)?;
         let local_hash = crate::core::repo::lockfile::content_hash(&destination)?;
-        Ok::<_, SkillsageError>((record.name, local_hash))
+        let local_skill_md = std::fs::read_to_string(destination.join("SKILL.md"))?;
+        Ok::<_, SkillsageError>((record.name, local_hash, local_skill_md))
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))??;
     let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
     let store_client = StoreClient::new_with_proxy(runtime.proxy_url.clone())?;
     let github_client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
-    match_local::search(&store_client, &github_client, &name, &local_hash).await
+    match_local::search(
+        &store_client,
+        &github_client,
+        &name,
+        &local_hash,
+        &local_skill_md,
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn link_local_skill(
     skill_id: String,
     remote_skill_id: String,
+    remote_version: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<SkillLockRecord, SkillsageError> {
     let layout = RepoLayout::from_user_home()?;
@@ -95,9 +104,11 @@ pub async fn link_local_skill(
     let client = StoreClient::new_with_proxy(runtime.proxy_url)?;
     let candidate = match_local::find(&client, &name, &remote_skill_id).await?;
     let _write_guard = state.write_lock.lock().await;
-    tokio::task::spawn_blocking(move || match_local::link_at(&layout, &skill_id, &candidate))
-        .await
-        .map_err(|error| SkillsageError::Task(error.to_string()))?
+    tokio::task::spawn_blocking(move || {
+        match_local::link_at(&layout, &skill_id, &candidate, remote_version.as_deref())
+    })
+    .await
+    .map_err(|error| SkillsageError::Task(error.to_string()))?
 }
 
 #[derive(Debug, Clone, Serialize)]

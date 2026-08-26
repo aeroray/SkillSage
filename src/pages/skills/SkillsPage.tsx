@@ -22,6 +22,7 @@ import {
   FolderOpen,
   GitBranch,
   Library,
+  LoaderCircle,
   Link2,
   MoreHorizontal,
   RefreshCw,
@@ -48,7 +49,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuLabel,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { Input } from "../../components/ui/input";
@@ -63,6 +66,7 @@ import {
 } from "../../components/ui/select";
 import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
+import { useToast } from "../../components/ui/toast-context";
 import {
   openSkillDirectory,
   openSkillsRoot,
@@ -249,8 +253,20 @@ function LocalMatchContent({
   const verificationLabel = (candidate: LocalSkillMatch) => {
     if (candidate.verification === "exact") return "内容完全一致";
     if (candidate.verification === "different") return "最新内容不一致";
+    if (candidate.verification === "rate-limited") return "GitHub 请求受限";
+    if (candidate.verification === "auth-required") return "需要 GitHub Token";
+    if (candidate.verification === "not-found") return "仓库不可访问";
+    if (candidate.verification === "path-not-found") return "技能路径不存在";
+    if (candidate.verification === "network-error") return "网络暂时不可用";
+    if (candidate.verification === "too-large") return "远端目录过大";
     return "内容未验证";
   };
+  const rateLimited = candidates.some(
+    (candidate) => candidate.verification === "rate-limited",
+  );
+  const hasUnverifiedCandidate = candidates.some(
+    (candidate) => !["exact", "different"].includes(candidate.verification),
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -293,6 +309,17 @@ function LocalMatchContent({
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               名称相同不代表来源相同；“内容完全一致”只表示当前远端目录指纹一致。
             </p>
+            {rateLimited ? (
+              <p className="mt-2 text-xs leading-5 text-destructive">
+                GitHub API
+                已达到当前请求上限，验证已停止。请稍后重试，或在设置中配置
+                GitHub Token。
+              </p>
+            ) : hasUnverifiedCandidate ? (
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                未完成验证的候选不会允许直接绑定，请先处理网络、权限或路径问题。
+              </p>
+            ) : null}
           </div>
           <p className="text-sm font-medium text-foreground">
             找到 {candidates.length} 个候选
@@ -340,13 +367,20 @@ function LocalMatchContent({
                 ) : null}
               </div>
               <Button
-                disabled={pending}
+                disabled={
+                  pending ||
+                  !["exact", "different"].includes(candidate.verification)
+                }
                 onClick={() => onLink(candidate)}
                 size="sm"
                 variant="outline"
               >
                 <Link2 data-icon="inline-start" />
-                {index === 0 && exactCandidate ? "采用推荐" : "匹配"}
+                {!["exact", "different"].includes(candidate.verification)
+                  ? "无法验证"
+                  : index === 0 && exactCandidate
+                    ? "采用推荐"
+                    : "匹配"}
               </Button>
             </div>
           ))}
@@ -357,6 +391,7 @@ function LocalMatchContent({
 }
 
 function SkillRow({
+  checking,
   checked,
   onCheck,
   onClaudeDistribution,
@@ -368,8 +403,10 @@ function SkillRow({
   onUpdate,
   pending,
   skill,
+  updating,
   updateAvailable,
 }: {
+  checking: boolean;
   checked: boolean;
   onCheck: (checked: boolean) => void;
   onClaudeDistribution: (skill: InstalledSkill) => void;
@@ -381,110 +418,136 @@ function SkillRow({
   onUpdate: (skill: InstalledSkill) => void;
   pending: boolean;
   skill: InstalledSkill;
+  updating: boolean;
   updateAvailable: boolean;
 }) {
+  const busy = pending || checking;
+
   return (
-    <div className="grid gap-4 border-b border-border px-5 py-4 last:border-b-0 lg:grid-cols-[auto_minmax(0,1fr)_180px_150px_auto] lg:items-center">
-      <Checkbox
-        aria-label={`选择 ${skill.name}`}
-        checked={checked}
-        onCheckedChange={(value) => onCheck(value === true)}
-      />
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="truncate text-sm font-medium text-foreground">
-            {skill.name}
-          </h3>
-          <Badge variant="muted">{skill.owner}</Badge>
-          {updateAvailable ? <Badge variant="success">有更新</Badge> : null}
+    <div aria-busy={busy} className="relative">
+      <div
+        className={`grid gap-4 border-b border-border px-5 py-4 last:border-b-0 transition-[filter,opacity] duration-200 lg:grid-cols-[auto_minmax(0,1fr)_180px_150px_auto] lg:items-center ${
+          busy ? "pointer-events-none select-none blur-[2px] opacity-60" : ""
+        }`}
+      >
+        <Checkbox
+          aria-label={`选择 ${skill.name}`}
+          checked={checked}
+          onCheckedChange={(value) => onCheck(value === true)}
+        />
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="truncate text-sm font-medium text-foreground">
+              {skill.name}
+            </h3>
+            <Badge variant="muted">{skill.owner}</Badge>
+            {updateAvailable ? <Badge variant="success">有更新</Badge> : null}
+          </div>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {skill.description || "暂无描述"}
+          </p>
         </div>
-        <p className="mt-1 truncate text-xs text-muted-foreground">
-          {skill.description || "暂无描述"}
-        </p>
-      </div>
-      <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground">
-        <p>{sourceLabel(skill.source)}</p>
-        <p>安装于 {formatInstalledAt(skill.installedAt)}</p>
-      </div>
-      <div className="text-xs text-muted-foreground">
-        <p className="font-medium text-foreground">
-          版本 {shortVersion(skill.currentVersion)}
-        </p>
-        <p className="mt-1">指纹 {skill.currentHash.slice(0, 10)}</p>
-      </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            aria-label={`打开 ${skill.name} 操作菜单`}
-            size="icon"
-            variant="ghost"
-          >
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              disabled={pending}
-              onSelect={() => onDetail(skill)}
+        <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground">
+          <p>{sourceLabel(skill.source)}</p>
+          <p>安装于 {formatInstalledAt(skill.installedAt)}</p>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">
+            版本 {shortVersion(skill.currentVersion)}
+          </p>
+          <p className="mt-1">指纹 {skill.currentHash.slice(0, 10)}</p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              aria-label={`打开 ${skill.name} 操作菜单`}
+              disabled={busy}
+              size="icon"
+              variant="ghost"
             >
-              <FileText />
-              查看技能详情
-            </DropdownMenuItem>
-            {skill.source.startsWith("local://") ? (
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>
+              {skill.claudeDistributed ? "已分发至 Claude" : "未分发至 Claude"}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
               <DropdownMenuItem
                 disabled={pending}
-                onSelect={() => onOnlineMatch(skill)}
+                onSelect={() => onDetail(skill)}
               >
-                <Search />
-                在线匹配
+                <FileText />
+                查看技能详情
               </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuItem
-              disabled={pending || !updateAvailable}
-              onSelect={() => onUpdate(skill)}
-            >
-              <Download />
-              {updateAvailable ? "更新" : "已是最新"}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={pending || skill.versionHistory.length === 0}
-              onSelect={() => onHistory(skill)}
-            >
-              <Undo2 />
-              版本历史
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={pending}
-              onSelect={() => onOpenDirectory(skill)}
-            >
-              <FolderOpen />
-              打开技能目录
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={pending}
-              onSelect={() => onClaudeDistribution(skill)}
-            >
-              {skill.claudeDistributed ? <Unlink2 /> : <Link2 />}
-              {skill.claudeDistributed ? "取消分发" : "分发至 Claude"}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={pending}
-              onSelect={() => onUninstall(skill)}
-              variant="destructive"
-            >
-              <Trash2 />
-              卸载
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+              {skill.source.startsWith("local://") ? (
+                <DropdownMenuItem
+                  disabled={pending}
+                  onSelect={() => onOnlineMatch(skill)}
+                >
+                  <Search />
+                  在线匹配
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                disabled={pending || !updateAvailable}
+                onSelect={() => onUpdate(skill)}
+              >
+                <Download />
+                {updateAvailable ? "更新" : "已是最新"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={pending || skill.versionHistory.length === 0}
+                onSelect={() => onHistory(skill)}
+              >
+                <Undo2 />
+                版本历史
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={pending}
+                onSelect={() => onOpenDirectory(skill)}
+              >
+                <FolderOpen />
+                打开技能目录
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={pending}
+                onSelect={() => onClaudeDistribution(skill)}
+              >
+                {skill.claudeDistributed ? <Unlink2 /> : <Link2 />}
+                {skill.claudeDistributed
+                  ? "取消分发至 Claude"
+                  : "分发至 Claude"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={pending}
+                onSelect={() => onUninstall(skill)}
+                variant="destructive"
+              >
+                <Trash2 />
+                卸载
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {busy ? (
+        <div
+          className="absolute inset-0 flex items-center justify-center gap-2 bg-card/45 text-xs font-medium text-muted-foreground"
+          role="status"
+        >
+          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+          {checking ? "检查更新中" : updating ? "更新中" : "处理中"}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 export function SkillsPage() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const {
     error: skillsError,
     loading: skillsLoading,
@@ -495,6 +558,7 @@ export function SkillsPage() {
   const {
     check: checkUpdatesNow,
     checking: updatesChecking,
+    checkingIds: updateCheckingIds,
     error: updatesError,
     updates,
   } = useSkillUpdates();
@@ -512,9 +576,7 @@ export function SkillsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [detailSkill, setDetailSkill] = useState<InstalledSkill>();
   const [matchSkill, setMatchSkill] = useState<InstalledSkill>();
-  const [matchCandidates, setMatchCandidates] = useState<LocalSkillMatch[]>(
-    [],
-  );
+  const [matchCandidates, setMatchCandidates] = useState<LocalSkillMatch[]>([]);
   const [matchLoading, setMatchLoading] = useState(false);
   const [matchError, setMatchError] = useState<string>();
   const matchRequestId = useRef(0);
@@ -576,9 +638,26 @@ export function SkillsPage() {
     await management.uninstall(uninstallTarget.id);
     setUninstallTarget(undefined);
   };
-  const checkSelectedUpdates = () => {
+  const checkSelectedUpdates = async () => {
     if (selectedIds.length === 0) return;
-    void checkUpdatesNow(undefined, selectedIds);
+    const result = await checkUpdatesNow(undefined, selectedIds);
+    if (result === undefined) {
+      toast({
+        description: "请稍后重试。",
+        title: "检查更新失败",
+        variant: "error",
+      });
+      return;
+    }
+    const updateCount = result.filter((item) => item.updateAvailable).length;
+    toast({
+      description:
+        updateCount > 0
+          ? `发现 ${updateCount} 个技能有更新。`
+          : "所有选中技能均已是最新。",
+      title: updateCount > 0 ? "发现可用更新" : "检查完成",
+      variant: updateCount > 0 ? "info" : "success",
+    });
   };
   const closeOnlineMatch = () => {
     matchRequestId.current += 1;
@@ -605,7 +684,11 @@ export function SkillsPage() {
   };
   const confirmOnlineMatch = async (candidate: LocalSkillMatch) => {
     if (!matchSkill) return;
-    const result = await management.linkLocalSkill(matchSkill.id, candidate.id);
+    const result = await management.linkLocalSkill(
+      matchSkill.id,
+      candidate.id,
+      candidate.remoteVersion,
+    );
     if (result) closeOnlineMatch();
   };
   const openRootDirectory = async () => {
@@ -769,7 +852,7 @@ export function SkillsPage() {
               </div>
               <Button
                 disabled={selectedIds.length === 0 || updatesChecking}
-                onClick={checkSelectedUpdates}
+                onClick={() => void checkSelectedUpdates()}
                 variant="secondary"
               >
                 <RefreshCw data-icon="inline-start" />
@@ -828,6 +911,7 @@ export function SkillsPage() {
                       <div>
                         {ownerSkills.map((skill) => (
                           <SkillRow
+                            checking={updateCheckingIds.includes(skill.id)}
                             checked={selectedIds.includes(skill.id)}
                             key={skill.id}
                             onCheck={(checked) =>
@@ -851,6 +935,10 @@ export function SkillsPage() {
                             onUpdate={(item) => void management.update(item.id)}
                             pending={management.pending === skill.id}
                             skill={skill}
+                            updating={
+                              management.pendingAction?.skillId === skill.id &&
+                              management.pendingAction.kind === "update"
+                            }
                             updateAvailable={
                               updatesById.get(skill.id)?.updateAvailable ??
                               false

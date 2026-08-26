@@ -151,7 +151,7 @@ async function previewInvoke<T>(
             ? previewLocalMatch.url
             : "local://local-research",
           description: "用于整理本地研究资料。",
-          currentVersion: localMatched ? "local-match" : "local",
+          currentVersion: localMatched ? "preview-remote" : "local",
           currentHash: "preview-local",
           installedAt: "2026-08-18T08:00:00Z",
           versionHistory: [],
@@ -186,7 +186,7 @@ async function previewInvoke<T>(
       skillPath: previewLocalMatch.slug,
       source: previewLocalMatch.url,
       description: "用于整理本地研究资料。",
-      currentVersion: "local-match",
+      currentVersion: String(args?.remoteVersion ?? "unverified"),
       currentHash: "preview-local",
       installedAt: "2026-08-18T08:00:00Z",
       versionHistory: [],

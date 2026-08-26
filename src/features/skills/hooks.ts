@@ -145,12 +145,15 @@ export function useUninstallSkill(onCompleted: () => void) {
 export function useSkillUpdates() {
   const [updates, setUpdates] = useState<UpdateInfo[]>([]);
   const [checking, setChecking] = useState(false);
+  const [checkingIds, setCheckingIds] = useState<string[]>([]);
   const [error, setError] = useState<string>();
   const requestId = useRef(0);
 
   const check = useCallback(async (skillId?: string, skillIds?: string[]) => {
     const currentRequest = ++requestId.current;
+    const requestedIds = skillIds ?? (skillId ? [skillId] : []);
     setChecking(true);
+    setCheckingIds(requestedIds);
     setError(undefined);
     try {
       const result = await checkUpdates(skillId, skillIds);
@@ -159,22 +162,41 @@ export function useSkillUpdates() {
     } catch (reason) {
       if (currentRequest === requestId.current)
         setError(normalizeTauriError(reason));
-      return [];
+      return undefined;
     } finally {
-      if (currentRequest === requestId.current) setChecking(false);
+      if (currentRequest === requestId.current) {
+        setChecking(false);
+        setCheckingIds([]);
+      }
     }
   }, []);
 
-  return { check, checking, error, updates };
+  return { check, checking, checkingIds, error, updates };
 }
+
+type SkillManagementAction =
+  | "claude"
+  | "match"
+  | "rollback"
+  | "uninstall"
+  | "update";
 
 export function useSkillManagement(onCompleted: () => void) {
   const [pending, setPending] = useState<string>();
+  const [pendingAction, setPendingAction] = useState<{
+    kind: SkillManagementAction;
+    skillId: string;
+  }>();
   const [error, setError] = useState<string>();
 
   const run = useCallback(
-    async <T>(skillId: string, action: () => Promise<T>) => {
+    async <T>(
+      skillId: string,
+      action: () => Promise<T>,
+      kind: SkillManagementAction,
+    ) => {
       setPending(skillId);
+      setPendingAction({ kind, skillId });
       setError(undefined);
       try {
         const result = await action();
@@ -185,6 +207,7 @@ export function useSkillManagement(onCompleted: () => void) {
         return undefined;
       } finally {
         setPending(undefined);
+        setPendingAction(undefined);
       }
     },
     [onCompleted],
@@ -193,18 +216,32 @@ export function useSkillManagement(onCompleted: () => void) {
   return {
     error,
     pending,
+    pendingAction,
     rollback: (skillId: string, version: string) =>
-      run(skillId, () => rollbackSkill(skillId, version)),
+      run(skillId, () => rollbackSkill(skillId, version), "rollback"),
     uninstall: (skillId: string) =>
-      run(skillId, async () => {
-        await uninstallSkill(skillId);
-        return true;
-      }),
+      run(
+        skillId,
+        async () => {
+          await uninstallSkill(skillId);
+          return true;
+        },
+        "uninstall",
+      ),
     setClaudeDistribution: (skillId: string, distributed: boolean) =>
-      run(skillId, () => setClaudeDistribution(skillId, distributed)),
-    linkLocalSkill: (skillId: string, remoteSkillId: string) =>
-      run(skillId, () => linkLocalSkillApi(skillId, remoteSkillId)),
-    update: (skillId: string) => run(skillId, () => updateSkill(skillId)),
+      run(skillId, () => setClaudeDistribution(skillId, distributed), "claude"),
+    linkLocalSkill: (
+      skillId: string,
+      remoteSkillId: string,
+      remoteVersion?: string,
+    ) =>
+      run(
+        skillId,
+        () => linkLocalSkillApi(skillId, remoteSkillId, remoteVersion),
+        "match",
+      ),
+    update: (skillId: string) =>
+      run(skillId, () => updateSkill(skillId), "update"),
   };
 }
 

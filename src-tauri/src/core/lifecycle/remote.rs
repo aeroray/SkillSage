@@ -1,4 +1,7 @@
-use crate::core::github::{client::GitHubClient, download::fetch_skill_files};
+use crate::core::github::{
+    client::GitHubClient,
+    download::{fetch_skill_files, fetch_skill_files_with_probe},
+};
 use crate::core::repo::lockfile::SkillLockRecord;
 use crate::core::store::models::SkillFile;
 use crate::core::{repo::layout::RepoLayout, settings};
@@ -16,13 +19,31 @@ pub async fn fetch_latest_with_client(
     client: &GitHubClient,
     record: &SkillLockRecord,
 ) -> Result<(String, Vec<SkillFile>), SkillsageError> {
-    let branch = client
-        .get_default_branch(&record.owner, &record.repo)
-        .await?;
     let commit = client
-        .get_commit_sha(&record.owner, &record.repo, &branch)
+        .get_latest_commit_sha(&record.owner, &record.repo)
         .await?;
     let files = fetch_at_commit(record, &client, &commit).await?;
+    Ok((commit, files))
+}
+
+pub async fn fetch_latest_with_probe(
+    client: &GitHubClient,
+    record: &SkillLockRecord,
+    local_skill_md: &str,
+) -> Result<(String, Option<Vec<SkillFile>>), SkillsageError> {
+    let commit = client
+        .get_latest_commit_sha(&record.owner, &record.repo)
+        .await?;
+    let skill_path = record.skill_path.as_deref().unwrap_or(&record.name);
+    let files = fetch_skill_files_with_probe(
+        client,
+        &record.owner,
+        &record.repo,
+        &commit,
+        skill_path,
+        local_skill_md,
+    )
+    .await?;
     Ok((commit, files))
 }
 
