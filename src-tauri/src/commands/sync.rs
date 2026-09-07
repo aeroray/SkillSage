@@ -112,7 +112,6 @@ pub async fn import_package(
             current_version: entry.current_version.clone(),
             current_hash: entry.current_hash.clone(),
             installed_at: String::new(),
-            version_history: Vec::new(),
             description: entry.description.clone(),
             claude_distributed: false,
         };

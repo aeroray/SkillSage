@@ -52,14 +52,19 @@ Reason: Forward slashes can be parsed as `mklink` switches, while manually embed
 Decision: The desktop store uses the public legacy `/api/search` endpoint and skills.sh HTML pages, then retrieves install files from the linked GitHub repository.
 Reason: The newer `/api/v1` endpoints require Vercel OIDC authentication, which is not available to a standalone desktop app before Phase 5 settings support.
 
-## Phase 4 version and rollback strategy
+## Phase 4 version and rollback strategy (superseded 2026-09-07)
 
 Decision: A live store install resolves the repository default branch to a Git commit SHA before downloading files; updates record the previous commit/hash in `versionHistory`, snapshot the central skill directory, and atomically replace it. Rollback first fetches the requested commit and falls back to the matching local snapshot when the remote is unavailable.
 Reason: Commit SHAs make update checks deterministic, while snapshots keep rollback usable during transient network failures.
 
+## Skill update metadata without rollback history
+
+Decision: SkillSage keeps only the current remote Git revision and content hash for update checks and sync reconstruction; it no longer stores version history, snapshots, or exposes rollback.
+Reason: Skill rollback is out of scope, while the current revision remains necessary to identify remote content for updates and metadata-only sync import.
+
 ## Phase 4 management writes
 
-Decision: Update, rollback, uninstall, distribution adjustment, and batch distribution remain Rust-owned commands behind the shared `AppState` async write lock; read-only listing and update checks do not take that lock.
+Decision: Update, uninstall, distribution adjustment, and batch distribution remain Rust-owned commands behind the shared `AppState` async write lock; read-only listing and update checks do not take that lock.
 Reason: Centralizing filesystem mutation preserves the single-source-of-truth and prevents concurrent lockfile/link races.
 
 ## Frontend component baseline
@@ -101,7 +106,7 @@ Reason: User feedback needs actionable diagnostics without exposing GitHub crede
 
 ## 2026-08-18 - Review hardening
 
-Decision: Managed repository roots, lock/settings files, imported trees, snapshots, and distribution links reject symlink-like paths unless the path is an explicitly owned link being removed.
+Decision: Managed repository roots, lock/settings files, imported trees, and distribution links reject symlink-like paths unless the path is an explicitly owned link being removed.
 Reason: A desktop skill manager handles user-controlled filesystem paths; following an unexpected link could read, overwrite, or delete data outside SkillSage's repository.
 
 Decision: Conflict takeover is treated as a reversible transaction and rolls back adopted entities when later installation or distribution steps fail.
@@ -187,7 +192,7 @@ Reason: Audit problems remain discoverable without interrupting the detail flow 
 ## 2026-08-20 - Explicit remote matching for local skills
 
 Decision: A `local://` installed skill may be explicitly matched to a validated skills.sh/GitHub candidate from its row menu. Matching verifies candidate current content against the local directory fingerprint, ranks exact matches first, and returns the verification state plus repository metadata. Linking updates only the lock record's remote metadata and preserves the existing local directory and content hash; it does not download or replace files.
-Reason: Skills installed by CLI or copied into the shared directory should be able to enter the existing update and rollback chain without silently changing local content. A name match is not proof of identical contents, while an exact current-directory fingerprint is strong evidence and gives the user a fast, explainable recommendation. Search and linking remain user-triggered.
+Reason: Skills installed by CLI or copied into the shared directory should be able to enter the existing update chain without silently changing local content. A name match is not proof of identical contents, while an exact current-directory fingerprint is strong evidence and gives the user a fast, explainable recommendation. Search and linking remain user-triggered.
 
 ## 2026-08-20 - Single shared public-directory install model (supersedes per-tool distribution)
 
@@ -197,7 +202,7 @@ Reason: Investigation found the promised per-tool isolation doesn't hold in prac
 Decision: Tool detection, the 5-tool registry, and general "adjust distribution"/"batch distribution" functionality remain removed; only the explicit Claude compatibility link is supported per skill.
 Reason: Claude needs a separate readable path, but a narrow adapter avoids recreating a general tool-management subsystem.
 
-Decision: `~/.skillsage/` shrinks to lock file, snapshots, tmp, and settings only — never skill content. `SkillLockRecord.distributed_to` is removed; `RepoLayout` gained `public_root` and one flat `skill(name)` accessor replacing the owner-namespaced `remote_skill()`/flat `local_skill()` split.
+Decision: `~/.skillsage/` contains only the lock file, tmp, and settings — never skill content or version snapshots. `SkillLockRecord.distributed_to` is removed; `RepoLayout` gained `public_root` and one flat `skill(name)` accessor replacing the owner-namespaced `remote_skill()`/flat `local_skill()` split.
 Reason: Keeps the private directory's purpose to "our own bookkeeping," matching the new single-content-location model.
 
 Decision: Clean-slate cutover — no automatic migration of existing `~/.skillsage/` content or old per-tool symlinks. The lockfile format version bumped to 2; a pre-cutover (version 1) lock file is treated as absent rather than partially parsed. Old data is left on disk, untracked.

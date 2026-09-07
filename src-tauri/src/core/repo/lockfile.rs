@@ -8,14 +8,6 @@ use crate::error::SkillsageError;
 
 use super::{atomic, layout::RepoLayout};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VersionRecord {
-    pub commit: String,
-    pub hash: String,
-    pub recorded_at: String,
-}
-
 /// The lockfile format version this build reads and writes. Bumped from 1 to
 /// 2 alongside the single-shared-directory redesign; Claude compatibility
 /// distribution is an optional field within this format.
@@ -37,8 +29,6 @@ pub struct SkillLockRecord {
     pub current_hash: String,
     #[serde(alias = "installed_at")]
     pub installed_at: String,
-    #[serde(default, alias = "version_history")]
-    pub version_history: Vec<VersionRecord>,
     #[serde(default)]
     pub description: String,
     #[serde(default)]

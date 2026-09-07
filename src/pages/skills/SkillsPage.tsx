@@ -31,7 +31,6 @@ import {
   Store,
   Trash2,
   Unlink2,
-  Undo2,
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -91,8 +90,8 @@ import {
 } from "../../features/skills/selectors";
 import { normalizeTauriError } from "../../lib/tauri";
 
-function shortVersion(version: string) {
-  return version.length > 12 ? version.slice(0, 8) : version;
+function shortRevision(revision: string) {
+  return revision.length > 12 ? revision.slice(0, 8) : revision;
 }
 
 function formatInstalledAt(value: string) {
@@ -187,7 +186,7 @@ function SkillDetailContent({
         />
         <SkillDetailField label="来源" value={skill.source || "未记录"} wide />
         <SkillDetailField
-          label="当前版本"
+          label="来源提交"
           value={skill.currentVersion || "未记录"}
         />
         <SkillDetailField label="安装时间" value={installedAt} />
@@ -197,37 +196,6 @@ function SkillDetailContent({
           wide
         />
       </dl>
-      <section>
-        <h3 className="text-sm font-semibold text-foreground">版本历史</h3>
-        {skill.versionHistory.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">暂无版本记录。</p>
-        ) : (
-          <div className="mt-3 flex flex-col gap-3">
-            {skill.versionHistory
-              .slice()
-              .reverse()
-              .map((version) => (
-                <div
-                  className="rounded-md border border-border p-3"
-                  key={`${version.commit}-${version.hash}`}
-                >
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <SkillDetailField label="版本提交" value={version.commit} />
-                    <SkillDetailField
-                      label="记录时间"
-                      value={version.recordedAt}
-                    />
-                    <SkillDetailField
-                      label="内容指纹"
-                      value={version.hash}
-                      wide
-                    />
-                  </div>
-                </div>
-              ))}
-          </div>
-        )}
-      </section>
     </div>
   );
 }
@@ -357,7 +325,7 @@ function LocalMatchContent({
                 <p className="mt-1 text-xs text-muted-foreground">
                   安装量 {candidate.installs.toLocaleString("zh-CN")}
                   {candidate.remoteVersion
-                    ? ` · 远端版本 ${shortVersion(candidate.remoteVersion)}`
+                    ? ` · 远端提交 ${shortRevision(candidate.remoteVersion)}`
                     : " · 暂无远端版本"}
                 </p>
                 {candidate.remoteHash ? (
@@ -397,7 +365,6 @@ function SkillRow({
   onClaudeDistribution,
   onDetail,
   onOnlineMatch,
-  onHistory,
   onOpenDirectory,
   onUninstall,
   onUpdate,
@@ -412,7 +379,6 @@ function SkillRow({
   onClaudeDistribution: (skill: InstalledSkill) => void;
   onDetail: (skill: InstalledSkill) => void;
   onOnlineMatch: (skill: InstalledSkill) => void;
-  onHistory: (skill: InstalledSkill) => void;
   onOpenDirectory: (skill: InstalledSkill) => void;
   onUninstall: (skill: InstalledSkill) => void;
   onUpdate: (skill: InstalledSkill) => void;
@@ -453,7 +419,7 @@ function SkillRow({
         </div>
         <div className="text-xs text-muted-foreground">
           <p className="font-medium text-foreground">
-            版本 {shortVersion(skill.currentVersion)}
+            提交 {shortRevision(skill.currentVersion)}
           </p>
           <p className="mt-1">指纹 {skill.currentHash.slice(0, 10)}</p>
         </div>
@@ -496,13 +462,6 @@ function SkillRow({
               >
                 <Download />
                 {updateAvailable ? "更新" : "已是最新"}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={pending || skill.versionHistory.length === 0}
-                onSelect={() => onHistory(skill)}
-              >
-                <Undo2 />
-                版本历史
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={pending}
@@ -580,7 +539,6 @@ export function SkillsPage() {
   const [matchLoading, setMatchLoading] = useState(false);
   const [matchError, setMatchError] = useState<string>();
   const matchRequestId = useRef(0);
-  const [historySkill, setHistorySkill] = useState<InstalledSkill>();
   const [uninstallTarget, setUninstallTarget] = useState<InstalledSkill>();
   const [githubUrlOpen, setGithubUrlOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -720,7 +678,7 @@ export function SkillsPage() {
             </Button>
           </div>
         }
-        description="查看、更新、回滚已安装技能。"
+        description="查看和更新已安装技能。"
         title="我的技能"
       />
       <ErrorBanner
@@ -929,7 +887,6 @@ export function SkillsPage() {
                             }
                             onDetail={setDetailSkill}
                             onOnlineMatch={(item) => void openOnlineMatch(item)}
-                            onHistory={setHistorySkill}
                             onOpenDirectory={(item) => void openDirectory(item)}
                             onUninstall={setUninstallTarget}
                             onUpdate={(item) => void management.update(item.id)}
@@ -981,47 +938,6 @@ export function SkillsPage() {
         {detailSkill ? (
           <SkillDetailContent skill={detailSkill} skillsRoot={skillsRoot} />
         ) : null}
-      </Dialog>
-      <Dialog
-        description="查看版本记录并回滚。"
-        onClose={() => setHistorySkill(undefined)}
-        open={Boolean(historySkill)}
-        title="版本历史"
-      >
-        <div className="flex flex-col gap-3">
-          {(historySkill?.versionHistory ?? [])
-            .slice()
-            .reverse()
-            .map((version) => (
-              <div
-                className="flex items-center justify-between gap-4 rounded-md border border-border p-3"
-                key={`${version.commit}-${version.hash}`}
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">
-                    {shortVersion(version.commit)}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    内容指纹 {version.hash.slice(0, 12)} · {version.recordedAt}
-                  </p>
-                </div>
-                <Button
-                  disabled={Boolean(management.pending)}
-                  onClick={async () => {
-                    if (!historySkill) return;
-                    const result = await management.rollback(
-                      historySkill.id,
-                      version.commit,
-                    );
-                    if (result) setHistorySkill(undefined);
-                  }}
-                  variant="outline"
-                >
-                  回滚
-                </Button>
-              </div>
-            ))}
-        </div>
       </Dialog>
       <AlertDialog
         onOpenChange={(open) => !open && setUninstallTarget(undefined)}

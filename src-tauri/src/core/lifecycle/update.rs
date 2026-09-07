@@ -76,44 +76,6 @@ pub fn apply_at(
     }
 
     let destination = layout.skill(&current.name)?;
-    let snapshot = layout
-        .snapshot_skill(&current.name)?
-        .join(&current.current_hash);
-    match std::fs::symlink_metadata(&snapshot) {
-        Ok(metadata) if metadata.file_type().is_symlink() => {
-            let _ = atomic::remove_dir(&temp_dir);
-            return Err(SkillsageError::Io(format!(
-                "快照路径不能是符号链接: {}",
-                snapshot.display()
-            )));
-        }
-        Ok(metadata) if !metadata.is_dir() => {
-            let _ = atomic::remove_dir(&temp_dir);
-            return Err(SkillsageError::Io(format!(
-                "快照路径不是目录: {}",
-                snapshot.display()
-            )));
-        }
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            if let Some(parent) = snapshot.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            if let Err(error) = copy_dir(&destination, &snapshot) {
-                let mut recovery = atomic::remove_dir(&snapshot).err();
-                if let Err(error) = atomic::remove_dir(&temp_dir) {
-                    if recovery.is_none() {
-                        recovery = Some(error);
-                    }
-                }
-                return Err(with_recovery(error, recovery));
-            }
-        }
-        Err(error) => {
-            let _ = atomic::remove_dir(&temp_dir);
-            return Err(error.into());
-        }
-    }
     let replacement = match atomic::replace_dir_transaction(&temp_dir, &destination) {
         Ok(replacement) => replacement,
         Err(error) => {
@@ -126,23 +88,12 @@ pub fn apply_at(
     next.current_version = version;
     next.current_hash = next_hash;
     next.description = parsed.manifest.description;
-    if !next
-        .version_history
-        .iter()
-        .any(|entry| entry.commit == current.current_version && entry.hash == current.current_hash)
-    {
-        next.version_history.push(lockfile::VersionRecord {
-            commit: current.current_version,
-            hash: current.current_hash,
-            recorded_at: lockfile::unix_timestamp(),
-        });
-    }
     lock.skills.insert(skill_id.to_string(), next.clone());
     if let Err(error) = lockfile::save(layout, &lock) {
         return Err(with_recovery(error, replacement.rollback().err()));
     }
     if let Err(error) = replacement.finalize() {
-        tracing::warn!(error = %error, "无法清理更新时生成的旧版本备份");
+        tracing::warn!(error = %error, "无法清理更新时生成的旧目录备份");
     }
     Ok(next)
 }
@@ -152,22 +103,6 @@ fn with_recovery(primary: SkillsageError, recovery: Option<SkillsageError>) -> S
         Some(recovery) => SkillsageError::Io(format!("{primary}; 恢复失败: {recovery}")),
         None => primary,
     }
-}
-
-pub fn snapshot_files_at(
-    layout: &RepoLayout,
-    record: &lockfile::SkillLockRecord,
-    hash: &str,
-) -> Result<Vec<SkillFile>, SkillsageError> {
-    let root = layout.snapshot_skill(&record.name)?.join(hash);
-    match std::fs::symlink_metadata(&root) {
-        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
-        _ => return Err(SkillsageError::PathNotFound(root)),
-    }
-    let mut files = Vec::new();
-    collect_snapshot_files(&root, &root, &mut files)?;
-    files.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(files)
 }
 
 fn materialize(
@@ -236,78 +171,17 @@ fn safe_relative_path(value: &str) -> Result<std::path::PathBuf, SkillsageError>
     Ok(result)
 }
 
-fn copy_dir(source: &std::path::Path, destination: &std::path::Path) -> Result<(), SkillsageError> {
-    match std::fs::symlink_metadata(source) {
-        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
-        _ => return Err(SkillsageError::PathNotFound(source.to_path_buf())),
-    }
-    for entry in std::fs::read_dir(source)? {
-        let entry = entry?;
-        let source_path = entry.path();
-        let metadata = std::fs::symlink_metadata(&source_path)?;
-        if metadata.file_type().is_symlink() {
-            return Err(SkillsageError::Io(format!(
-                "技能快照不能包含符号链接: {}",
-                source_path.display()
-            )));
-        }
-        let destination_path = destination.join(entry.file_name());
-        if metadata.is_dir() {
-            std::fs::create_dir_all(&destination_path)?;
-            copy_dir(&source_path, &destination_path)?;
-        } else {
-            if let Some(parent) = destination_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::copy(source_path, destination_path)?;
-        }
-    }
-    Ok(())
-}
-
-fn collect_snapshot_files(
-    root: &std::path::Path,
-    current: &std::path::Path,
-    files: &mut Vec<SkillFile>,
-) -> Result<(), SkillsageError> {
-    for entry in std::fs::read_dir(current)? {
-        let entry = entry?;
-        let path = entry.path();
-        let metadata = std::fs::symlink_metadata(&path)?;
-        if metadata.file_type().is_symlink() {
-            return Err(SkillsageError::Io(format!(
-                "技能快照不能包含符号链接: {}",
-                path.display()
-            )));
-        }
-        if metadata.is_dir() {
-            collect_snapshot_files(root, &path, files)?;
-        } else if metadata.is_file() {
-            let relative = path
-                .strip_prefix(root)
-                .map_err(|error| SkillsageError::Io(error.to_string()))?
-                .to_string_lossy()
-                .replace('\\', "/");
-            files.push(SkillFile {
-                path: relative,
-                contents: std::fs::read_to_string(path)?,
-            });
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
 
-    use super::{apply_at, snapshot_files_at};
+    use super::apply_at;
     use crate::core::lifecycle::install::install_test_skill_at;
     use crate::core::repo::{layout::RepoLayout, lockfile};
     use crate::core::store::models::SkillFile;
 
     #[test]
-    fn update_records_history_and_creates_snapshot() {
+    fn update_replaces_content_without_history_or_snapshots() {
         let root = std::env::temp_dir().join(format!("skillsage-update-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create shared test parent");
@@ -333,10 +207,11 @@ license: MIT
         .expect("update should succeed");
 
         assert_eq!(record.current_version, "commit-v2");
-        assert_eq!(record.version_history.len(), 1);
-        let snapshot = snapshot_files_at(&layout, &record, &record.version_history[0].hash)
-            .expect("snapshot should be readable");
-        assert_eq!(snapshot[0].path, "SKILL.md");
+        assert_eq!(
+            record.current_hash,
+            lockfile::content_hash(&layout.skill(&record.name).unwrap()).unwrap()
+        );
+        assert!(!layout.lock_root().join("snapshots").exists());
         assert_eq!(
             lockfile::load(&layout)
                 .expect("lock should load")

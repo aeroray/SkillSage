@@ -14,7 +14,6 @@ function skill(overrides: Partial<InstalledSkill>): InstalledSkill {
     currentVersion: "abc123",
     currentHash: "hash",
     installedAt: "0",
-    versionHistory: [],
     claudeDistributed: false,
     ...overrides,
   };

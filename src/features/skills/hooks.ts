@@ -6,7 +6,6 @@ import {
   installSkill,
   linkLocalSkill as linkLocalSkillApi,
   refreshInstalled,
-  rollbackSkill,
   setClaudeDistribution,
   uninstallSkill,
   updateSkill,
@@ -177,7 +176,6 @@ export function useSkillUpdates() {
 type SkillManagementAction =
   | "claude"
   | "match"
-  | "rollback"
   | "uninstall"
   | "update";
 
@@ -217,8 +215,6 @@ export function useSkillManagement(onCompleted: () => void) {
     error,
     pending,
     pendingAction,
-    rollback: (skillId: string, version: string) =>
-      run(skillId, () => rollbackSkill(skillId, version), "rollback"),
     uninstall: (skillId: string) =>
       run(
         skillId,

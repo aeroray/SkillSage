@@ -31,7 +31,6 @@ pub fn run() {
             commands::manage::link_local_skill,
             commands::manage::check_updates,
             commands::manage::update_skill,
-            commands::manage::rollback_skill,
             commands::manage::uninstall_skill,
             commands::manage::set_claude_distribution,
             commands::store::get_leaderboard,

@@ -11,7 +11,6 @@ export type InstalledSkill = {
   currentVersion: string;
   currentHash: string;
   installedAt: string;
-  versionHistory: VersionRecord[];
   claudeDistributed: boolean;
 };
 
@@ -29,12 +28,6 @@ export type LocalSkillMatch = SkillSearchResult & {
     | string;
   remoteVersion?: string;
   remoteHash?: string;
-};
-
-export type VersionRecord = {
-  commit: string;
-  hash: string;
-  recordedAt: string;
 };
 
 export type InstalledSkillsList = {

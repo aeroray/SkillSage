@@ -3,7 +3,7 @@ use tauri::State;
 
 use crate::core::claude;
 use crate::core::github::client::GitHubClient;
-use crate::core::lifecycle::{match_local, remote, rollback, uninstall, update};
+use crate::core::lifecycle::{match_local, remote, uninstall, update};
 use crate::core::paths;
 use crate::core::repo::{layout::RepoLayout, lockfile::SkillLockRecord};
 use crate::core::settings;
@@ -169,48 +169,6 @@ pub async fn update_skill(
     let (version, files) = remote::fetch_latest(&record).await?;
     let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || update::apply_at(&layout, &skill_id, version, files))
-        .await
-        .map_err(|error| SkillsageError::Task(error.to_string()))?
-}
-
-#[tauri::command]
-pub async fn rollback_skill(
-    skill_id: String,
-    version: String,
-    state: State<'_, AppState>,
-) -> Result<SkillLockRecord, SkillsageError> {
-    let layout = RepoLayout::from_user_home()?;
-    let record = load_record(&layout, &skill_id)?;
-    if !remote::is_remote_record(&record) {
-        return Err(SkillsageError::InvalidSkill(
-            "this skill does not have a remote rollback source".into(),
-        ));
-    }
-    let target = record
-        .version_history
-        .iter()
-        .find(|entry| entry.commit == version)
-        .cloned()
-        .ok_or_else(|| {
-            SkillsageError::InvalidSkill(
-                "requested rollback version is not in the skill history".into(),
-            )
-        })?;
-    let files = match remote::fetch_at(&record, &version).await {
-        Ok(files) => files,
-        Err(_) => {
-            let fallback_layout = layout.clone();
-            let fallback_record = record.clone();
-            let fallback_hash = target.hash.clone();
-            tokio::task::spawn_blocking(move || {
-                update::snapshot_files_at(&fallback_layout, &fallback_record, &fallback_hash)
-            })
-            .await
-            .map_err(|error| SkillsageError::Task(error.to_string()))??
-        }
-    };
-    let _write_guard = state.write_lock.lock().await;
-    tokio::task::spawn_blocking(move || rollback::apply_at(&layout, &skill_id, version, files))
         .await
         .map_err(|error| SkillsageError::Task(error.to_string()))?
 }

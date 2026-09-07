@@ -226,7 +226,6 @@ pub fn import_at(
             current_version: "local".into(),
             current_hash: current_hash.clone(),
             installed_at: lockfile::unix_timestamp(),
-            version_history: Vec::new(),
             description: parsed.manifest.description.clone(),
             claude_distributed: false,
         },

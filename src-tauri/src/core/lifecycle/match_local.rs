@@ -125,7 +125,6 @@ async fn verify_candidate(
                 current_version: String::new(),
                 current_hash: local_hash.to_string(),
                 installed_at: String::new(),
-                version_history: Vec::new(),
                 description: String::new(),
                 claude_distributed: false,
             };

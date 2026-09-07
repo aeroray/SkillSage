@@ -12,17 +12,17 @@
   </p>
 </div>
 
-技匠（SkillSage）将 AI Agent 技能直接安装到各工具共用的 `~/.agents/skills/` 目录，并在本地维护版本、来源和快照信息。它适合需要统一安装、更新和维护技能的个人开发者与团队。
+技匠（SkillSage）将 AI Agent 技能直接安装到各工具共用的 `~/.agents/skills/` 目录，并在本地维护来源、提交和内容指纹信息。它适合需要统一安装、更新和维护技能的个人开发者与团队。
 
 > [!NOTE]
 > SkillSage 是桌面端软件，主窗口默认及最小尺寸为 `1200×800`，支持最大化，不面向移动端布局。
 
 ## 功能概览
 
-- **我的技能**：查看已安装技能，执行更新、回退、卸载和按选择检查更新。
+- **我的技能**：查看已安装技能，执行更新、卸载和按选择检查更新。
 - **技能商店**：搜索 skills.sh，查看技能详情，并从商店或 GitHub 安装技能。
 - **本地导入**：导入 `SKILL.md` 文件、技能目录，或包含单个技能目录的父目录。
-- **本地技能在线匹配**：对 `local://` 技能主动搜索 skills.sh 的名称匹配候选，并用本地目录指纹核对远端当前内容；完全一致的候选会优先推荐。确认后只链接远端来源记录，不替换现有本地文件，并启用后续更新与回滚。
+- **本地技能在线匹配**：对 `local://` 技能主动搜索 skills.sh 的名称匹配候选，并用本地目录指纹核对远端当前内容；完全一致的候选会优先推荐。确认后只链接远端来源记录，不替换现有本地文件，并启用后续更新。
 - **共享目录管理**：Cursor、GitHub Copilot、OpenAI Codex CLI 和 OpenCode 可直接读取 `~/.agents/skills/` 中的技能内容。
 - **Claude 兼容分发**：Claude Code 可在每个技能菜单中单独分发或取消分发，使用 `~/.claude/skills/<name>` 的目录链接读取同一份内容。
 - **采纳技能**：扫描 `~/.agents/skills/` 中未登记的真实技能目录，按 `SKILL.md` 名称安全采纳，并处理名称不一致或无效目录。
@@ -64,7 +64,7 @@ pnpm exec tauri build
 pnpm exec tauri build --debug --no-bundle
 ```
 
-### 版本维护
+### 应用版本
 
 应用版本以 [`package.json`](./package.json) 中的 `version` 为唯一来源。Tauri 配置直接读取该字段；Cargo 版本由以下命令同步生成：
 
@@ -93,14 +93,14 @@ SkillSage 将技能内容与管理数据分开保存：
 | 共享技能目录       | `~/.agents/skills/`                                 |
 | Claude 技能链接    | `~/.claude/skills/<name>`                           |
 | 技能锁定记录       | `~/.skillsage/lock/skill-lock.json`                 |
-| 更新快照与临时文件 | `~/.skillsage/lock/snapshots/`、`~/.skillsage/tmp/` |
+| 更新临时文件       | `~/.skillsage/tmp/`                                  |
 | 同步数据文件       | 用户在导出时选择的位置                              |
 | 代理配置           | `~/.skillsage/settings.json`                        |
 
 - 技能内容直接写入共享目录；只有用户明确选择 Claude 分发时，才会在 `~/.claude/skills/<name>` 创建指向共享目录的目录链接，不复制技能内容。
 - Claude 分发在 Windows 使用 directory junction，在 macOS 使用 symlink；取消分发或卸载时只删除 SkillSage 确认归属的链接。
 - 同步数据包含远程技能记录和非敏感应用设置；GitHub Token 使用 Windows 凭据管理器或 macOS Keychain 保存，不写入同步文件、设置文件或日志。
-- 远程更新按 Git 提交记录版本，更新前创建快照，网络不可用时可回退到本地快照。
+- 远程技能保留当前 Git 提交和内容指纹，用于检查更新以及在同步导入时恢复对应内容；不维护版本历史或本地快照。
 - 移除应用不会修改共享技能目录；如需删除技能，请在“我的技能”中单独卸载。
 
 ## 开发者指南
@@ -134,7 +134,7 @@ docs/
 └── memory/          # 项目长期约束与已确认决策
 ```
 
-安装、更新、回退、卸载、采纳和同步等文件系统写操作由 Rust 负责；前端通过 Tauri commands 调用后端能力。不要在前端或脚本中直接实现技能安装、采纳或卸载流程，也不要调用 `npx skills`。
+安装、更新、卸载、采纳和同步等文件系统写操作由 Rust 负责；前端通过 Tauri commands 调用后端能力。不要在前端或脚本中直接实现技能安装、采纳或卸载流程，也不要调用 `npx skills`。
 
 ### 常用检查
 
@@ -183,4 +183,4 @@ xattr -rd com.apple.quarantine /Applications/SkillSage.app
 
 - [跨平台 QA 指南](./docs/guides/cross-platform-qa.md)
 
-当前桌面端已覆盖商店、GitHub/本地导入、版本管理、设置、同步、技能采纳和冲突处理等核心流程，并采用单一共享技能目录模型。历史规格和设计草稿已移除，避免与实际代码形成两套标准。
+当前桌面端已覆盖商店、GitHub/本地导入、技能更新、设置、同步、技能采纳和冲突处理等核心流程，并采用单一共享技能目录模型。历史规格和设计草稿已移除，避免与实际代码形成两套标准。

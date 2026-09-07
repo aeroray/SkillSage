@@ -60,10 +60,6 @@ export function updateSkill(skillId: string) {
   return invokeCommand<InstalledSkill>("update_skill", { skillId });
 }
 
-export function rollbackSkill(skillId: string, version: string) {
-  return invokeCommand<InstalledSkill>("rollback_skill", { skillId, version });
-}
-
 export function checkInstallConflict(name: string) {
   return invokeCommand<PathConflict | undefined>("check_install_conflict", {
     name,

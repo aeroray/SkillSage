@@ -138,7 +138,6 @@ async function previewInvoke<T>(
           currentVersion: index === 0 ? "a1b2c3d" : "d4e5f6a",
           currentHash: "9c8b7a6d5e4f3210",
           installedAt: "2026-08-18T08:00:00Z",
-          versionHistory: [],
           claudeDistributed: previewClaudeDistributed.has(skill.id),
         })),
         {
@@ -154,7 +153,6 @@ async function previewInvoke<T>(
           currentVersion: localMatched ? "preview-remote" : "local",
           currentHash: "preview-local",
           installedAt: "2026-08-18T08:00:00Z",
-          versionHistory: [],
           claudeDistributed: false,
         },
       ],
@@ -189,7 +187,6 @@ async function previewInvoke<T>(
       currentVersion: String(args?.remoteVersion ?? "unverified"),
       currentHash: "preview-local",
       installedAt: "2026-08-18T08:00:00Z",
-      versionHistory: [],
       claudeDistributed: false,
     } as T;
   }

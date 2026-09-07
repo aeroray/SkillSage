@@ -154,7 +154,6 @@ mod tests {
             current_version: "local".into(),
             current_hash: "hash".into(),
             installed_at: "1".into(),
-            version_history: Vec::new(),
             description: String::new(),
             claude_distributed: false,
         }

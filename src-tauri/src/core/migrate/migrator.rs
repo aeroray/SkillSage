@@ -140,7 +140,6 @@ async fn prepare_adoption(
             current_version: candidate.version,
             current_hash: current_hash.clone(),
             installed_at: lockfile::unix_timestamp(),
-            version_history: Vec::new(),
             description: parsed.manifest.description,
             claude_distributed: false,
         },
@@ -154,7 +153,6 @@ async fn prepare_adoption(
             current_version: "adopted".into(),
             current_hash: current_hash.clone(),
             installed_at: lockfile::unix_timestamp(),
-            version_history: Vec::new(),
             description: parsed.manifest.description,
             claude_distributed: false,
         },
@@ -211,7 +209,6 @@ async fn verify_legacy_source(
         current_version: candidate.version.clone(),
         current_hash: String::new(),
         installed_at: String::new(),
-        version_history: Vec::new(),
         description: String::new(),
         claude_distributed: false,
     };

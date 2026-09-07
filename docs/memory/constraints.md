@@ -10,7 +10,7 @@
 - MemoryCustodian rules remain authoritative for loading, routing, budgets, compaction, and forgetting behavior.
 - The Phase 2 built-in fixture is test-only and offline; user-facing installation uses the live store, GitHub URL, or local import flows.
 - Until token/settings support exists, do not depend on skills.sh `/api/v1`; it requires Vercel OIDC. Use the public legacy search and HTML store pages for Phase 3.
-- Phase 4 remote update/rollback currently supports GitHub-backed skills.sh records only; the offline Phase 2 fixture is intentionally not updateable.
+- Remote update checks and updates support GitHub-backed skills.sh records only; the offline Phase 2 fixture is intentionally not updateable, and skill version history/rollback is not maintained.
 - Phase 5 local import accepts a `SKILL.md` file, a skill directory, or a directory containing exactly one immediate skill directory; symlinks are rejected and same-name remote records cannot be overwritten by local import.
 - Phase 5 GitHub URL installation supports repository, tree, blob, and raw `SKILL.md` URLs; repository URLs enumerate candidate skills from the resolved Git tree.
 - Phase 5 settings persist proxy configuration in `~/.skillsage/settings.json` and store the GitHub token in the OS keyring; request clients must receive both through the Rust settings layer.

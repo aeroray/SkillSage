@@ -2,8 +2,8 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::error::SkillsageError;
 
-/// `root` holds only SkillSage's own bookkeeping (lock file, snapshots, tmp,
-/// settings) — never skill content. `public_root` is the single shared
+/// `root` holds only SkillSage's own bookkeeping (lock file, tmp, settings) —
+/// never skill content. `public_root` is the single shared
 /// directory (`~/.agents/skills`) every skill installs into directly, flat,
 /// with no per-owner subfolders. Claude's compatibility links live below
 /// `claude_root` and always point back to a real directory in `public_root`.
@@ -64,14 +64,6 @@ impl RepoLayout {
         self.root.join("settings.json")
     }
 
-    pub fn snapshots_root(&self) -> PathBuf {
-        self.lock_root().join("snapshots")
-    }
-
-    pub fn snapshot_skill(&self, name: &str) -> Result<PathBuf, SkillsageError> {
-        Ok(self.snapshots_root().join(safe_component(name)?))
-    }
-
     pub fn tmp_root(&self) -> PathBuf {
         self.root.join("tmp")
     }
@@ -79,7 +71,6 @@ impl RepoLayout {
     pub fn ensure_roots(&self) -> Result<(), SkillsageError> {
         ensure_real_directory(&self.root, "中央仓库")?;
         ensure_real_directory(&self.lock_root(), "lock 目录")?;
-        ensure_real_directory(&self.snapshots_root(), "快照目录")?;
         ensure_real_directory(&self.tmp_root(), "临时目录")?;
         // Validate and create every missing ancestor one component at a time.
         // This prevents a user-controlled `.agents` symlink from redirecting

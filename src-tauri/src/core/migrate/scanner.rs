@@ -68,7 +68,7 @@ pub fn scan(layout: &RepoLayout) -> Result<AdoptScanResult, SkillsageError> {
 
         let display_path = paths::display(&path);
         // An embedded symlink would fail later anyway (content_hash/adopt_item
-        // reject them the same way import and snapshotting already do), so
+        // reject them the same way import and adoption already do), so
         // catch it at scan time and surface it as a clear warning instead of
         // a failure the user only sees after selecting "adopt".
         let item = if let Err(error) = validate_tree(&path) {
