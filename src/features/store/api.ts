@@ -12,3 +12,7 @@ export function getLeaderboard(range: LeaderboardRange) {
 export function getSkillDetail(skillId: string) {
   return invokeCommand<SkillDetail>("get_skill_detail", { skillId });
 }
+
+export function translateSkillDescription(text: string) {
+  return invokeCommand<string>("translate_skill_description", { text });
+}

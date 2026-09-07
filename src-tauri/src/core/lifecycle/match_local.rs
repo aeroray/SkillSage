@@ -336,6 +336,7 @@ mod tests {
             source: "owner/repo".into(),
             installs: 0,
             source_type: "github".into(),
+            description: None,
             install_url: None,
             url: "https://www.skills.sh/owner/repo/skillsage-phase2-test".into(),
             is_duplicate: false,

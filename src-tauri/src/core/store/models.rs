@@ -10,6 +10,8 @@ pub struct SkillSearchResult {
     pub installs: u64,
     pub source_type: String,
     #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
     pub install_url: Option<String>,
     pub url: String,
     #[serde(default)]
@@ -91,4 +93,6 @@ pub(crate) struct LegacySearchItem {
     pub name: String,
     pub installs: u64,
     pub source: String,
+    #[serde(default)]
+    pub description: Option<String>,
 }

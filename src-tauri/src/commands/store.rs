@@ -33,3 +33,10 @@ pub async fn get_skill_detail(
     let client = StoreClient::new_with_proxy(runtime.proxy_url)?;
     client.detail(&skill_id).await
 }
+
+#[tauri::command]
+pub async fn translate_skill_description(text: String) -> Result<String, SkillsageError> {
+    let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
+    let client = StoreClient::new_with_proxy(runtime.proxy_url)?;
+    client.translate_description(&text).await
+}

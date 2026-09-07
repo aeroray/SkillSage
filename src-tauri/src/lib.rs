@@ -1,3 +1,5 @@
+#![allow(linker_messages)]
+
 mod commands;
 mod core;
 mod error;
@@ -35,6 +37,7 @@ pub fn run() {
             commands::store::get_leaderboard,
             commands::store::get_skill_detail,
             commands::store::search_skills,
+            commands::store::translate_skill_description,
             commands::settings::get_settings,
             commands::settings::set_settings,
             commands::sync::export_package,

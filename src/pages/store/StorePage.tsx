@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CircleAlert,
   Check,
@@ -6,6 +6,8 @@ import {
   Download,
   ExternalLink,
   Flame,
+  Languages,
+  LoaderCircle,
   Rocket,
   RefreshCw,
   Search,
@@ -36,7 +38,13 @@ import {
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { Input } from "../../components/ui/input";
-import { Separator } from "../../components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import {
@@ -55,6 +63,8 @@ import {
   useSkillDetail,
   useSkillSearch,
 } from "../../features/store/hooks";
+import { translateSkillDescription } from "../../features/store/api";
+import { normalizeTauriError } from "../../lib/tauri";
 import type { PathConflict } from "../../features/skills/types";
 import type {
   LeaderboardRange,
@@ -97,6 +107,8 @@ type PendingInstall = {
   skillId: string;
 };
 
+type DescriptionMode = "original" | "translated";
+
 function auditStatusLabel(status: string) {
   const normalized = status.toLowerCase();
   if (normalized === "pass") return "通过";
@@ -126,23 +138,33 @@ function LoadingCards() {
 }
 
 function SkillCard({
+  description,
   installedSkillIds,
   group,
   onOpen,
   onQuickInstall,
   quickInstallDisabled,
   quickInstallingSkillId,
+  translatedDescription,
+  descriptionMode,
 }: {
+  description?: string;
   group: SkillGroup;
   installedSkillIds: ReadonlySet<string>;
   onOpen: (skillId: string) => void;
   onQuickInstall: (skill: SkillSearchResult) => void;
   quickInstallDisabled: boolean;
   quickInstallingSkillId?: string;
+  translatedDescription?: string;
+  descriptionMode: DescriptionMode;
 }) {
   const { primary, additional, source } = group;
   const installed = installedSkillIds.has(primary.id);
   const quickInstalling = quickInstallingSkillId === primary.id;
+  const displayedDescription =
+    descriptionMode === "translated"
+      ? translatedDescription ?? description
+      : description;
   return (
     <Card
       className="cursor-pointer shadow-sm transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
@@ -163,6 +185,11 @@ function SkillCard({
           <CardDescription className="mt-1 truncate font-mono text-xs">
             {source}
           </CardDescription>
+          {displayedDescription ? (
+            <CardDescription className="mt-3 line-clamp-2 text-xs leading-5">
+              {displayedDescription}
+            </CardDescription>
+          ) : null}
         </div>
         {installed ? (
           <Button
@@ -237,26 +264,42 @@ function SkillCard({
 }
 
 function DetailContent({
+  descriptionMode,
   detail,
   installError,
   installMessage,
   installing,
+  onDescriptionModeChange,
   onOpenSettings,
   onInstall,
+  onTranslate,
   stage,
+  translation,
+  translationError,
+  translationLoading,
 }: {
+  descriptionMode: DescriptionMode;
   detail: SkillDetail;
   installError?: string;
   installMessage: string;
   installing: boolean;
+  onDescriptionModeChange: (mode: DescriptionMode) => void;
   onInstall: () => void;
   onOpenSettings: () => void;
+  onTranslate: () => void;
   stage: string;
+  translation?: string;
+  translationError?: string;
+  translationLoading: boolean;
 }) {
   const auditWarnings = detail.audits.filter(
     (audit) => audit.status.toLowerCase() !== "pass",
   );
   const auditWarningMessage = `审计发现问题：${auditWarnings.map((audit) => `${audit.provider} ${auditStatusLabel(audit.status)}`).join("、")}。请先确认来源和内容。`;
+  const displayedDescription =
+    descriptionMode === "translated"
+      ? translation ?? detail.description
+      : detail.description;
 
   return (
     <div className="flex flex-col gap-6">
@@ -264,9 +307,68 @@ function DetailContent({
         <Badge>{detail.source}</Badge>
         <Badge variant="muted">{detail.slug}</Badge>
       </div>
-      <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-        {detail.description}
-      </p>
+
+      <section
+        aria-busy={translationLoading}
+        aria-labelledby="description-title"
+        className="rounded-lg border border-border bg-muted/20 p-4"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3
+                className="text-sm font-medium text-foreground"
+                id="description-title"
+              >
+                技能说明
+              </h3>
+              <Badge variant="muted">
+                {descriptionMode === "translated" ? "AI 译文" : "原文"}
+              </Badge>
+            </div>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+              {displayedDescription}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {translation ? (
+              <Select
+                onValueChange={(value) =>
+                  onDescriptionModeChange(value as DescriptionMode)
+                }
+                value={descriptionMode}
+              >
+                <SelectTrigger aria-label="选择技能说明语言" size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="translated">译文</SelectItem>
+                  <SelectItem value="original">原文</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : null}
+            <Button
+              aria-label={translation ? "重新翻译技能说明" : "翻译技能说明"}
+              disabled={translationLoading}
+              onClick={onTranslate}
+              size="sm"
+              variant="outline"
+            >
+              {translationLoading ? (
+                <LoaderCircle aria-hidden="true" className="animate-spin" />
+              ) : (
+                <Languages aria-hidden="true" />
+              )}
+              {translation ? "重新翻译" : "翻译说明"}
+            </Button>
+          </div>
+        </div>
+        {translationError ? (
+          <p className="mt-3 text-xs text-destructive" role="alert">
+            {translationError}
+          </p>
+        ) : null}
+      </section>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
@@ -278,7 +380,10 @@ function DetailContent({
           ["来源", "GitHub"],
           ["许可", detail.license ?? "—"],
         ].map(([label, value]) => (
-          <div className="rounded-md bg-muted p-3" key={label}>
+          <div
+            className="rounded-lg border border-border bg-muted/30 p-3"
+            key={label}
+          >
             <p className="text-xs text-muted-foreground">{label}</p>
             <p className="mt-1 truncate text-base font-semibold text-foreground">
               {value}
@@ -287,8 +392,10 @@ function DetailContent({
         ))}
       </div>
 
-      <Separator />
-      <section aria-labelledby="security-title">
+      <section
+        aria-labelledby="security-title"
+        className="rounded-lg border border-border p-4"
+      >
         <div className="flex items-center gap-2">
           <ShieldCheck aria-hidden="true" className="h-4 w-4 text-success" />
           <h3
@@ -349,8 +456,10 @@ function DetailContent({
         )}
       </section>
 
-      <Separator />
-      <section aria-labelledby="install-target-title">
+      <section
+        aria-labelledby="install-target-title"
+        className="rounded-lg border border-border p-4"
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3
@@ -399,6 +508,20 @@ export function StorePage() {
   const [installConflict, setInstallConflict] = useState<PendingInstall>();
   const [quickInstallingSkillId, setQuickInstallingSkillId] =
     useState<string>();
+  const [originalDescriptions, setOriginalDescriptions] = useState<
+    Record<string, string>
+  >({});
+  const [translatedDescriptions, setTranslatedDescriptions] = useState<
+    Record<string, string>
+  >({});
+  const [descriptionModes, setDescriptionModes] = useState<
+    Record<string, DescriptionMode>
+  >({});
+  const [translationLoadingSkillId, setTranslationLoadingSkillId] =
+    useState<string>();
+  const [translationErrors, setTranslationErrors] = useState<
+    Record<string, string>
+  >({});
   const routeSkillId = location.pathname.startsWith("/store/")
     ? decodeRouteSkillId(location.pathname.slice("/store/".length))
     : null;
@@ -435,6 +558,14 @@ export function StorePage() {
   }, [closeDetail, refreshInstalledSkills]);
   const installState = useSkillInstall(handleInstallCompleted);
   const conflictCheck = useInstallConflictCheck();
+
+  useEffect(() => {
+    if (!detail?.description) return;
+    setOriginalDescriptions((current) => {
+      if (current[detail.id] === detail.description) return current;
+      return { ...current, [detail.id]: detail.description };
+    });
+  }, [detail]);
 
   const isSearching = !isSearchComposing && query.trim().length >= 2;
   const activeLeaderboardLabel =
@@ -478,6 +609,51 @@ export function StorePage() {
       setQuickInstallingSkillId(undefined);
     }
   };
+  const translateDescription = async () => {
+    if (!detail) return;
+    const cachedTranslation = translatedDescriptions[detail.id];
+    if (cachedTranslation) {
+      setDescriptionModes((current) => ({
+        ...current,
+        [detail.id]: "translated",
+      }));
+      return;
+    }
+
+    setTranslationLoadingSkillId(detail.id);
+    setTranslationErrors((current) => {
+      if (!current[detail.id]) return current;
+      const next = { ...current };
+      delete next[detail.id];
+      return next;
+    });
+    try {
+      const translated = await translateSkillDescription(detail.description);
+      setTranslatedDescriptions((current) => ({
+        ...current,
+        [detail.id]: translated,
+      }));
+      setDescriptionModes((current) => ({
+        ...current,
+        [detail.id]: "translated",
+      }));
+    } catch (reason) {
+      setTranslationErrors((current) => ({
+        ...current,
+        [detail.id]: normalizeTauriError(reason),
+      }));
+    } finally {
+      setTranslationLoadingSkillId(undefined);
+    }
+  };
+  const detailTranslation = detail
+    ? translatedDescriptions[detail.id]
+    : undefined;
+  const detailDescriptionMode = detail
+    ? descriptionModes[detail.id] ?? "original"
+    : "original";
+  const detailTranslationLoading =
+    translationLoadingSkillId === detail?.id;
 
   return (
     <div>
@@ -583,6 +759,13 @@ export function StorePage() {
           <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {groups.map((group) => (
               <SkillCard
+                description={
+                  originalDescriptions[group.primary.id] ??
+                  group.primary.description
+                }
+                descriptionMode={
+                  descriptionModes[group.primary.id] ?? "original"
+                }
                 group={group}
                 installedSkillIds={installedSkillIds}
                 key={group.source}
@@ -594,6 +777,9 @@ export function StorePage() {
                   conflictCheck.checking
                 }
                 quickInstallingSkillId={quickInstallingSkillId}
+                translatedDescription={
+                  translatedDescriptions[group.primary.id]
+                }
               />
             ))}
           </div>
@@ -619,7 +805,6 @@ export function StorePage() {
             <Button
               aria-label="在 skills.sh 打开详情"
               asChild
-              className="size-4"
               size="icon"
               title="在 skills.sh 打开详情"
               variant="ghost"
@@ -648,13 +833,24 @@ export function StorePage() {
           />
         ) : detail ? (
           <DetailContent
+            descriptionMode={detailDescriptionMode}
             detail={detail}
             installError={installState.error ?? conflictCheck.error}
             installMessage={installState.message}
             installing={installState.installing || conflictCheck.checking}
+            onDescriptionModeChange={(mode) => {
+              setDescriptionModes((current) => ({
+                ...current,
+                [detail.id]: mode,
+              }));
+            }}
             onInstall={() => void startStoreInstall()}
             onOpenSettings={() => navigate("/settings")}
+            onTranslate={() => void translateDescription()}
             stage={installState.stage}
+            translation={detailTranslation}
+            translationError={detail ? translationErrors[detail.id] : undefined}
+            translationLoading={detailTranslationLoading}
           />
         ) : (
           <p className="text-sm text-muted-foreground">无法加载技能详情。</p>

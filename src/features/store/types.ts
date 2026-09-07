@@ -5,6 +5,7 @@ export type SkillSearchResult = {
   source: string;
   installs: number;
   sourceType: string;
+  description?: string;
   installUrl?: string;
   url: string;
   isDuplicate: boolean;

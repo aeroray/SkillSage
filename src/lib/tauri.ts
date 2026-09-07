@@ -8,6 +8,7 @@ const previewSkills = [
     source: "vercel-labs/agent-skills",
     installs: 128400,
     sourceType: "github",
+    description: "A reusable collection of AI Agent workflows with usage guidance and safety notes.",
     url: "https://skills.sh/vercel-labs/agent-skills/frontend-design",
     isDuplicate: false,
   },
@@ -18,6 +19,7 @@ const previewSkills = [
     source: "vercel-labs/agent-skills",
     installs: 86400,
     sourceType: "github",
+    description: "Guidelines for interface design and component systems.",
     url: "https://skills.sh/vercel-labs/agent-skills/web-design-guidelines",
     isDuplicate: false,
   },
@@ -28,6 +30,7 @@ const previewSkills = [
     source: "anthropics/skills",
     installs: 74200,
     sourceType: "github",
+    description: "Tools and guidance for working with PDF documents.",
     url: "https://skills.sh/anthropics/skills/pdf",
     isDuplicate: false,
   },
@@ -38,6 +41,7 @@ const previewSkills = [
     source: "anthropics/skills",
     installs: 61900,
     sourceType: "github",
+    description: "Guidance for creating and maintaining agent skills.",
     url: "https://skills.sh/anthropics/skills/skill-creator",
     isDuplicate: false,
   },
@@ -48,6 +52,7 @@ const previewSkills = [
     source: "openai/skills",
     installs: 48600,
     sourceType: "github",
+    description: "Tools for creating, editing, and analyzing spreadsheets.",
     url: "https://skills.sh/openai/skills/spreadsheets",
     isDuplicate: false,
   },
@@ -58,6 +63,7 @@ const previewSkills = [
     source: "openai/skills",
     installs: 35400,
     sourceType: "github",
+    description: "Tools for creating and editing document files.",
     url: "https://skills.sh/openai/skills/docs",
     isDuplicate: false,
   },
@@ -103,7 +109,7 @@ async function previewInvoke<T>(
       previewSkills[0];
     return {
       ...skill,
-      description: "一组可复用的 AI Agent 工作流，附带使用说明和安全提示。",
+      description: skill.description ?? "A reusable collection of AI Agent workflows with usage guidance and safety notes.",
       license: "MIT",
       githubStars: 18400,
       audits: [
@@ -122,6 +128,10 @@ async function previewInvoke<T>(
       ],
       url: skill.url,
     } as T;
+  }
+  if (command === "translate_skill_description") {
+    const text = String(args?.text ?? "").trim();
+    return `这是技能说明的中文译文（预览）：${text}` as T;
   }
   if (command === "refresh_installed") {
     const localMatched = previewMatchedLocalSkills.has("local/local-research");
