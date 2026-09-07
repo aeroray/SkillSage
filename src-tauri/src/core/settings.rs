@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::core::repo::{atomic, layout::RepoLayout};
@@ -5,12 +7,17 @@ use crate::error::SkillsageError;
 
 const KEYRING_SERVICE: &str = "com.skillsage.desktop";
 const KEYRING_USER: &str = "github-token";
+const MAX_TRANSLATED_DESCRIPTIONS: usize = 1000;
+const MAX_TRANSLATED_DESCRIPTION_CHARS: usize = 16_000;
+const MAX_TRANSLATION_KEY_CHARS: usize = 512;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StoredSettings {
     #[serde(default)]
     pub proxy_url: Option<String>,
+    #[serde(default)]
+    pub translated_descriptions: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -65,7 +72,8 @@ pub fn save(
             .map(ToOwned::to_owned)
             .or_else(|| previous_token.clone())
     };
-    let stored = StoredSettings { proxy_url };
+    let mut stored = load_stored(layout)?;
+    stored.proxy_url = proxy_url;
     write_stored(layout, &stored)?;
     if let Err(error) = set_token(desired_token.as_deref()) {
         let restore_file = restore_settings_file(layout, previous_file);
@@ -74,6 +82,110 @@ pub fn save(
         return Err(with_recovery(error, recovery));
     }
     load_view(layout)
+}
+
+pub fn load_translations(layout: &RepoLayout) -> Result<BTreeMap<String, String>, SkillsageError> {
+    layout.ensure_roots()?;
+    let stored = load_stored(layout)?;
+    validate_translations(&stored.translated_descriptions)?;
+    Ok(stored.translated_descriptions)
+}
+
+pub fn save_translation(
+    layout: &RepoLayout,
+    skill_id: String,
+    translated_description: String,
+) -> Result<(), SkillsageError> {
+    let skill_id = normalize_translation_key(skill_id)?;
+    let translated_description = normalize_translation_value(translated_description)?;
+    layout.ensure_roots()?;
+    let mut stored = load_stored(layout)?;
+    validate_translations(&stored.translated_descriptions)?;
+    if !stored.translated_descriptions.contains_key(&skill_id)
+        && stored.translated_descriptions.len() >= MAX_TRANSLATED_DESCRIPTIONS
+    {
+        return Err(SkillsageError::Settings(
+            "技能说明翻译缓存已达到上限".into(),
+        ));
+    }
+    stored
+        .translated_descriptions
+        .insert(skill_id, translated_description);
+    write_stored(layout, &stored)
+}
+
+pub fn merge_translations(
+    layout: &RepoLayout,
+    translations: &BTreeMap<String, String>,
+) -> Result<usize, SkillsageError> {
+    validate_translations(translations)?;
+    if translations.is_empty() {
+        return Ok(0);
+    }
+    layout.ensure_roots()?;
+    let mut stored = load_stored(layout)?;
+    validate_translations(&stored.translated_descriptions)?;
+    let new_count = translations
+        .keys()
+        .filter(|key| !stored.translated_descriptions.contains_key(*key))
+        .count();
+    if stored.translated_descriptions.len() + new_count > MAX_TRANSLATED_DESCRIPTIONS {
+        return Err(SkillsageError::Settings(
+            "同步后的技能说明翻译缓存超过上限".into(),
+        ));
+    }
+    let mut changed = 0;
+    for (skill_id, translated_description) in translations {
+        if stored
+            .translated_descriptions
+            .get(skill_id)
+            .is_some_and(|current| current == translated_description)
+        {
+            continue;
+        }
+        stored
+            .translated_descriptions
+            .insert(skill_id.clone(), translated_description.clone());
+        changed += 1;
+    }
+    if changed > 0 {
+        write_stored(layout, &stored)?;
+    }
+    Ok(changed)
+}
+
+pub fn validate_translations(
+    translations: &BTreeMap<String, String>,
+) -> Result<(), SkillsageError> {
+    if translations.len() > MAX_TRANSLATED_DESCRIPTIONS {
+        return Err(SkillsageError::Settings("技能说明翻译缓存条目过多".into()));
+    }
+    for (skill_id, translated_description) in translations {
+        normalize_translation_key(skill_id.clone())?;
+        normalize_translation_value(translated_description.clone())?;
+    }
+    Ok(())
+}
+
+fn normalize_translation_key(skill_id: String) -> Result<String, SkillsageError> {
+    let skill_id = skill_id.trim().to_string();
+    if skill_id.is_empty()
+        || skill_id.chars().count() > MAX_TRANSLATION_KEY_CHARS
+        || !skill_id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "/_-.".contains(character))
+    {
+        return Err(SkillsageError::Settings("技能标识无效".into()));
+    }
+    Ok(skill_id)
+}
+
+fn normalize_translation_value(value: String) -> Result<String, SkillsageError> {
+    let value = value.trim().to_string();
+    if value.is_empty() || value.chars().count() > MAX_TRANSLATED_DESCRIPTION_CHARS {
+        return Err(SkillsageError::Settings("技能说明译文无效".into()));
+    }
+    Ok(value)
 }
 
 pub fn normalize_proxy(proxy_url: Option<String>) -> Result<Option<String>, SkillsageError> {
@@ -219,7 +331,10 @@ fn delete_token() -> Result<(), SkillsageError> {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_proxy;
+    use std::fs;
+
+    use super::{load_translations, normalize_proxy, save_translation};
+    use crate::core::repo::layout::RepoLayout;
 
     #[test]
     fn normalizes_empty_and_rejects_invalid_proxy_values() {
@@ -229,5 +344,30 @@ mod tests {
             Some("http://127.0.0.1:8080".into())
         );
         assert!(normalize_proxy(Some("not a url".into())).is_err());
+    }
+
+    #[test]
+    fn persists_translations_in_settings_file() {
+        let root = std::env::temp_dir().join(format!(
+            "skillsage-settings-translations-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create shared test parent");
+        let layout = RepoLayout::new(root.join("central"), root.join("public"));
+
+        save_translation(
+            &layout,
+            "local/local-research".into(),
+            "用于整理本地研究资料。".into(),
+        )
+        .expect("translation should be saved");
+        let translations = load_translations(&layout).expect("translations should load");
+        assert_eq!(
+            translations.get("local/local-research"),
+            Some(&"用于整理本地研究资料。".to_string())
+        );
+
+        fs::remove_dir_all(root).expect("remove settings test root");
     }
 }

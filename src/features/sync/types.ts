@@ -19,6 +19,7 @@ export type SyncImportPreview = {
   path: string;
   exportedAt: string;
   settings?: SyncSettings;
+  translatedDescriptionsCount?: number;
   skills: SyncSkillPreview[];
 };
 
@@ -36,5 +37,6 @@ export type SyncImportResult = {
   imported: { id: string; name: string }[];
   skipped: string[];
   failed: SyncImportFailure[];
+  translationsImported: number;
   settings?: SyncSettings;
 };

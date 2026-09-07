@@ -62,16 +62,19 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open }
   }, [preview]);
 
   const selectedCount = selectedIds.length;
-  const canImport = Boolean(preview && path.trim() && selectedCount > 0 && !importing);
-  const selectedOptions = useMemo<SyncImportOptions>(() => ({ applySettings: Boolean(preview?.settings) && applySettings, selectedIds }), [applySettings, preview?.settings, selectedIds]);
+  const translatedDescriptionsCount = preview?.translatedDescriptionsCount ?? 0;
+  const hasSyncPreferences = Boolean(preview?.settings) || translatedDescriptionsCount > 0;
+  const canImport = Boolean(preview && path.trim() && (selectedCount > 0 || (hasSyncPreferences && applySettings)) && !importing);
+  const selectedOptions = useMemo<SyncImportOptions>(() => ({ applySettings: hasSyncPreferences && applySettings, selectedIds }), [applySettings, hasSyncPreferences, selectedIds]);
 
   const submit = async () => {
     if (!canImport) return;
     const result = await run(path, selectedOptions);
     if (!result) return;
     if (result.settings && onApplySettings) await onApplySettings(result.settings);
-    setResultMessage(`导入 ${result.imported.length} 个，跳过 ${result.skipped.length} 个，失败 ${result.failed.length} 个。`);
-    if (result.imported.length > 0) onCompleted();
+    const translationMessage = result.translationsImported > 0 ? `，译文 ${result.translationsImported} 条` : "";
+    setResultMessage(`导入 ${result.imported.length} 个，跳过 ${result.skipped.length} 个，失败 ${result.failed.length} 个${translationMessage}。`);
+    if (result.imported.length > 0 || result.translationsImported > 0) onCompleted();
   };
 
   return (
@@ -97,9 +100,9 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open }
           <Card>
             <CardHeader><CardTitle className="text-base">预览</CardTitle><CardDescription>{preview.path} · 导出于 {preview.exportedAt}</CardDescription></CardHeader>
             <CardContent className="flex flex-col gap-3">
-              {preview.settings ? <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">
+              {hasSyncPreferences ? <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">
                 <Checkbox checked={applySettings} id="sync-apply-settings" onCheckedChange={(checked) => setApplySettings(checked === true)} />
-                <div><Label className="font-medium" htmlFor="sync-apply-settings">同步应用设置</Label><p className="mt-1 text-xs leading-5 text-muted-foreground">恢复显示模式、主题色和代理设置；GitHub Token 不会导入。</p></div>
+                <div><Label className="font-medium" htmlFor="sync-apply-settings">同步应用设置和译文缓存</Label><p className="mt-1 text-xs leading-5 text-muted-foreground">恢复显示模式、主题色、代理设置和 {translatedDescriptionsCount} 条技能说明译文；GitHub Token 不会导入。</p></div>
               </div> : null}
               {preview.skills.map((skill) => {
                 const selected = selectedIds.includes(skill.id);

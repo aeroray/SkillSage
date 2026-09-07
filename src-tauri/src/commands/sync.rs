@@ -23,6 +23,7 @@ pub struct SyncImportResult {
     pub imported: Vec<InstallResult>,
     pub skipped: Vec<String>,
     pub failed: Vec<SyncImportFailure>,
+    pub translations_imported: usize,
     pub settings: Option<export::SyncSettings>,
 }
 
@@ -75,15 +76,21 @@ pub async fn import_package(
     } else {
         None
     };
-    if let Some(sync_settings) = &settings {
+    let translations_imported = if options.apply_settings {
         let _write_guard = state.write_lock.lock().await;
-        crate::core::settings::save(&layout, sync_settings.proxy_url.clone(), None, false)?;
-    }
+        if let Some(sync_settings) = &settings {
+            crate::core::settings::save(&layout, sync_settings.proxy_url.clone(), None, false)?;
+        }
+        crate::core::settings::merge_translations(&layout, &package.translated_descriptions)?
+    } else {
+        0
+    };
     let selected = import::selected_entries(&package, &options.selected_ids)?;
     let mut result = SyncImportResult {
         imported: Vec::new(),
         skipped: Vec::new(),
         failed: Vec::new(),
+        translations_imported,
         settings,
     };
 

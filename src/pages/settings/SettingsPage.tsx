@@ -183,7 +183,7 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent className="flex flex-col gap-4 pb-5">
               <div className="flex items-start justify-between gap-5 rounded-lg border border-border bg-muted/30 p-4">
-                <div className="min-w-0 flex-1"><p className="text-sm font-medium text-foreground">同步数据</p><p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">包含远程技能记录、显示模式、主题色和代理设置。GitHub Token 不会导出。</p></div>
+                <div className="min-w-0 flex-1"><p className="text-sm font-medium text-foreground">同步数据</p><p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">包含远程技能记录、技能说明译文、显示模式、主题色和代理设置。GitHub Token 不会导出。</p></div>
                 <div className="flex shrink-0 flex-col items-stretch gap-2"><Button onClick={() => setSyncOpen(true)} variant="outline"><Upload data-icon="inline-start" />导入同步数据</Button><Button disabled={loading || syncExport.exporting || !settings} onClick={() => void exportSyncData()}><Download data-icon="inline-start" />{syncExport.exporting ? "导出中…" : "导出同步数据"}</Button></div>
               </div>
               {syncExport.error ? <ErrorBanner error={syncExport.error} /> : null}

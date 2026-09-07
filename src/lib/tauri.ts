@@ -70,6 +70,7 @@ const previewSkills = [
 ];
 
 let previewSettings = { proxyUrl: "", githubTokenConfigured: false };
+let previewSkillTranslations: Record<string, string> = {};
 const previewClaudeDistributed = new Set<string>();
 const previewMatchedLocalSkills = new Set<string>();
 const previewLocalMatch = {
@@ -132,6 +133,16 @@ async function previewInvoke<T>(
   if (command === "translate_skill_description") {
     const text = String(args?.text ?? "").trim();
     return `这是技能说明的中文译文（预览）：${text}` as T;
+  }
+  if (command === "get_skill_translations") return previewSkillTranslations as T;
+  if (command === "save_skill_translation") {
+    const skillId = String(args?.skillId ?? "");
+    const translatedDescription = String(args?.translatedDescription ?? "");
+    previewSkillTranslations = {
+      ...previewSkillTranslations,
+      [skillId]: translatedDescription,
+    };
+    return undefined as T;
   }
   if (command === "refresh_installed") {
     const localMatched = previewMatchedLocalSkills.has("local/local-research");
@@ -271,6 +282,7 @@ async function previewInvoke<T>(
       path: String(args?.path ?? "C:\\Users\\PC\\skillsage-sync.json"),
       exportedAt: "2026-08-18T08:00:00Z",
       settings: { themeMode: "light", themeAccent: "teal", proxyUrl: "" },
+      translatedDescriptionsCount: Object.keys(previewSkillTranslations).length,
       skills: [
         {
           id: "vercel-labs/agent-skills/frontend-design",
@@ -293,6 +305,9 @@ async function previewInvoke<T>(
       })),
       skipped: [],
       failed: [],
+      translationsImported: (options as { applySettings?: boolean }).applySettings
+        ? Object.keys(previewSkillTranslations).length
+        : 0,
       settings: (options as { applySettings?: boolean }).applySettings
         ? { themeMode: "light", themeAccent: "teal", proxyUrl: "" }
         : undefined,

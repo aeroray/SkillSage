@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   CircleAlert,
   Check,
@@ -6,8 +6,6 @@ import {
   Download,
   ExternalLink,
   Flame,
-  Languages,
-  LoaderCircle,
   Rocket,
   RefreshCw,
   Search,
@@ -20,6 +18,10 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PageHeader } from "../../components/common/PageHeader";
 import { PathConflictDialog } from "../../components/common/PathConflictDialog";
+import {
+  SkillDescriptionPanel,
+  type DescriptionMode,
+} from "../../components/common/SkillDescriptionPanel";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import {
@@ -38,13 +40,6 @@ import {
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { Input } from "../../components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../components/ui/select";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import {
@@ -61,6 +56,7 @@ import { groupByRepository } from "../../features/store/selectors";
 import {
   useLeaderboard,
   useSkillDetail,
+  useSkillDescriptionTranslations,
   useSkillSearch,
 } from "../../features/store/hooks";
 import { translateSkillDescription } from "../../features/store/api";
@@ -106,8 +102,6 @@ type PendingInstall = {
   conflict: PathConflict;
   skillId: string;
 };
-
-type DescriptionMode = "original" | "translated";
 
 function auditStatusLabel(status: string) {
   const normalized = status.toLowerCase();
@@ -296,11 +290,6 @@ function DetailContent({
     (audit) => audit.status.toLowerCase() !== "pass",
   );
   const auditWarningMessage = `审计发现问题：${auditWarnings.map((audit) => `${audit.provider} ${auditStatusLabel(audit.status)}`).join("、")}。请先确认来源和内容。`;
-  const displayedDescription =
-    descriptionMode === "translated"
-      ? translation ?? detail.description
-      : detail.description;
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-2">
@@ -308,67 +297,15 @@ function DetailContent({
         <Badge variant="muted">{detail.slug}</Badge>
       </div>
 
-      <section
-        aria-busy={translationLoading}
-        aria-labelledby="description-title"
-        className="rounded-lg border border-border bg-muted/20 p-4"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3
-                className="text-sm font-medium text-foreground"
-                id="description-title"
-              >
-                技能说明
-              </h3>
-              <Badge variant="muted">
-                {descriptionMode === "translated" ? "AI 译文" : "原文"}
-              </Badge>
-            </div>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-              {displayedDescription}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {translation ? (
-              <Select
-                onValueChange={(value) =>
-                  onDescriptionModeChange(value as DescriptionMode)
-                }
-                value={descriptionMode}
-              >
-                <SelectTrigger aria-label="选择技能说明语言" size="sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="translated">译文</SelectItem>
-                  <SelectItem value="original">原文</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : null}
-            <Button
-              aria-label={translation ? "重新翻译技能说明" : "翻译技能说明"}
-              disabled={translationLoading}
-              onClick={onTranslate}
-              size="sm"
-              variant="outline"
-            >
-              {translationLoading ? (
-                <LoaderCircle aria-hidden="true" className="animate-spin" />
-              ) : (
-                <Languages aria-hidden="true" />
-              )}
-              {translation ? "重新翻译" : "翻译说明"}
-            </Button>
-          </div>
-        </div>
-        {translationError ? (
-          <p className="mt-3 text-xs text-destructive" role="alert">
-            {translationError}
-          </p>
-        ) : null}
-      </section>
+      <SkillDescriptionPanel
+        description={detail.description}
+        descriptionMode={descriptionMode}
+        onDescriptionModeChange={onDescriptionModeChange}
+        onTranslate={onTranslate}
+        translatedDescription={translation}
+        translationError={translationError}
+        translationLoading={translationLoading}
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
@@ -508,12 +445,6 @@ export function StorePage() {
   const [installConflict, setInstallConflict] = useState<PendingInstall>();
   const [quickInstallingSkillId, setQuickInstallingSkillId] =
     useState<string>();
-  const [originalDescriptions, setOriginalDescriptions] = useState<
-    Record<string, string>
-  >({});
-  const [translatedDescriptions, setTranslatedDescriptions] = useState<
-    Record<string, string>
-  >({});
   const [descriptionModes, setDescriptionModes] = useState<
     Record<string, DescriptionMode>
   >({});
@@ -545,6 +476,10 @@ export function StorePage() {
     refresh: refreshDetail,
   } = useSkillDetail(selectedSkillId);
   const {
+    save: saveTranslation,
+    translations,
+  } = useSkillDescriptionTranslations();
+  const {
     loading: installedLoading,
     refresh: refreshInstalledSkills,
     skills: installedSkills,
@@ -558,14 +493,6 @@ export function StorePage() {
   }, [closeDetail, refreshInstalledSkills]);
   const installState = useSkillInstall(handleInstallCompleted);
   const conflictCheck = useInstallConflictCheck();
-
-  useEffect(() => {
-    if (!detail?.description) return;
-    setOriginalDescriptions((current) => {
-      if (current[detail.id] === detail.description) return current;
-      return { ...current, [detail.id]: detail.description };
-    });
-  }, [detail]);
 
   const isSearching = !isSearchComposing && query.trim().length >= 2;
   const activeLeaderboardLabel =
@@ -611,7 +538,7 @@ export function StorePage() {
   };
   const translateDescription = async () => {
     if (!detail) return;
-    const cachedTranslation = translatedDescriptions[detail.id];
+    const cachedTranslation = translations[detail.id];
     if (cachedTranslation) {
       setDescriptionModes((current) => ({
         ...current,
@@ -629,10 +556,7 @@ export function StorePage() {
     });
     try {
       const translated = await translateSkillDescription(detail.description);
-      setTranslatedDescriptions((current) => ({
-        ...current,
-        [detail.id]: translated,
-      }));
+      await saveTranslation(detail.id, translated);
       setDescriptionModes((current) => ({
         ...current,
         [detail.id]: "translated",
@@ -647,10 +571,11 @@ export function StorePage() {
     }
   };
   const detailTranslation = detail
-    ? translatedDescriptions[detail.id]
+    ? translations[detail.id]
     : undefined;
   const detailDescriptionMode = detail
-    ? descriptionModes[detail.id] ?? "original"
+    ? descriptionModes[detail.id] ??
+      (detailTranslation ? "translated" : "original")
     : "original";
   const detailTranslationLoading =
     translationLoadingSkillId === detail?.id;
@@ -759,12 +684,10 @@ export function StorePage() {
           <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {groups.map((group) => (
               <SkillCard
-                description={
-                  originalDescriptions[group.primary.id] ??
-                  group.primary.description
-                }
+                description={group.primary.description}
                 descriptionMode={
-                  descriptionModes[group.primary.id] ?? "original"
+                  descriptionModes[group.primary.id] ??
+                  (translations[group.primary.id] ? "translated" : "original")
                 }
                 group={group}
                 installedSkillIds={installedSkillIds}
@@ -777,9 +700,7 @@ export function StorePage() {
                   conflictCheck.checking
                 }
                 quickInstallingSkillId={quickInstallingSkillId}
-                translatedDescription={
-                  translatedDescriptions[group.primary.id]
-                }
+                translatedDescription={translations[group.primary.id]}
               />
             ))}
           </div>

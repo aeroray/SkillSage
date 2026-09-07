@@ -27,6 +27,7 @@ pub struct SyncImportPreview {
     pub path: String,
     pub exported_at: String,
     pub settings: Option<SyncSettings>,
+    pub translated_descriptions_count: usize,
     pub skills: Vec<SyncSkillPreview>,
 }
 
@@ -73,6 +74,7 @@ pub fn preview_at(layout: &RepoLayout, path: &str) -> Result<SyncImportPreview, 
         path: paths::display(&PathBuf::from(path)),
         exported_at: package.exported_at,
         settings: package.settings,
+        translated_descriptions_count: package.translated_descriptions.len(),
         skills,
     })
 }
@@ -117,6 +119,8 @@ fn validate(package: &SyncPackage) -> Result<(), SkillsageError> {
     if let Some(settings) = &package.settings {
         validate_settings(settings)?;
     }
+    crate::core::settings::validate_translations(&package.translated_descriptions)
+        .map_err(|error| SkillsageError::SyncInvalid(error.to_string()))?;
     if package.skills.len() > 1000 {
         return Err(SkillsageError::SyncInvalid(
             "同步数据中的技能数量过多".into(),

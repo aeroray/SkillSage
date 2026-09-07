@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getLeaderboard, getSkillDetail, searchSkills } from "./api";
+import {
+  getLeaderboard,
+  getSkillDetail,
+  getSkillTranslations,
+  saveSkillTranslation,
+  searchSkills,
+} from "./api";
 import {
   clearCachedLeaderboard,
   getCachedLeaderboard,
   setCachedLeaderboard,
 } from "./cache";
-import type { LeaderboardRange, SkillDetail, SkillSearchResult } from "./types";
+import type {
+  LeaderboardRange,
+  SkillDetail,
+  SkillSearchResult,
+  SkillTranslationCache,
+} from "./types";
 import { normalizeTauriError } from "../../lib/tauri";
 
 export function useLeaderboard(range: LeaderboardRange) {
@@ -142,4 +153,37 @@ export function useSkillDetail(skillId: string | null) {
     loading,
     refresh: () => setReloadToken((value) => value + 1),
   };
+}
+
+export function useSkillDescriptionTranslations() {
+  const [translations, setTranslations] = useState<SkillTranslationCache>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    void getSkillTranslations()
+      .then((result) => {
+        if (active) setTranslations(result);
+      })
+      .catch((reason) => {
+        if (active) setError(normalizeTauriError(reason));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const save = useCallback(async (skillId: string, translatedDescription: string) => {
+    await saveSkillTranslation(skillId, translatedDescription);
+    setTranslations((current) => ({
+      ...current,
+      [skillId]: translatedDescription,
+    }));
+  }, []);
+
+  return { error, loading, save, translations };
 }

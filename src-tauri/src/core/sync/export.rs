@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,8 @@ pub struct SyncPackage {
     pub exported_at: String,
     #[serde(default)]
     pub settings: Option<SyncSettings>,
+    #[serde(default)]
+    pub translated_descriptions: BTreeMap<String, String>,
     pub skills: Vec<SyncSkillEntry>,
 }
 
@@ -75,6 +78,7 @@ pub fn export_at(
 ) -> Result<PathBuf, SkillsageError> {
     validate_settings(&sync_settings)?;
     sync_settings.proxy_url = settings::normalize_proxy(sync_settings.proxy_url)?;
+    let translated_descriptions = settings::load_translations(layout)?;
     let lock = lockfile::load(layout)?;
     let skills = lock
         .skills
@@ -90,6 +94,7 @@ pub fn export_at(
         format_version: FORMAT_VERSION,
         exported_at: lockfile::unix_timestamp(),
         settings: Some(sync_settings),
+        translated_descriptions,
         skills,
     };
 
@@ -147,6 +152,7 @@ mod tests {
 
     use super::{export_at, SyncPackage, SyncSettings, FORMAT_VERSION};
     use crate::core::repo::{layout::RepoLayout, lockfile};
+    use crate::core::settings;
 
     #[test]
     fn exports_remote_records_but_excludes_local_records() {
@@ -189,6 +195,12 @@ mod tests {
             },
         );
         lockfile::save(&layout, &lock).expect("save lock");
+        settings::save_translation(
+            &layout,
+            "local/local-skill".into(),
+            "本地技能说明译文".into(),
+        )
+        .expect("save translation");
 
         let path = root.join("skillsage-sync.json");
         let path = export_at(
@@ -204,6 +216,10 @@ mod tests {
         assert!(package.settings.is_some());
         assert_eq!(package.skills.len(), 1);
         assert_eq!(package.skills[0].name, "skill");
+        assert_eq!(
+            package.translated_descriptions.get("local/local-skill"),
+            Some(&"本地技能说明译文".to_string())
+        );
         fs::remove_dir_all(root).expect("remove test root");
     }
 }

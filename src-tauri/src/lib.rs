@@ -40,6 +40,8 @@ pub fn run() {
             commands::store::translate_skill_description,
             commands::settings::get_settings,
             commands::settings::set_settings,
+            commands::settings::get_skill_translations,
+            commands::settings::save_skill_translation,
             commands::sync::export_package,
             commands::sync::preview_import_package,
             commands::sync::import_package,

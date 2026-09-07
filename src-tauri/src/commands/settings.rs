@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 use tauri::State;
 
@@ -40,6 +42,31 @@ pub async fn set_settings(
             update.github_token,
             update.clear_github_token,
         )
+    })
+    .await
+    .map_err(|error| SkillsageError::Task(error.to_string()))?
+}
+
+#[tauri::command]
+pub async fn get_skill_translations() -> Result<BTreeMap<String, String>, SkillsageError> {
+    tokio::task::spawn_blocking(|| {
+        let layout = RepoLayout::from_user_home()?;
+        settings::load_translations(&layout)
+    })
+    .await
+    .map_err(|error| SkillsageError::Task(error.to_string()))?
+}
+
+#[tauri::command]
+pub async fn save_skill_translation(
+    skill_id: String,
+    translated_description: String,
+    state: State<'_, AppState>,
+) -> Result<(), SkillsageError> {
+    let _write_guard = state.write_lock.lock().await;
+    tokio::task::spawn_blocking(move || {
+        let layout = RepoLayout::from_user_home()?;
+        settings::save_translation(&layout, skill_id, translated_description)
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))?

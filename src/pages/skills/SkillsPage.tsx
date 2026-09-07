@@ -39,6 +39,10 @@ import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PageHeader } from "../../components/common/PageHeader";
 import { ImportDialog } from "../import/ImportDialog";
 import { GithubUrlInstallDialog } from "../store/GithubUrlInstallDialog";
+import {
+  SkillDescriptionPanel,
+  type DescriptionMode,
+} from "../../components/common/SkillDescriptionPanel";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -71,11 +75,13 @@ import {
   openSkillsRoot,
   searchLocalSkillMatches,
 } from "../../features/skills/api";
+import { translateSkillDescription } from "../../features/store/api";
 import {
   useInstalledSkills,
   useSkillManagement,
   useSkillUpdates,
 } from "../../features/skills/hooks";
+import { useSkillDescriptionTranslations } from "../../features/store/hooks";
 import type {
   InstalledSkill,
   LocalSkillMatch,
@@ -140,7 +146,9 @@ function SkillDetailField({
   wide?: boolean;
 }) {
   return (
-    <div className={wide ? "sm:col-span-2" : undefined}>
+    <div
+      className={`rounded-lg border border-border bg-muted/30 p-3 ${wide ? "sm:col-span-2" : ""}`}
+    >
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
       <dd className="mt-1 break-words text-sm leading-6 text-foreground">
         {value}
@@ -150,11 +158,23 @@ function SkillDetailField({
 }
 
 function SkillDetailContent({
+  descriptionMode,
   skill,
   skillsRoot,
+  onDescriptionModeChange,
+  onTranslate,
+  translatedDescription,
+  translationError,
+  translationLoading,
 }: {
+  descriptionMode: DescriptionMode;
   skill: InstalledSkill;
   skillsRoot?: string;
+  onDescriptionModeChange: (mode: DescriptionMode) => void;
+  onTranslate: () => void;
+  translatedDescription?: string;
+  translationError?: string;
+  translationLoading: boolean;
 }) {
   const skillPath = skill.skillPath
     ? skill.skillPath
@@ -166,15 +186,24 @@ function SkillDetailContent({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-4 border-b border-border pb-5">
-        <p className="min-w-0 text-sm leading-6 text-muted-foreground">
-          {skill.description || "暂无描述"}
-        </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="muted">{skill.source || "本地技能"}</Badge>
         <Badge variant={skill.claudeDistributed ? "success" : "muted"}>
           {skill.claudeDistributed ? "已分发至 Claude" : "未分发至 Claude"}
         </Badge>
       </div>
-      <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
+
+      <SkillDescriptionPanel
+        description={skill.description}
+        descriptionMode={descriptionMode}
+        onDescriptionModeChange={onDescriptionModeChange}
+        onTranslate={onTranslate}
+        translatedDescription={translatedDescription}
+        translationError={translationError}
+        translationLoading={translationLoading}
+      />
+
+      <dl className="grid gap-3 sm:grid-cols-2">
         <SkillDetailField label="技能 ID" value={skill.id || "未记录"} />
         <SkillDetailField label="作者" value={skill.owner || "未记录"} />
         <SkillDetailField label="仓库" value={skill.repo || "未记录"} />
@@ -361,6 +390,7 @@ function LocalMatchContent({
 function SkillRow({
   checking,
   checked,
+  description,
   onCheck,
   onClaudeDistribution,
   onDetail,
@@ -375,6 +405,7 @@ function SkillRow({
 }: {
   checking: boolean;
   checked: boolean;
+  description?: string;
   onCheck: (checked: boolean) => void;
   onClaudeDistribution: (skill: InstalledSkill) => void;
   onDetail: (skill: InstalledSkill) => void;
@@ -410,7 +441,7 @@ function SkillRow({
             {updateAvailable ? <Badge variant="success">有更新</Badge> : null}
           </div>
           <p className="mt-1 truncate text-xs text-muted-foreground">
-            {skill.description || "暂无描述"}
+            {description || "暂无描述"}
           </p>
         </div>
         <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground">
@@ -528,12 +559,22 @@ export function SkillsPage() {
     void refreshSkills();
   }, [refreshSkills]);
   const management = useSkillManagement(refreshPage);
+  const { save: saveTranslation, translations } =
+    useSkillDescriptionTranslations();
   const [search, setSearch] = useState("");
   const [source, setSource] = useState<SkillSourceFilter>("all");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
   const [sort, setSort] = useState<SkillSortMode>("recent");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [detailSkill, setDetailSkill] = useState<InstalledSkill>();
+  const [localDescriptionModes, setLocalDescriptionModes] = useState<
+    Record<string, DescriptionMode>
+  >({});
+  const [localTranslationLoadingSkillId, setLocalTranslationLoadingSkillId] =
+    useState<string>();
+  const [localTranslationErrors, setLocalTranslationErrors] = useState<
+    Record<string, string>
+  >({});
   const [matchSkill, setMatchSkill] = useState<InstalledSkill>();
   const [matchCandidates, setMatchCandidates] = useState<LocalSkillMatch[]>([]);
   const [matchLoading, setMatchLoading] = useState(false);
@@ -656,6 +697,43 @@ export function SkillsPage() {
       await openSkillsRoot(skillsRoot);
     } catch (error) {
       setDirectoryError(normalizeTauriError(error));
+    }
+  };
+  const translateLocalDescription = async () => {
+    const skill = detailSkill;
+    if (!skill) return;
+    const cachedTranslation = translations[skill.id];
+    if (cachedTranslation) {
+      setLocalDescriptionModes((current) => ({
+        ...current,
+        [skill.id]: "translated",
+      }));
+      return;
+    }
+
+    setLocalTranslationLoadingSkillId(skill.id);
+    setLocalTranslationErrors((current) => {
+      if (!current[skill.id]) return current;
+      const next = { ...current };
+      delete next[skill.id];
+      return next;
+    });
+    try {
+      const translated = await translateSkillDescription(skill.description);
+      await saveTranslation(skill.id, translated);
+      setLocalDescriptionModes((current) => ({
+        ...current,
+        [skill.id]: "translated",
+      }));
+    } catch (reason) {
+      setLocalTranslationErrors((current) => ({
+        ...current,
+        [skill.id]: normalizeTauriError(reason),
+      }));
+    } finally {
+      setLocalTranslationLoadingSkillId((current) =>
+        current === skill.id ? undefined : current,
+      );
     }
   };
 
@@ -871,6 +949,14 @@ export function SkillsPage() {
                           <SkillRow
                             checking={updateCheckingIds.includes(skill.id)}
                             checked={selectedIds.includes(skill.id)}
+                            description={
+                              localDescriptionModes[skill.id] ===
+                                "translated" ||
+                              (localDescriptionModes[skill.id] === undefined &&
+                                translations[skill.id])
+                                ? translations[skill.id] ?? skill.description
+                                : skill.description
+                            }
                             key={skill.id}
                             onCheck={(checked) =>
                               setSelectedIds((current) =>
@@ -930,13 +1016,34 @@ export function SkillsPage() {
         ) : null}
       </Dialog>
       <Dialog
-        description="查看本地已安装信息，不会联网。"
+        description="查看本地已安装信息，可翻译技能说明。"
         onClose={() => setDetailSkill(undefined)}
         open={Boolean(detailSkill)}
         title={detailSkill?.name ?? "技能详情"}
       >
         {detailSkill ? (
-          <SkillDetailContent skill={detailSkill} skillsRoot={skillsRoot} />
+          <SkillDetailContent
+            descriptionMode={
+              localDescriptionModes[detailSkill.id] ??
+              (translations[detailSkill.id] ? "translated" : "original")
+            }
+            onDescriptionModeChange={(mode) =>
+              setLocalDescriptionModes((current) => ({
+                ...current,
+                [detailSkill.id]: mode,
+              }))
+            }
+            onTranslate={() => void translateLocalDescription()}
+            skill={detailSkill}
+            skillsRoot={skillsRoot}
+            translatedDescription={
+              translations[detailSkill.id]
+            }
+            translationError={localTranslationErrors[detailSkill.id]}
+            translationLoading={
+              localTranslationLoadingSkillId === detailSkill.id
+            }
+          />
         ) : null}
       </Dialog>
       <AlertDialog

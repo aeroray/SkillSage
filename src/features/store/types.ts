@@ -11,6 +11,8 @@ export type SkillSearchResult = {
   isDuplicate: boolean;
 };
 
+export type SkillTranslationCache = Record<string, string>;
+
 export type LeaderboardRange = "all-time" | "trending" | "hot";
 
 export type AuditEntry = {
