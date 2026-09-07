@@ -118,29 +118,6 @@ export function useSkillInstall(onCompleted: () => void) {
   return { error, install, installing, message, stage };
 }
 
-export function useUninstallSkill(onCompleted: () => void) {
-  const [uninstalling, setUninstalling] = useState(false);
-  const [error, setError] = useState<string>();
-
-  const uninstall = useCallback(
-    async (skillId: string) => {
-      setUninstalling(true);
-      setError(undefined);
-      try {
-        await uninstallSkill(skillId);
-        onCompleted();
-      } catch (reason) {
-        setError(normalizeTauriError(reason));
-      } finally {
-        setUninstalling(false);
-      }
-    },
-    [onCompleted],
-  );
-
-  return { error, uninstall, uninstalling };
-}
-
 export function useSkillUpdates() {
   const [updates, setUpdates] = useState<UpdateInfo[]>([]);
   const [checking, setChecking] = useState(false);

@@ -14,9 +14,7 @@ pub struct SkillManifest {
     pub metadata: BTreeMap<String, serde_yaml::Value>,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct ParsedSkill {
     pub manifest: SkillManifest,
-    pub body: String,
 }

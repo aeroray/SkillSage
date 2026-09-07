@@ -25,7 +25,6 @@ pub fn run() {
             commands::migrate::execute_migrate,
             commands::migrate::remove_adopt_candidate,
             commands::migrate::rename_adopt_candidate,
-            commands::manage::list_installed,
             commands::manage::refresh_installed,
             commands::manage::search_local_skill_matches,
             commands::manage::link_local_skill,

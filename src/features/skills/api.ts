@@ -15,10 +15,6 @@ export function installSkill(skillId: string, takeover?: boolean) {
   });
 }
 
-export function listInstalled() {
-  return invokeCommand<InstalledSkillsList>("list_installed");
-}
-
 export function refreshInstalled() {
   return invokeCommand<InstalledSkillsList>("refresh_installed");
 }

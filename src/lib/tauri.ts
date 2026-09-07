@@ -123,7 +123,7 @@ async function previewInvoke<T>(
       url: skill.url,
     } as T;
   }
-  if (command === "list_installed" || command === "refresh_installed") {
+  if (command === "refresh_installed") {
     const localMatched = previewMatchedLocalSkills.has("local/local-research");
     return {
       skillsRoot: "C:\\Users\\PC\\.agents\\skills",

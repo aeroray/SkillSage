@@ -20,13 +20,10 @@ pub fn parse_skill_md(content: &str) -> Result<ParsedSkill, SkillsageError> {
         SkillsageError::InvalidSkill("缺少 YAML frontmatter 结束标记".to_string())
     })?;
     let frontmatter = &rest[..end];
-    let body = rest[end + "\n---".len()..]
-        .trim_start_matches('\n')
-        .to_string();
     let manifest: SkillManifest = serde_yaml::from_str(frontmatter)?;
     validate_manifest(&manifest)?;
 
-    Ok(ParsedSkill { manifest, body })
+    Ok(ParsedSkill { manifest })
 }
 
 pub fn read_skill_md(path: &Path) -> Result<ParsedSkill, SkillsageError> {
@@ -91,7 +88,6 @@ mod tests {
 
         assert_eq!(parsed.manifest.name, "web-research");
         assert_eq!(parsed.manifest.license.as_deref(), Some("MIT"));
-        assert_eq!(parsed.body, "# Instructions\n");
     }
 
     #[test]

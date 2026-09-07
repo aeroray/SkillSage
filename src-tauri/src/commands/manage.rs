@@ -3,7 +3,7 @@ use tauri::State;
 
 use crate::core::claude;
 use crate::core::github::client::GitHubClient;
-use crate::core::lifecycle::{match_local, remote, uninstall, update};
+use crate::core::lifecycle::{install, match_local, remote, update};
 use crate::core::paths;
 use crate::core::repo::{layout::RepoLayout, lockfile::SkillLockRecord};
 use crate::core::settings;
@@ -19,7 +19,7 @@ pub struct InstalledSkillsList {
 }
 
 #[tauri::command]
-pub async fn list_installed() -> Result<InstalledSkillsList, SkillsageError> {
+pub async fn refresh_installed() -> Result<InstalledSkillsList, SkillsageError> {
     tokio::task::spawn_blocking(|| {
         let layout = RepoLayout::from_user_home()?;
         let lock = crate::core::repo::lockfile::load(&layout)?;
@@ -38,11 +38,6 @@ pub async fn list_installed() -> Result<InstalledSkillsList, SkillsageError> {
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))?
-}
-
-#[tauri::command]
-pub async fn refresh_installed() -> Result<InstalledSkillsList, SkillsageError> {
-    list_installed().await
 }
 
 #[tauri::command]
@@ -179,9 +174,12 @@ pub async fn uninstall_skill(
     state: State<'_, AppState>,
 ) -> Result<(), SkillsageError> {
     let _write_guard = state.write_lock.lock().await;
-    tokio::task::spawn_blocking(move || uninstall::uninstall(&skill_id))
-        .await
-        .map_err(|error| SkillsageError::Task(error.to_string()))?
+    tokio::task::spawn_blocking(move || {
+        let layout = RepoLayout::from_user_home()?;
+        install::uninstall_skill_at(&layout, &skill_id)
+    })
+    .await
+    .map_err(|error| SkillsageError::Task(error.to_string()))?
 }
 
 #[tauri::command]
