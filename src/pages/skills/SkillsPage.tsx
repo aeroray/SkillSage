@@ -17,10 +17,13 @@ import {
 } from "../../components/ui/accordion";
 import {
   ArrowRight,
+  CircleAlert,
   Download,
   FileText,
   FolderOpen,
   GitBranch,
+  GitCommit,
+  Info,
   Library,
   LoaderCircle,
   Link2,
@@ -70,6 +73,11 @@ import {
 import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
 import { useToast } from "../../components/ui/toast-context";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../components/ui/tooltip";
 import {
   openSkillDirectory,
   openSkillsRoot,
@@ -237,7 +245,6 @@ function LocalMatchContent({
   onSearchMore,
   pending,
   showSearchMore,
-  skill,
 }: {
   candidates: LocalSkillMatch[];
   error?: string;
@@ -246,7 +253,6 @@ function LocalMatchContent({
   onSearchMore: () => void;
   pending: boolean;
   showSearchMore: boolean;
-  skill: InstalledSkill;
 }) {
   const exactCandidate = candidates.find(
     (candidate) => candidate.verification === "exact",
@@ -262,27 +268,29 @@ function LocalMatchContent({
     if (candidate.verification === "too-large") return "远端目录过大";
     return "内容未验证";
   };
+  const verificationHelp = (candidate: LocalSkillMatch) => {
+    if (candidate.verification === "exact") return "远端目录与本地内容完全一致，可以直接匹配。";
+    if (candidate.verification === "different") return "已读取远端内容，但与本地目录不同；匹配不会替换本地文件。";
+    if (candidate.verification === "rate-limited") return "GitHub 请求达到上限，请稍后重试或配置 GitHub Token。";
+    if (candidate.verification === "auth-required") return "当前仓库需要有效的 GitHub Token 才能验证。";
+    if (candidate.verification === "not-found") return "仓库不存在，或当前账号无权访问。";
+    if (candidate.verification === "path-not-found") return "仓库中没有找到该技能对应的 SKILL.md。";
+    if (candidate.verification === "network-error") return "网络或代理异常，暂时无法读取远端内容。";
+    if (candidate.verification === "too-large") return "远端目录超出安全读取限制。";
+    return "暂时无法完成远端内容验证。";
+  };
   const rateLimited = candidates.some(
     (candidate) => candidate.verification === "rate-limited",
   );
-  const hasUnverifiedCandidate = candidates.some(
-    (candidate) => !["exact", "different"].includes(candidate.verification),
-  );
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="rounded-md bg-muted/50 p-4">
-        <p className="text-sm leading-6 text-muted-foreground">
-          将为“{skill.name}”搜索名称匹配的远端技能。确认匹配后只更新来源记录，
-          不会替换本地文件。
-        </p>
-      </div>
+    <div className="flex flex-col gap-4">
       {loading ? (
         <div
           aria-busy="true"
           className="flex items-center gap-3 text-sm text-muted-foreground"
         >
-          <Search className="size-4 animate-pulse" />
+          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
           正在查询远端技能…
         </div>
       ) : error ? (
@@ -294,110 +302,131 @@ function LocalMatchContent({
           未找到名称完全匹配的远端技能。
         </p>
       ) : (
-        <div className="flex flex-col gap-3" role="list">
-          <div
-            className={`rounded-md border p-4 ${
-              exactCandidate
-                ? "border-success/30 bg-success/5"
-                : "border-border bg-muted/50"
-            }`}
-          >
-            <p className="text-sm font-medium text-foreground">
-              {exactCandidate
-                ? "已找到与本地目录内容完全一致的候选，已优先置顶。"
-                : "未找到当前内容完全一致的候选，请根据作者和仓库来源确认。"}
-            </p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              名称相同不代表来源相同；“内容完全一致”只表示当前远端目录指纹一致。
-            </p>
-            {rateLimited ? (
-              <p className="mt-2 text-xs leading-5 text-destructive">
-                GitHub API
-                已达到当前请求上限，验证已停止。请稍后重试，或在设置中配置
-                GitHub Token。
-              </p>
-            ) : hasUnverifiedCandidate ? (
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                未完成验证的候选不会允许直接绑定，请先处理网络、权限或路径问题。
-              </p>
+        <div className="flex flex-col gap-3">
+          <div className="flex min-h-8 items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-foreground">候选来源</p>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {candidates.length} 个
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-label="查看匹配说明"
+                    className="size-7"
+                    size="icon"
+                    variant="ghost"
+                  >
+                    <Info aria-hidden="true" className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs leading-5" sideOffset={6}>
+                  匹配只会更新来源记录，不会替换本地文件。只有完成内容验证的候选可以匹配。
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            {showSearchMore ? (
+              <Button onClick={onSearchMore} size="sm" variant="ghost">
+                <Search data-icon="inline-start" />
+                搜索更多
+              </Button>
             ) : null}
           </div>
-          <p className="text-sm font-medium text-foreground">
-            找到 {candidates.length} 个候选
-          </p>
-          {candidates.map((candidate, index) => (
-            <div
-              className="flex items-start justify-between gap-4 rounded-md border border-border p-4"
-              key={candidate.id}
-              role="listitem"
+          {rateLimited ? (
+            <p
+              className="flex items-center gap-2 text-xs leading-5 text-destructive"
+              role="status"
             >
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {candidate.name}
-                  </p>
-                  {index === 0 ? (
-                    <Badge
-                      className="border-primary/30 text-primary"
-                      variant="outline"
-                    >
-                      {exactCandidate ? "推荐" : "优先候选"}
-                    </Badge>
-                  ) : null}
-                  <Badge
-                    variant={
-                      candidate.verification === "exact" ? "success" : "muted"
-                    }
-                  >
-                    {verificationLabel(candidate)}
-                  </Badge>
-                  {candidate.matchBasis === "npx-lock" ? (
-                    <Badge variant="outline">NPX 安装记录</Badge>
-                  ) : candidate.descriptionMatch ? (
-                    <Badge variant="outline">说明一致</Badge>
-                  ) : null}
-                </div>
-                <p className="mt-2 truncate text-xs text-muted-foreground">
-                  仓库 {candidate.source} · 路径 {candidate.slug}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {candidate.installs > 0
-                    ? `安装量 ${candidate.installs.toLocaleString("zh-CN")}`
-                    : "来源记录未包含安装量"}
-                  {candidate.remoteVersion
-                    ? ` · 远端提交 ${shortRevision(candidate.remoteVersion)}`
-                    : " · 暂无远端版本"}
-                </p>
-                {candidate.remoteHash ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    远端指纹 {candidate.remoteHash.slice(0, 12)}
-                  </p>
-                ) : null}
-              </div>
-              <Button
-                disabled={
-                  pending ||
-                  !["exact", "different"].includes(candidate.verification)
-                }
-                onClick={() => onLink(candidate)}
-                size="sm"
-                variant="outline"
-              >
-                <Link2 data-icon="inline-start" />
-                {!["exact", "different"].includes(candidate.verification)
-                  ? "无法验证"
-                  : index === 0 && exactCandidate
-                    ? "采用推荐"
-                    : "匹配"}
-              </Button>
-            </div>
-          ))}
-          {showSearchMore ? (
-            <Button onClick={onSearchMore} variant="outline">
-              <Search data-icon="inline-start" />
-              搜索更多候选
-            </Button>
+              <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
+              GitHub 请求受限；稍后重试或在设置中配置 Token。
+            </p>
           ) : null}
+          <div className="flex flex-col gap-2" role="list">
+            {candidates.map((candidate) => {
+              const canLink = ["exact", "different"].includes(
+                candidate.verification,
+              );
+              const recommended =
+                candidate.verification === "exact" &&
+                candidate.id === exactCandidate?.id;
+              return (
+                <div
+                  className={`flex items-start justify-between gap-4 rounded-md border p-3 ${
+                    recommended
+                      ? "border-success/30 bg-success/5"
+                      : "border-border"
+                  }`}
+                  key={candidate.id}
+                  role="listitem"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {candidate.name}
+                      </p>
+                      {recommended ? (
+                        <Badge variant="success">推荐</Badge>
+                      ) : null}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            tabIndex={0}
+                            variant={
+                              candidate.verification === "exact"
+                                ? "success"
+                                : candidate.verification === "different"
+                                  ? "muted"
+                                  : "outline"
+                            }
+                          >
+                            {verificationLabel(candidate)}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          className="max-w-xs leading-5"
+                          sideOffset={6}
+                        >
+                          {verificationHelp(candidate)}
+                        </TooltipContent>
+                      </Tooltip>
+                      {candidate.matchBasis === "npx-lock" ? (
+                        <Badge variant="outline">NPX 记录</Badge>
+                      ) : null}
+                    </div>
+                    <p className="mt-1.5 truncate text-xs text-muted-foreground">
+                      {candidate.source} · {candidate.slug}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs tabular-nums text-muted-foreground">
+                      {candidate.installs > 0 ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Download aria-hidden="true" className="size-3.5" />
+                          {candidate.installs.toLocaleString("zh-CN")}
+                        </span>
+                      ) : null}
+                      {candidate.remoteVersion ? (
+                        <span
+                          className="inline-flex items-center gap-1.5"
+                          title={`远端提交 ${candidate.remoteVersion}`}
+                        >
+                          <GitCommit aria-hidden="true" className="size-3.5" />
+                          {shortRevision(candidate.remoteVersion)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <Button
+                    disabled={pending || !canLink}
+                    onClick={() => onLink(candidate)}
+                    size="sm"
+                    variant={recommended ? "default" : "outline"}
+                  >
+                    <Link2 data-icon="inline-start" />
+                    {canLink ? (recommended ? "采用" : "匹配") : "不可匹配"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -408,6 +437,7 @@ function SkillRow({
   checking,
   checked,
   description,
+  interactionDisabled,
   onCheck,
   onClaudeDistribution,
   onDetail,
@@ -423,6 +453,7 @@ function SkillRow({
   checking: boolean;
   checked: boolean;
   description?: string;
+  interactionDisabled: boolean;
   onCheck: (checked: boolean) => void;
   onClaudeDistribution: (skill: InstalledSkill) => void;
   onDetail: (skill: InstalledSkill) => void;
@@ -436,6 +467,7 @@ function SkillRow({
   updateAvailable: boolean;
 }) {
   const busy = pending || checking;
+  const controlsDisabled = busy || interactionDisabled;
 
   return (
     <div aria-busy={busy} className="relative">
@@ -447,6 +479,7 @@ function SkillRow({
         <Checkbox
           aria-label={`选择 ${skill.name}`}
           checked={checked}
+          disabled={controlsDisabled}
           onCheckedChange={(value) => onCheck(value === true)}
         />
         <div className="min-w-0">
@@ -475,7 +508,7 @@ function SkillRow({
           <DropdownMenuTrigger asChild>
             <Button
               aria-label={`打开 ${skill.name} 操作菜单`}
-              disabled={busy}
+              disabled={controlsDisabled}
               size="icon"
               variant="ghost"
             >
@@ -489,7 +522,7 @@ function SkillRow({
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
-                disabled={pending}
+                disabled={controlsDisabled}
                 onSelect={() => onDetail(skill)}
               >
                 <FileText />
@@ -497,7 +530,7 @@ function SkillRow({
               </DropdownMenuItem>
               {skill.source.startsWith("local://") ? (
                 <DropdownMenuItem
-                  disabled={pending}
+                  disabled={controlsDisabled}
                   onSelect={() => onOnlineMatch(skill)}
                 >
                   <Search />
@@ -505,21 +538,21 @@ function SkillRow({
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem
-                disabled={pending || !updateAvailable}
+                disabled={controlsDisabled || !updateAvailable}
                 onSelect={() => onUpdate(skill)}
               >
                 <Download />
                 {updateAvailable ? "更新" : "已是最新"}
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={pending}
+                disabled={controlsDisabled}
                 onSelect={() => onOpenDirectory(skill)}
               >
                 <FolderOpen />
                 打开技能目录
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={pending}
+                disabled={controlsDisabled}
                 onSelect={() => onClaudeDistribution(skill)}
               >
                 {skill.claudeDistributed ? <Unlink2 /> : <Link2 />}
@@ -528,7 +561,7 @@ function SkillRow({
                   : "分发至 Claude"}
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={pending}
+                disabled={controlsDisabled}
                 onSelect={() => onUninstall(skill)}
                 variant="destructive"
               >
@@ -602,6 +635,14 @@ export function SkillsPage() {
   const [githubUrlOpen, setGithubUrlOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [directoryError, setDirectoryError] = useState<string>();
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [bulkUpdateProgress, setBulkUpdateProgress] = useState({
+    completed: 0,
+    total: 0,
+  });
+  const [completedUpdateIds, setCompletedUpdateIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
     setSelectedIds((current) =>
@@ -609,10 +650,17 @@ export function SkillsPage() {
     );
   }, [skills]);
 
-  const updatesById = useMemo(
-    () => new Map(updates.map((item) => [item.id, item])),
-    [updates],
+  const visibleUpdates = useMemo(
+    () => updates.filter((item) => !completedUpdateIds.has(item.id)),
+    [completedUpdateIds, updates],
   );
+  const updatesById = useMemo(
+    () => new Map(visibleUpdates.map((item) => [item.id, item])),
+    [visibleUpdates],
+  );
+  const availableUpdateCount = visibleUpdates.filter(
+    (item) => item.updateAvailable,
+  ).length;
   const filteredSkills = useMemo(
     () =>
       filterAndSortSkills(skills, updatesById, {
@@ -657,6 +705,7 @@ export function SkillsPage() {
   };
   const checkSelectedUpdates = async () => {
     if (selectedIds.length === 0) return;
+    setCompletedUpdateIds(new Set());
     const result = await checkUpdatesNow(undefined, selectedIds);
     if (result === undefined) {
       toast({
@@ -674,6 +723,51 @@ export function SkillsPage() {
           : "所有选中技能均已是最新。",
       title: updateCount > 0 ? "发现可用更新" : "检查完成",
       variant: updateCount > 0 ? "info" : "success",
+    });
+  };
+  const updateSingleSkill = async (skill: InstalledSkill) => {
+    const result = await management.update(skill.id);
+    if (result) {
+      setCompletedUpdateIds((current) => new Set(current).add(skill.id));
+    }
+  };
+  const updateAllSkills = async () => {
+    if (bulkUpdating) return;
+    const targets = updates.filter(
+      (item) => item.updateAvailable && !completedUpdateIds.has(item.id),
+    );
+    if (targets.length === 0) return;
+
+    setBulkUpdating(true);
+    setBulkUpdateProgress({ completed: 0, total: targets.length });
+    let updatedCount = 0;
+    let failedCount = 0;
+    try {
+      for (const target of targets) {
+        const result = await management.update(target.id, { refresh: false });
+        if (result) {
+          updatedCount += 1;
+          setCompletedUpdateIds((current) => new Set(current).add(target.id));
+        } else {
+          failedCount += 1;
+        }
+        setBulkUpdateProgress((current) => ({
+          completed: current.completed + 1,
+          total: current.total,
+        }));
+      }
+      await refreshSkills();
+    } finally {
+      setBulkUpdating(false);
+      setBulkUpdateProgress({ completed: 0, total: 0 });
+    }
+    toast({
+      description:
+        failedCount > 0
+          ? `已更新 ${updatedCount} 个技能，${failedCount} 个技能更新失败。`
+          : `已更新 ${updatedCount} 个技能。`,
+      title: failedCount > 0 ? "批量更新完成" : "全部更新完成",
+      variant: failedCount > 0 ? "info" : "success",
     });
   };
   const closeOnlineMatch = () => {
@@ -916,14 +1010,43 @@ export function SkillsPage() {
                   重新扫描
                 </Button>
               </div>
-              <Button
-                disabled={selectedIds.length === 0 || updatesChecking}
-                onClick={() => void checkSelectedUpdates()}
-                variant="secondary"
-              >
-                <RefreshCw data-icon="inline-start" />
-                {updatesChecking ? "检查中" : "检查更新"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {availableUpdateCount > 0 || bulkUpdating ? (
+                  <Button
+                    aria-label={`更新全部 ${availableUpdateCount} 个技能`}
+                    disabled={
+                      bulkUpdating ||
+                      updatesChecking ||
+                      Boolean(management.pending)
+                    }
+                    onClick={() => void updateAllSkills()}
+                    title={`更新全部 ${availableUpdateCount} 个技能`}
+                  >
+                    {bulkUpdating ? (
+                      <LoaderCircle
+                        aria-hidden="true"
+                        className="animate-spin"
+                        data-icon="inline-start"
+                      />
+                    ) : (
+                      <Download data-icon="inline-start" />
+                    )}
+                    {bulkUpdating
+                      ? `更新中 ${bulkUpdateProgress.completed}/${bulkUpdateProgress.total}`
+                      : `更新全部（${availableUpdateCount}）`}
+                  </Button>
+                ) : null}
+                <Button
+                  disabled={
+                    selectedIds.length === 0 || updatesChecking || bulkUpdating
+                  }
+                  onClick={() => void checkSelectedUpdates()}
+                  variant="secondary"
+                >
+                  <RefreshCw data-icon="inline-start" />
+                  {updatesChecking ? "检查中" : "检查更新"}
+                </Button>
+              </div>
             </div>
           </div>
           <Separator className="bg-foreground/20" />
@@ -987,6 +1110,7 @@ export function SkillsPage() {
                                 ? translations[skill.id] ?? skill.description
                                 : skill.description
                             }
+                            interactionDisabled={bulkUpdating}
                             key={skill.id}
                             onCheck={(checked) =>
                               setSelectedIds((current) =>
@@ -1005,7 +1129,7 @@ export function SkillsPage() {
                             onOnlineMatch={(item) => void openOnlineMatch(item)}
                             onOpenDirectory={(item) => void openDirectory(item)}
                             onUninstall={setUninstallTarget}
-                            onUpdate={(item) => void management.update(item.id)}
+                            onUpdate={(item) => void updateSingleSkill(item)}
                             pending={management.pending === skill.id}
                             skill={skill}
                             updating={
@@ -1029,7 +1153,9 @@ export function SkillsPage() {
       </Card>
 
       <Dialog
-        description="查询远端候选，匹配后保留本地文件并启用更新。"
+        contentClassName="px-6 py-4"
+        description="为本地技能关联远端来源。"
+        descriptionHidden
         onClose={closeOnlineMatch}
         open={Boolean(matchSkill)}
         title={`在线匹配：${matchSkill?.name ?? "技能"}`}
@@ -1051,7 +1177,6 @@ export function SkillsPage() {
                   candidate.matchBasis === "npx-lock",
               )
             }
-            skill={matchSkill}
           />
         ) : null}
       </Dialog>

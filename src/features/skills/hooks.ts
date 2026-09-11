@@ -156,6 +156,10 @@ type SkillManagementAction =
   | "uninstall"
   | "update";
 
+type SkillManagementOptions = {
+  refresh?: boolean;
+};
+
 export function useSkillManagement(onCompleted: () => void) {
   const [pending, setPending] = useState<string>();
   const [pendingAction, setPendingAction] = useState<{
@@ -169,13 +173,14 @@ export function useSkillManagement(onCompleted: () => void) {
       skillId: string,
       action: () => Promise<T>,
       kind: SkillManagementAction,
+      options: SkillManagementOptions = {},
     ) => {
       setPending(skillId);
       setPendingAction({ kind, skillId });
       setError(undefined);
       try {
         const result = await action();
-        onCompleted();
+        if (options.refresh !== false) onCompleted();
         return result;
       } catch (reason) {
         setError(normalizeTauriError(reason));
@@ -213,8 +218,8 @@ export function useSkillManagement(onCompleted: () => void) {
         () => linkLocalSkillApi(skillId, remoteSkillId, remoteVersion),
         "match",
       ),
-    update: (skillId: string) =>
-      run(skillId, () => updateSkill(skillId), "update"),
+    update: (skillId: string, options?: SkillManagementOptions) =>
+      run(skillId, () => updateSkill(skillId), "update", options),
   };
 }
 

@@ -26,25 +26,22 @@ pub async fn fetch_latest_with_client(
     Ok((commit, files))
 }
 
-pub async fn fetch_latest_with_probe(
+pub async fn fetch_with_probe_at(
     client: &GitHubClient,
     record: &SkillLockRecord,
+    commit: &str,
     local_skill_md: &str,
-) -> Result<(String, SkillProbe), SkillsageError> {
-    let commit = client
-        .get_latest_commit_sha(&record.owner, &record.repo)
-        .await?;
+) -> Result<SkillProbe, SkillsageError> {
     let skill_path = record.skill_path.as_deref().unwrap_or(&record.name);
-    let files = fetch_skill_files_with_probe(
+    fetch_skill_files_with_probe(
         client,
         &record.owner,
         &record.repo,
-        &commit,
+        commit,
         skill_path,
         local_skill_md,
     )
-    .await?;
-    Ok((commit, files))
+    .await
 }
 
 pub async fn fetch_at(

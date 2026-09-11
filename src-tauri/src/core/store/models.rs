@@ -53,7 +53,7 @@ pub struct AuditEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillFile {
     pub path: String,
-    pub contents: String,
+    pub contents: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

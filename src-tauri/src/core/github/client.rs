@@ -53,6 +53,13 @@ impl GitHubClient {
     }
 
     pub async fn get_text(&self, url: &str) -> Result<String, SkillsageError> {
+        let bytes = self.get_bytes(url).await?;
+        String::from_utf8(bytes).map_err(|error| {
+            SkillsageError::InvalidStoreData(format!("GitHub 返回了非 UTF-8 文本: {error}"))
+        })
+    }
+
+    pub async fn get_bytes(&self, url: &str) -> Result<Vec<u8>, SkillsageError> {
         let response = self
             .authorized(self.http.get(url))
             .send()
@@ -66,10 +73,7 @@ impl GitHubClient {
             tracing::warn!(status, "GitHub request returned an error status");
             return Err(SkillsageError::github_status(status, self.token.is_some()));
         }
-        let bytes = bounded_bytes(response, MAX_REMOTE_TEXT_BYTES, "GitHub 文本").await?;
-        String::from_utf8(bytes).map_err(|error| {
-            SkillsageError::InvalidStoreData(format!("GitHub 返回了非 UTF-8 内容: {error}"))
-        })
+        bounded_bytes(response, MAX_REMOTE_TEXT_BYTES, "GitHub 文件").await
     }
 
     pub async fn get_default_branch(

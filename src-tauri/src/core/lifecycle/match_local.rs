@@ -237,38 +237,48 @@ async fn verify_candidate(
                 description: String::new(),
                 claude_distributed: false,
             };
-            match remote::fetch_latest_with_probe(github_client, &probe, local_skill_md).await {
-                Ok((version, probe)) => {
-                    if let Ok(parsed) = parse_skill_md(&probe.skill_md) {
-                        description_match =
-                            descriptions_match(local_skill_md, &parsed.manifest.description);
-                        if candidate.description.is_none() {
-                            candidate.description = Some(parsed.manifest.description);
+            match github_client.get_latest_commit_sha(owner, repo).await {
+                Ok(version) => match remote::fetch_with_probe_at(
+                    github_client,
+                    &probe,
+                    &version,
+                    local_skill_md,
+                )
+                .await
+                {
+                    Ok(probe) => {
+                        if let Ok(parsed) = parse_skill_md(&probe.skill_md) {
+                            description_match =
+                                descriptions_match(local_skill_md, &parsed.manifest.description);
+                            if candidate.description.is_none() {
+                                candidate.description = Some(parsed.manifest.description);
+                            }
                         }
-                    }
-                    let Some(files) = probe.files else {
-                        return LocalSkillMatch {
-                            candidate,
-                            verification: "different".to_string(),
-                            remote_version: Some(version),
-                            remote_hash: None,
-                            description_match,
-                            match_basis: match_basis.to_string(),
+                        let Some(files) = probe.files else {
+                            return LocalSkillMatch {
+                                candidate,
+                                verification: "different".to_string(),
+                                remote_version: Some(version),
+                                remote_hash: None,
+                                description_match,
+                                match_basis: match_basis.to_string(),
+                            };
                         };
-                    };
-                    let remote_hash = lockfile::content_hash_files(
-                        &files
-                            .iter()
-                            .map(|file| (file.path.replace('\\', "/"), file.contents.clone()))
-                            .collect::<Vec<_>>(),
-                    );
-                    let content_match = remote_hash == local_hash;
-                    (
-                        if content_match { "exact" } else { "different" },
-                        Some(version),
-                        Some(remote_hash),
-                    )
-                }
+                        let remote_hash = lockfile::content_hash_files(
+                            &files
+                                .iter()
+                                .map(|file| (file.path.replace('\\', "/"), file.contents.clone()))
+                                .collect::<Vec<_>>(),
+                        );
+                        let content_match = remote_hash == local_hash;
+                        (
+                            if content_match { "exact" } else { "different" },
+                            Some(version),
+                            Some(remote_hash),
+                        )
+                    }
+                    Err(error) => (verification_for_error(&error), Some(version), None),
+                },
                 Err(error) => (verification_for_error(&error), None, None),
             }
         }

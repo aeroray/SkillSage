@@ -201,7 +201,7 @@ license: MIT
             "commit-v2".to_string(),
             vec![SkillFile {
                 path: "SKILL.md".to_string(),
-                contents: next.to_string(),
+                contents: next.as_bytes().to_vec(),
             }],
         )
         .expect("update should succeed");

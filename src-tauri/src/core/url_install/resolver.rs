@@ -131,5 +131,8 @@ fn manifest_from_files(
         .iter()
         .find(|file| file.path.eq_ignore_ascii_case("SKILL.md"))
         .ok_or_else(|| SkillsageError::InvalidSkill("技能目录缺少 SKILL.md".into()))?;
-    Ok(parse_skill_md(&skill_md.contents)?.manifest)
+    let contents = std::str::from_utf8(&skill_md.contents).map_err(|error| {
+        SkillsageError::InvalidSkill(format!("SKILL.md 不是有效的 UTF-8 文本：{error}"))
+    })?;
+    Ok(parse_skill_md(contents)?.manifest)
 }

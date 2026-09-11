@@ -175,6 +175,11 @@ Reason: Installation entry points belong to the same skill-management context, w
 Decision: The installed-skills “检查更新” action is enabled only when skills are selected and checks exactly those selected skill IDs; the page's initial refresh and lifecycle refreshes may still check all installed skills.
 Reason: Batch operations should share one predictable selection scope instead of silently operating on the entire repository.
 
+## 2026-09-11 - Batch skill updates
+
+Decision: Installed-skill management offers a batch update action for currently detected updates, runs the existing per-skill update pipeline sequentially, continues after individual failures, and reports the aggregate result.
+Reason: Users can update several known out-of-date skills without repeating the same action while retaining each skill's existing safety and error handling.
+
 ## 2026-08-18 - Migration and store visual hierarchy
 
 Decision: Migration results use compact single-line path fields, explicit right-side action panels for manual/invalid items, and no redundant pending-count badge. Store browsing uses left-aligned colored ranking tabs, a right-aligned search field, text-led skill cards, and an expandable same-repository skill menu.
@@ -198,6 +203,11 @@ Reason: Skills installed by CLI or copied into the shared directory should be ab
 
 Decision: Local matching first verifies compatible NPX lock provenance, otherwise checks only the top three deduplicated store candidates and expands to twenty only on request. Strict normalized description equality and install-count dominance may stop candidate expansion, while only full content hashes count as exact matches; session caches prevent repeated searches and verification.
 Reason: This preserves explicit verification while avoiding broad GitHub request bursts for common skill names and older local copies.
+
+## 2026-09-11 - Byte-safe remote skill content
+
+Decision: Download, materialize, and hash remote skill files as raw bytes; decode only `SKILL.md` as UTF-8 when parsing its manifest.
+Reason: Skills can include binary assets such as PNG files, which must not make installation, updates, or content verification fail.
 
 ## 2026-08-20 - Single shared public-directory install model (supersedes per-tool distribution)
 

@@ -116,7 +116,7 @@ pub fn content_hash(root: &Path) -> Result<String, SkillsageError> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
-pub fn content_hash_files(files: &[(String, String)]) -> String {
+pub fn content_hash_files(files: &[(String, Vec<u8>)]) -> String {
     let mut sorted = files.to_vec();
     sorted.sort_by(|left, right| left.0.cmp(&right.0));
 
@@ -124,7 +124,7 @@ pub fn content_hash_files(files: &[(String, String)]) -> String {
     for (relative_path, contents) in sorted {
         hasher.update(relative_path.replace('\\', "/").as_bytes());
         hasher.update(&[0]);
-        hasher.update(contents.as_bytes());
+        hasher.update(&contents);
         hasher.update(&[0]);
     }
     hasher.finalize().to_hex().to_string()
@@ -168,7 +168,7 @@ pub fn unix_timestamp() -> String {
 mod tests {
     use std::fs;
 
-    use super::content_hash;
+    use super::{content_hash, content_hash_files};
 
     #[test]
     fn content_hash_is_stable_for_same_files() {
@@ -180,6 +180,21 @@ mod tests {
         let first = content_hash(&root).expect("hash should work");
         let second = content_hash(&root).expect("hash should be stable");
         assert_eq!(first, second);
+        fs::remove_dir_all(root).expect("remove test dir");
+    }
+
+    #[test]
+    fn in_memory_hash_supports_binary_skill_files() {
+        let root =
+            std::env::temp_dir().join(format!("skillsage-binary-hash-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("assets")).expect("create test dir");
+        let bytes = vec![0, 159, 146, 150, 255];
+        fs::write(root.join("assets/image.bin"), &bytes).expect("write binary test file");
+
+        let disk_hash = content_hash(&root).expect("disk hash should work");
+        let memory_hash = content_hash_files(&[("assets/image.bin".into(), bytes)]);
+        assert_eq!(memory_hash, disk_hash);
         fs::remove_dir_all(root).expect("remove test dir");
     }
 }

@@ -110,7 +110,7 @@ async fn download_files(
     if let (Some(path), Some(contents)) = (prefetched_path, prefetched_contents) {
         downloaded.push(SkillFile {
             path: relative_path(path, &actual_prefix),
-            contents,
+            contents: contents.into_bytes(),
         });
     }
 
@@ -130,7 +130,7 @@ async fn download_files(
                 .await
                 .map_err(|error| SkillsageError::Task(error.to_string()))?;
             let url = format!("https://raw.githubusercontent.com/{owner}/{repo}/{commit}/{file}");
-            let contents = client.get_text(&url).await?;
+            let contents = client.get_bytes(&url).await?;
             Ok::<SkillFile, SkillsageError>(SkillFile {
                 path: relative_path(&file, &actual_prefix),
                 contents,
