@@ -41,6 +41,7 @@ import type { AdoptableItem } from "../../features/adopt";
 import { copyText } from "../../lib/clipboard";
 import { displayPath } from "../../lib/paths";
 import { normalizeTauriError } from "../../lib/tauri";
+import { refreshInstalledSkillsCache } from "../../features/skills/hooks";
 
 function AdoptCandidateRow({
   item,
@@ -182,6 +183,7 @@ export function AdoptPage() {
   };
   const handleCompleted = () => {
     void runScan();
+    void refreshInstalledSkillsCache().catch(() => undefined);
   };
   const { error: executeError, execute, executing } = useAdoptExecute(handleCompleted);
 

@@ -6,6 +6,7 @@ import {
   Download,
   ExternalLink,
   Flame,
+  LoaderCircle,
   Rocket,
   RefreshCw,
   Search,
@@ -161,7 +162,7 @@ function SkillCard({
       : description;
   return (
     <Card
-      className="cursor-pointer shadow-sm transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="cursor-pointer shadow-sm transition-[background-color,border-color] duration-150 hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       onClick={() => onOpen(primary.id)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -179,7 +180,7 @@ function SkillCard({
           <CardDescription className="mt-1 truncate font-mono text-xs">
             {source}
           </CardDescription>
-          {displayedDescription ? (
+          {!installed && displayedDescription ? (
             <CardDescription className="mt-3 line-clamp-2 text-xs leading-5">
               {displayedDescription}
             </CardDescription>
@@ -261,7 +262,6 @@ function DetailContent({
   descriptionMode,
   detail,
   installError,
-  installMessage,
   installing,
   onDescriptionModeChange,
   onOpenSettings,
@@ -275,7 +275,6 @@ function DetailContent({
   descriptionMode: DescriptionMode;
   detail: SkillDetail;
   installError?: string;
-  installMessage: string;
   installing: boolean;
   onDescriptionModeChange: (mode: DescriptionMode) => void;
   onInstall: () => void;
@@ -415,20 +414,14 @@ function DetailContent({
           error={installError}
           onOpenSettings={onOpenSettings}
         />
-        {installMessage ? (
-          <p className="mt-4 text-xs text-muted-foreground" role="status">
-            {installMessage}
-          </p>
-        ) : null}
-        <div className="mt-5 flex items-center justify-end gap-4">
-          <div className="flex items-center gap-2">
+        <div className="mt-5 flex justify-end">
+          <Button aria-busy={installing} disabled={installing} onClick={onInstall}>
             {installing ? (
-              <Badge variant="success">{stageLabels[stage] ?? "处理中"}</Badge>
-            ) : null}
-          </div>
-          <Button disabled={installing} onClick={onInstall}>
-            <Download data-icon="inline-start" />
-            {installing ? "安装中" : "开始安装"}
+              <LoaderCircle aria-hidden="true" className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <Download data-icon="inline-start" />
+            )}
+            {installing ? `${stageLabels[stage] ?? "处理中"}…` : "开始安装"}
           </Button>
         </div>
       </section>
@@ -757,7 +750,6 @@ export function StorePage() {
             descriptionMode={detailDescriptionMode}
             detail={detail}
             installError={installState.error ?? conflictCheck.error}
-            installMessage={installState.message}
             installing={installState.installing || conflictCheck.checking}
             onDescriptionModeChange={(mode) => {
               setDescriptionModes((current) => ({

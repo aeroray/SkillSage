@@ -1,6 +1,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::core::claude;
 use crate::core::github::{client::GitHubClient, download::fetch_skill_files_with_path};
 use crate::core::lifecycle::install::{self, InstallResult};
 use crate::core::repo::conflict::ConflictAction;
@@ -64,12 +65,20 @@ pub async fn install_skill(
         &app,
         &skill_id,
         "distributing",
-        "Storing skill in the shared skills directory",
+        "Installing skill and distributing to Claude Code",
     )?;
     let _write_guard = state.write_lock.lock().await;
     let result = tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
-        install::install_skill_from_store_at(&layout, detail, conflict_action)
+        let result = install::install_skill_from_store_at(&layout, detail, conflict_action)?;
+        if let Err(error) = claude::set_at(&layout, &result.id, true) {
+            tracing::warn!(
+                skill_id = %result.id,
+                error = %error,
+                "技能已安装，但自动分发到 Claude Code 失败"
+            );
+        }
+        Ok::<InstallResult, SkillsageError>(result)
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))??;

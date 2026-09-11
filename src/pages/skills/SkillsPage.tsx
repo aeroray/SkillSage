@@ -18,6 +18,9 @@ import {
 import {
   ArrowRight,
   CircleAlert,
+  Circle,
+  CheckCircle2,
+  ChevronDown,
   Download,
   FileText,
   FolderOpen,
@@ -31,7 +34,7 @@ import {
   RefreshCw,
   ScanSearch,
   Search,
-  Store,
+  SquareArrowRightEnter,
   Trash2,
   Unlink2,
   X,
@@ -55,9 +58,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuLabel,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { Input } from "../../components/ui/input";
@@ -439,6 +440,7 @@ function SkillRow({
   description,
   interactionDisabled,
   onCheck,
+  onCheckUpdate,
   onClaudeDistribution,
   onDetail,
   onOnlineMatch,
@@ -455,6 +457,7 @@ function SkillRow({
   description?: string;
   interactionDisabled: boolean;
   onCheck: (checked: boolean) => void;
+  onCheckUpdate: (skill: InstalledSkill) => void;
   onClaudeDistribution: (skill: InstalledSkill) => void;
   onDetail: (skill: InstalledSkill) => void;
   onOnlineMatch: (skill: InstalledSkill) => void;
@@ -468,6 +471,9 @@ function SkillRow({
 }) {
   const busy = pending || checking;
   const controlsDisabled = busy || interactionDisabled;
+  const isLocalSkill = skill.source.startsWith("local://");
+  const hasRemoteUpdateSource =
+    !isLocalSkill && !skill.source.startsWith("builtin://");
 
   return (
     <div aria-busy={busy} className="relative">
@@ -498,11 +504,25 @@ function SkillRow({
           <p>{sourceLabel(skill.source)}</p>
           <p>安装于 {formatInstalledAt(skill.installedAt)}</p>
         </div>
-        <div className="text-xs text-muted-foreground">
-          <p className="font-medium text-foreground">
-            提交 {shortRevision(skill.currentVersion)}
+        <div className="min-w-0 text-xs">
+          <p
+            className={`flex items-center gap-1.5 font-medium ${
+              skill.claudeDistributed
+                ? "text-success"
+                : "text-muted-foreground"
+            }`}
+          >
+            {skill.claudeDistributed ? (
+              <CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />
+            ) : (
+              <Circle aria-hidden="true" className="size-4 shrink-0" />
+            )}
+            <span className="truncate">
+              {skill.claudeDistributed
+                ? "已分发至 Claude Code"
+                : "未分发至 Claude Code"}
+            </span>
           </p>
-          <p className="mt-1">指纹 {skill.currentHash.slice(0, 10)}</p>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -516,10 +536,6 @@ function SkillRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>
-              {skill.claudeDistributed ? "已分发至 Claude" : "未分发至 Claude"}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
                 disabled={controlsDisabled}
@@ -537,13 +553,24 @@ function SkillRow({
                   在线匹配
                 </DropdownMenuItem>
               ) : null}
-              <DropdownMenuItem
-                disabled={controlsDisabled || !updateAvailable}
-                onSelect={() => onUpdate(skill)}
-              >
-                <Download />
-                {updateAvailable ? "更新" : "已是最新"}
-              </DropdownMenuItem>
+              {hasRemoteUpdateSource ? (
+                <DropdownMenuItem
+                  disabled={controlsDisabled}
+                  onSelect={() => onCheckUpdate(skill)}
+                >
+                  <RefreshCw />
+                  检查更新
+                </DropdownMenuItem>
+              ) : null}
+              {hasRemoteUpdateSource && updateAvailable ? (
+                <DropdownMenuItem
+                  disabled={controlsDisabled}
+                  onSelect={() => onUpdate(skill)}
+                >
+                  <Download />
+                  更新
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 disabled={controlsDisabled}
                 onSelect={() => onOpenDirectory(skill)}
@@ -594,6 +621,7 @@ export function SkillsPage() {
     skillsRoot,
     refresh: refreshSkills,
     skills,
+    updateSkill: updateInstalledSkill,
   } = useInstalledSkills();
   const {
     check: checkUpdatesNow,
@@ -724,6 +752,41 @@ export function SkillsPage() {
       title: updateCount > 0 ? "发现可用更新" : "检查完成",
       variant: updateCount > 0 ? "info" : "success",
     });
+  };
+  const checkSingleUpdate = async (skill: InstalledSkill) => {
+    setCompletedUpdateIds((current) => {
+      if (!current.has(skill.id)) return current;
+      const next = new Set(current);
+      next.delete(skill.id);
+      return next;
+    });
+    const result = await checkUpdatesNow(skill.id);
+    if (result === undefined) {
+      toast({
+        description: "请稍后重试。",
+        title: "检查更新失败",
+        variant: "error",
+      });
+      return;
+    }
+    const update = result.find((item) => item.id === skill.id);
+    toast({
+      description: update?.updateAvailable
+        ? "发现新版本，可以从技能菜单中更新。"
+        : update
+          ? "当前已是最新版本。"
+          : "已完成当前技能的更新检查。",
+      title: update?.updateAvailable ? "发现可用更新" : "检查完成",
+      variant: update?.updateAvailable ? "info" : "success",
+    });
+  };
+  const toggleClaudeDistribution = async (skill: InstalledSkill) => {
+    const updated = await management.setClaudeDistribution(
+      skill.id,
+      !skill.claudeDistributed,
+      { refresh: false },
+    );
+    if (updated) updateInstalledSkill(updated);
   };
   const updateSingleSkill = async (skill: InstalledSkill) => {
     const result = await management.update(skill.id);
@@ -866,17 +929,39 @@ export function SkillsPage() {
       <PageHeader
         actions={
           <div className="flex items-center gap-2">
-            <Button onClick={() => setImportOpen(true)} variant="outline">
-              <FolderOpen data-icon="inline-start" />
-              导入本地技能
-            </Button>
-            <Button onClick={() => setGithubUrlOpen(true)} variant="outline">
-              <GitBranch data-icon="inline-start" />
-              GitHub 链接安装
-            </Button>
-            <Button onClick={() => navigate("/store")}>
-              <Store data-icon="inline-start" />
-              技能商店
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button aria-label="手动导入技能" variant="outline">
+                  <SquareArrowRightEnter data-icon="inline-start" />
+                  手动导入
+                  <ChevronDown data-icon="inline-end" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onSelect={() => setImportOpen(true)}>
+                    <FolderOpen />
+                    导入本地技能
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setGithubUrlOpen(true)}>
+                    <GitBranch />
+                    GitHub 链接安装
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              disabled={
+                skillsLoading ||
+                updatesChecking ||
+                bulkUpdating ||
+                Boolean(management.pending)
+              }
+              onClick={rescanSkills}
+              variant="outline"
+            >
+              <ScanSearch data-icon="inline-start" />
+              重新扫描
             </Button>
           </div>
         }
@@ -999,16 +1084,6 @@ export function SkillsPage() {
                   <FolderOpen data-icon="inline-start" />
                   打开技能目录
                 </Button>
-                <Button
-                  aria-label="重新扫描技能目录"
-                  disabled={skillsLoading}
-                  onClick={rescanSkills}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <ScanSearch data-icon="inline-start" />
-                  重新扫描
-                </Button>
               </div>
               <div className="flex items-center gap-2">
                 {availableUpdateCount > 0 || bulkUpdating ? (
@@ -1119,11 +1194,9 @@ export function SkillsPage() {
                                   : current.filter((id) => id !== skill.id),
                               )
                             }
+                            onCheckUpdate={(item) => void checkSingleUpdate(item)}
                             onClaudeDistribution={(item) =>
-                              void management.setClaudeDistribution(
-                                item.id,
-                                !item.claudeDistributed,
-                              )
+                              void toggleClaudeDistribution(item)
                             }
                             onDetail={setDetailSkill}
                             onOnlineMatch={(item) => void openOnlineMatch(item)}

@@ -37,6 +37,13 @@ function loadInstalledSkills(force = false) {
   return installedSkillsPromise;
 }
 
+/** Refresh the shared installed-skill cache after another flow changes the
+ * public skills directory, such as adopting an existing skill. */
+export function refreshInstalledSkillsCache() {
+  cachedInstalledSkills = undefined;
+  return loadInstalledSkills(true);
+}
+
 export function useInstalledSkills() {
   const [skills, setSkills] = useState<InstalledSkill[]>(
     () => cachedInstalledSkills?.skills ?? [],
@@ -66,11 +73,35 @@ export function useInstalledSkills() {
     }
   }, []);
 
+  const updateSkill = useCallback((updatedSkill: InstalledSkill) => {
+    setSkills((current) =>
+      current.map((skill) =>
+        skill.id === updatedSkill.id ? updatedSkill : skill,
+      ),
+    );
+    if (cachedInstalledSkills) {
+      cachedInstalledSkills = {
+        ...cachedInstalledSkills,
+        skills: cachedInstalledSkills.skills.map((skill) =>
+          skill.id === updatedSkill.id ? updatedSkill : skill,
+        ),
+      };
+    }
+  }, []);
+
   useEffect(() => {
     void refresh(false);
   }, [refresh]);
 
-  return { error, loading, refresh, setSkills, skills, skillsRoot };
+  return {
+    error,
+    loading,
+    refresh,
+    setSkills,
+    skills,
+    skillsRoot,
+    updateSkill,
+  };
 }
 
 export function useSkillInstall(onCompleted: () => void) {
@@ -133,7 +164,13 @@ export function useSkillUpdates() {
     setError(undefined);
     try {
       const result = await checkUpdates(skillId, skillIds);
-      if (currentRequest === requestId.current) setUpdates(result.updates);
+      if (currentRequest === requestId.current) {
+        setUpdates((current) => {
+          const merged = new Map(current.map((item) => [item.id, item]));
+          result.updates.forEach((item) => merged.set(item.id, item));
+          return [...merged.values()];
+        });
+      }
       return result.updates;
     } catch (reason) {
       if (currentRequest === requestId.current)
@@ -206,8 +243,17 @@ export function useSkillManagement(onCompleted: () => void) {
         },
         "uninstall",
       ),
-    setClaudeDistribution: (skillId: string, distributed: boolean) =>
-      run(skillId, () => setClaudeDistribution(skillId, distributed), "claude"),
+    setClaudeDistribution: (
+      skillId: string,
+      distributed: boolean,
+      options?: SkillManagementOptions,
+    ) =>
+      run(
+        skillId,
+        () => setClaudeDistribution(skillId, distributed),
+        "claude",
+        options,
+      ),
     linkLocalSkill: (
       skillId: string,
       remoteSkillId: string,

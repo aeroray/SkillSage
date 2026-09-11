@@ -144,6 +144,20 @@ async function previewInvoke<T>(
     };
     return undefined as T;
   }
+  if (command === "install_skill") {
+    const skillId = String(args?.skillId ?? "");
+    const skill = previewSkills.find((item) => item.id === skillId) ?? previewSkills[0];
+    const [owner] = skill.source.split("/");
+    previewClaudeDistributed.add(skill.id);
+    return {
+      id: skill.id,
+      name: skill.name,
+      owner,
+      currentVersion: "preview",
+      currentHash: "preview",
+      installPath: `C:\\Users\\PC\\.agents\\skills\\${skill.name}`,
+    } as T;
+  }
   if (command === "refresh_installed") {
     const localMatched = previewMatchedLocalSkills.has("local/local-research");
     return {
@@ -181,9 +195,23 @@ async function previewInvoke<T>(
   }
   if (command === "set_claude_distribution") {
     const skillId = String(args?.skillId ?? "");
-    if (args?.distributed) previewClaudeDistributed.add(skillId);
+    const distributed = args?.distributed === true;
+    if (distributed) previewClaudeDistributed.add(skillId);
     else previewClaudeDistributed.delete(skillId);
-    return undefined as T;
+    const skill = previewSkills.find((item) => item.id === skillId);
+    const [owner = "local", repo = "local"] = (skill?.source ?? "local/local").split("/");
+    return {
+      id: skillId,
+      name: skill?.name ?? skillId.split("/").at(-1) ?? skillId,
+      owner,
+      repo,
+      source: skill?.source ?? "local://local-research",
+      description: skill?.description ?? "用于整理本地研究资料。",
+      currentVersion: "preview",
+      currentHash: "preview",
+      installedAt: "2026-08-18T08:00:00Z",
+      claudeDistributed: distributed,
+    } as T;
   }
   if (command === "search_local_skill_matches") {
     return [

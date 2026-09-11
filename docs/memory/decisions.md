@@ -167,8 +167,17 @@ Reason: SkillSage installs real files into a shared directory, so app removal an
 
 ## 2026-08-18 - Installed skills management surface
 
-Decision: The installed-skills page presents local import, GitHub URL installation, and the store as peer actions in the top-right. Filters, selection, batch actions, and author groups share one management panel; the master selection checkbox exposes an indeterminate state when only part of the filtered result is selected.
-Reason: Installation entry points belong to the same skill-management context, while the selection workflow should visually and semantically connect its controls to the list it operates on.
+Decision: The installed-skills page presents one “手动导入” menu for local import and GitHub URL installation, plus rescan, in the top-right. Filters, selection, batch actions, and author groups share one management panel; the master selection checkbox exposes an indeterminate state when only part of the filtered result is selected.
+Reason: The toolbar stays focused on operations for the installed-skills directory, while store browsing remains a primary navigation destination.
+
+Decision: The installed-skills list replaces opaque commit and fingerprint metadata with a compact Claude Code distribution status.
+Reason: Users need the availability state more readily than internal revision identifiers, without adding a second explanatory line to every row.
+
+Decision: Toggling Claude Code distribution updates the affected installed-skill row and shared cache in place instead of refreshing the whole list.
+Reason: Distribution is a local state change and should complete without a page-wide loading flash.
+
+Decision: Store installs automatically attempt to create the managed Claude Code compatibility link after the shared skill directory is installed.
+Reason: Newly installed skills should be immediately available to Claude Code without requiring a second manual distribution action.
 
 ## 2026-08-18 - Selection-scoped update checks
 
@@ -179,6 +188,11 @@ Reason: Batch operations should share one predictable selection scope instead of
 
 Decision: Installed-skill management offers a batch update action for currently detected updates, runs the existing per-skill update pipeline sequentially, continues after individual failures, and reports the aggregate result.
 Reason: Users can update several known out-of-date skills without repeating the same action while retaining each skill's existing safety and error handling.
+
+## 2026-09-11 - Adopt refreshes installed skills
+
+Decision: A successful adopt operation refreshes both the adopt scan and the shared installed-skill cache before users return to management.
+Reason: Newly adopted skills should appear immediately without requiring a second manual scan on the installed-skills page.
 
 ## 2026-08-18 - Migration and store visual hierarchy
 
@@ -191,8 +205,20 @@ Reason: The card should communicate the source shape at the point where the skil
 Decision: Store skill cards use natural content height with explicit bottom padding; their bottom metadata row has a minimum height matching the same-repository action; ranking tabs remain compact and the search field fills the remaining toolbar width.
 Reason: The store should show more results at a glance without leaving large blank regions or visually oversized controls.
 
+Decision: Store skill-card hover states use a subtle background and border transition without translation or shadow elevation.
+Reason: Keep the card grid visually stable and prevent repeated hover feedback from becoming heavier than the content.
+
+Decision: Store cards hide the description once a skill is installed; uninstalled cards keep it as a discovery aid.
+Reason: Installed-state cards should stay compact and visually consistent while new skills retain enough context for evaluation.
+
 Decision: Store security-audit failures are represented by a red warning icon beside the audit heading, with the detailed warning exposed through a tooltip instead of a full-width alert below the audit cards.
 Reason: Audit problems remain discoverable without interrupting the detail flow or adding a large block of repeated status text.
+
+Decision: Store detail installation progress is shown inside the primary install button with a loading icon and current stage label; separate progress text and badges are omitted.
+Reason: One compact status target keeps installation feedback visible without competing with the detail content.
+
+Decision: Installed-skill menus omit the Claude distribution summary label; local and built-in skills omit remote update actions, while remote skills expose a current-skill “检查更新” action and show “更新” only when available.
+Reason: Keep menus focused on actionable operations without implying that local content has a latest version.
 
 ## 2026-08-20 - Explicit remote matching for local skills
 
