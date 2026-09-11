@@ -1,7 +1,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::core::github::{client::GitHubClient, download::fetch_skill_files};
+use crate::core::github::{client::GitHubClient, download::fetch_skill_files_with_path};
 use crate::core::lifecycle::install::{self, InstallResult};
 use crate::core::repo::conflict::ConflictAction;
 use crate::core::store::client::StoreClient;
@@ -40,7 +40,20 @@ pub async fn install_skill(
     let default_branch = github.get_default_branch(owner, repo).await?;
     let current_version = github.get_commit_sha(owner, repo, &default_branch).await?;
     detail.version = Some(current_version.clone());
-    detail.files = fetch_skill_files(&github, owner, repo, &current_version, &detail.slug).await?;
+    let requested_skill_path = detail
+        .skill_path
+        .clone()
+        .unwrap_or_else(|| detail.slug.clone());
+    let (resolved_skill_path, files) = fetch_skill_files_with_path(
+        &github,
+        owner,
+        repo,
+        &current_version,
+        &requested_skill_path,
+    )
+    .await?;
+    detail.skill_path = Some(resolved_skill_path);
+    detail.files = files;
     emit_progress(
         &app,
         &skill_id,

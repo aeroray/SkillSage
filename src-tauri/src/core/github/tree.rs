@@ -1,8 +1,9 @@
 use serde::Deserialize;
 
+use crate::core::limits::{MAX_GITHUB_TREE_ENTRIES, MAX_REMOTE_SKILL_CANDIDATES};
+use crate::core::skill::parser::parse_skill_md;
 use crate::error::SkillsageError;
 
-use super::super::limits::MAX_GITHUB_TREE_ENTRIES;
 use super::client::GitHubClient;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -26,6 +27,18 @@ pub async fn find_skill_files(
     commit: &str,
     skill_path: &str,
 ) -> Result<Vec<String>, SkillsageError> {
+    find_skill_files_with_path(client, owner, repo, commit, skill_path)
+        .await
+        .map(|(_, files)| files)
+}
+
+pub async fn find_skill_files_with_path(
+    client: &GitHubClient,
+    owner: &str,
+    repo: &str,
+    commit: &str,
+    skill_path: &str,
+) -> Result<(String, Vec<String>), SkillsageError> {
     validate_skill_path(skill_path)?;
     let tree = client.get_tree(owner, repo, commit).await?;
     if tree.truncated {
@@ -58,7 +71,8 @@ pub async fn find_skill_files(
                 .map(|(_, suffix)| suffix)
                 .unwrap_or(leaf),
         ];
-        tree.tree
+        let path_match = tree
+            .tree
             .iter()
             .filter(|entry| entry.entry_type == "blob" && entry.path.ends_with("/SKILL.md"))
             .find(|entry| {
@@ -69,11 +83,29 @@ pub async fn find_skill_files(
                     .map(|parent| aliases.contains(&parent))
                     .unwrap_or(false)
             })
-            .map(|entry| entry.path.clone())
-            .ok_or_else(|| SkillsageError::PathNotFound(exact_skill_file.clone().into()))?
+            .map(|entry| entry.path.clone());
+        match path_match {
+            Some(path) => path,
+            None => {
+                // skills.sh identifies a skill by its manifest name, which does not
+                // always match the directory name in the source repository.
+                // Resolve that mapping from SKILL.md when the path-based lookup fails.
+                find_skill_file_by_manifest(
+                    client,
+                    owner,
+                    repo,
+                    commit,
+                    &tree.tree,
+                    prefix,
+                    &exact_skill_file,
+                )
+                .await?
+            }
+        }
     };
     let actual_prefix = skill_file.strip_suffix("/SKILL.md").unwrap_or("");
-    tree.tree
+    let files = tree
+        .tree
         .into_iter()
         .filter(|entry| {
             entry.entry_type == "blob"
@@ -84,7 +116,51 @@ pub async fn find_skill_files(
             validate_tree_path(&entry.path)?;
             Ok(entry.path)
         })
-        .collect()
+        .collect::<Result<Vec<_>, SkillsageError>>()?;
+    Ok((actual_prefix.to_string(), files))
+}
+
+async fn find_skill_file_by_manifest(
+    client: &GitHubClient,
+    owner: &str,
+    repo: &str,
+    commit: &str,
+    tree: &[GitTreeEntry],
+    requested_path: &str,
+    exact_skill_file: &str,
+) -> Result<String, SkillsageError> {
+    let candidates = tree
+        .iter()
+        .filter(|entry| {
+            entry.entry_type == "blob"
+                && (entry.path == "SKILL.md" || entry.path.ends_with("/SKILL.md"))
+                && validate_tree_path(&entry.path).is_ok()
+        })
+        .map(|entry| entry.path.clone())
+        .collect::<Vec<_>>();
+    if candidates.len() > MAX_REMOTE_SKILL_CANDIDATES {
+        return Err(SkillsageError::ResponseTooLarge(format!(
+            "仓库包含超过 {MAX_REMOTE_SKILL_CANDIDATES} 个可识别技能"
+        )));
+    }
+
+    for candidate in candidates {
+        let url = format!("https://raw.githubusercontent.com/{owner}/{repo}/{commit}/{candidate}");
+        let contents = client.get_text(&url).await?;
+        let Ok(parsed) = parse_skill_md(&contents) else {
+            continue;
+        };
+        if manifest_matches_skill_path(&parsed.manifest.name, requested_path) {
+            return Ok(candidate);
+        }
+    }
+
+    Err(SkillsageError::PathNotFound(exact_skill_file.into()))
+}
+
+fn manifest_matches_skill_path(manifest_name: &str, requested_path: &str) -> bool {
+    let requested_name = requested_path.rsplit('/').next().unwrap_or(requested_path);
+    manifest_name == requested_name || manifest_name == requested_path
 }
 
 fn validate_skill_path(value: &str) -> Result<(), SkillsageError> {
@@ -119,4 +195,25 @@ fn validate_tree_path(value: &str) -> Result<(), SkillsageError> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::manifest_matches_skill_path;
+
+    #[test]
+    fn matches_manifest_name_to_store_skill_path() {
+        assert!(manifest_matches_skill_path(
+            "redesign-existing-projects",
+            "redesign-existing-projects"
+        ));
+        assert!(manifest_matches_skill_path(
+            "redesign-existing-projects",
+            "skills/redesign-existing-projects"
+        ));
+        assert!(!manifest_matches_skill_path(
+            "redesign-skill",
+            "redesign-existing-projects"
+        ));
+    }
 }

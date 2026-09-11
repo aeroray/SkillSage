@@ -2,11 +2,19 @@ use crate::error::SkillsageError;
 use std::sync::Arc;
 
 use super::super::limits::{MAX_REMOTE_SKILL_FILES, MAX_REMOTE_SKILL_TOTAL_BYTES};
-use super::{client::GitHubClient, tree::find_skill_files};
+use super::{
+    client::GitHubClient,
+    tree::{find_skill_files, find_skill_files_with_path},
+};
 
 use crate::core::store::models::SkillFile;
 
 const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 8;
+
+pub struct SkillProbe {
+    pub skill_md: String,
+    pub files: Option<Vec<SkillFile>>,
+}
 
 pub async fn fetch_skill_files(
     client: &GitHubClient,
@@ -19,6 +27,19 @@ pub async fn fetch_skill_files(
     download_files(client, owner, repo, commit, files, None).await
 }
 
+pub async fn fetch_skill_files_with_path(
+    client: &GitHubClient,
+    owner: &str,
+    repo: &str,
+    commit: &str,
+    skill_path: &str,
+) -> Result<(String, Vec<SkillFile>), SkillsageError> {
+    let (resolved_path, files) =
+        find_skill_files_with_path(client, owner, repo, commit, skill_path).await?;
+    let downloaded = download_files(client, owner, repo, commit, files, None).await?;
+    Ok((resolved_path, downloaded))
+}
+
 pub async fn fetch_skill_files_with_probe(
     client: &GitHubClient,
     owner: &str,
@@ -26,7 +47,7 @@ pub async fn fetch_skill_files_with_probe(
     commit: &str,
     skill_path: &str,
     local_skill_md: &str,
-) -> Result<Option<Vec<SkillFile>>, SkillsageError> {
+) -> Result<SkillProbe, SkillsageError> {
     let files = find_skill_files(client, owner, repo, commit, skill_path).await?;
     if files.len() > MAX_REMOTE_SKILL_FILES {
         return Err(SkillsageError::ResponseTooLarge(format!(
@@ -41,18 +62,24 @@ pub async fn fetch_skill_files_with_probe(
     let url = format!("https://raw.githubusercontent.com/{owner}/{repo}/{commit}/{skill_file}");
     let contents = client.get_text(&url).await?;
     if contents != local_skill_md {
-        return Ok(None);
+        return Ok(SkillProbe {
+            skill_md: contents,
+            files: None,
+        });
     }
-    download_files(
+    let files = download_files(
         client,
         owner,
         repo,
         commit,
         files,
-        Some((skill_file, contents)),
+        Some((skill_file, contents.clone())),
     )
-    .await
-    .map(Some)
+    .await?;
+    Ok(SkillProbe {
+        skill_md: contents,
+        files: Some(files),
+    })
 }
 
 async fn download_files(

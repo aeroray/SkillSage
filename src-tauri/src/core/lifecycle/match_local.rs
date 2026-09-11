@@ -1,13 +1,53 @@
 use crate::core::github::client::GitHubClient;
 use crate::core::lifecycle::remote;
 use crate::core::repo::{layout::RepoLayout, lockfile};
+use crate::core::skill::parser::parse_skill_md;
 use crate::core::store::{client::StoreClient, models::SkillSearchResult};
 use crate::error::SkillsageError;
 use serde::Serialize;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 const MAX_CANDIDATES_TO_VERIFY: usize = 20;
+const DEFAULT_CANDIDATES_TO_VERIFY: usize = 3;
 const MAX_CONCURRENT_VERIFICATIONS: usize = 4;
+
+#[derive(Debug, Clone)]
+pub struct PreferredRemote {
+    pub owner: String,
+    pub repo: String,
+    pub skill_path: Option<String>,
+    pub source_url: String,
+}
+
+impl PreferredRemote {
+    pub fn into_candidate(self, name: &str) -> SkillSearchResult {
+        let slug = self.skill_path.unwrap_or_else(|| name.to_string());
+        SkillSearchResult {
+            id: format!("{}/{}/{}", self.owner, self.repo, name),
+            slug,
+            name: name.to_string(),
+            source: format!("{}/{}", self.owner, self.repo),
+            installs: 0,
+            source_type: "github".to_string(),
+            description: None,
+            install_url: Some(self.source_url.clone()),
+            url: self.source_url,
+            is_duplicate: false,
+        }
+    }
+}
+
+pub struct SearchRequest<'a> {
+    pub name: &'a str,
+    pub local_hash: &'a str,
+    pub local_skill_md: &'a str,
+    pub preferred: Option<PreferredRemote>,
+    pub exhaustive: bool,
+    pub cached_candidates: Option<Vec<SkillSearchResult>>,
+    pub prior_matches: Vec<LocalSkillMatch>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalSkillMatch {
@@ -16,34 +56,87 @@ pub struct LocalSkillMatch {
     pub verification: String,
     pub remote_version: Option<String>,
     pub remote_hash: Option<String>,
+    pub description_match: bool,
+    pub match_basis: String,
 }
 
 pub async fn search(
     store_client: &StoreClient,
     github_client: &GitHubClient,
-    name: &str,
-    local_hash: &str,
-    local_skill_md: &str,
-) -> Result<Vec<LocalSkillMatch>, SkillsageError> {
-    let mut candidates = search_candidates(store_client, name)
-        .await?
-        .into_iter()
-        .take(MAX_CANDIDATES_TO_VERIFY);
-    let mut matches = Vec::new();
-    let Some(first) = candidates.next() else {
-        return Ok(matches);
-    };
-    let first = verify_candidate(github_client, first, local_hash, local_skill_md).await;
-    let first_should_stop = matches!(first.verification.as_str(), "exact" | "rate-limited");
-    matches.push(first);
-    if first_should_stop {
-        return Ok(matches);
+    request: SearchRequest<'_>,
+) -> Result<(Vec<LocalSkillMatch>, Vec<SkillSearchResult>), SkillsageError> {
+    let SearchRequest {
+        name,
+        local_hash,
+        local_skill_md,
+        preferred,
+        exhaustive,
+        cached_candidates,
+        prior_matches,
+    } = request;
+    if let Some(preferred) = preferred {
+        let candidate = verify_candidate(
+            github_client,
+            preferred.into_candidate(name),
+            local_hash,
+            local_skill_md,
+            "npx-lock",
+        )
+        .await;
+        if matches!(
+            candidate.verification.as_str(),
+            "exact" | "different" | "rate-limited"
+        ) {
+            return Ok((vec![candidate], Vec::new()));
+        }
     }
 
-    for batch in candidates
-        .collect::<Vec<_>>()
-        .chunks(MAX_CONCURRENT_VERIFICATIONS)
-    {
+    let limit = if exhaustive {
+        MAX_CANDIDATES_TO_VERIFY
+    } else {
+        DEFAULT_CANDIDATES_TO_VERIFY
+    };
+    let candidates = match cached_candidates {
+        Some(candidates) => candidates,
+        None => search_candidates(store_client, name).await?,
+    };
+    let dominant_first =
+        candidates
+            .first()
+            .zip(candidates.get(1))
+            .is_some_and(|(first, second)| {
+                first.installs >= 10_000 && first.installs >= second.installs.saturating_mul(5)
+            });
+    let prior_ids = prior_matches
+        .iter()
+        .map(|candidate| candidate.candidate.id.as_str())
+        .collect::<HashSet<_>>();
+    let mut pending = candidates
+        .iter()
+        .take(limit)
+        .filter(|candidate| !prior_ids.contains(candidate.id.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut matches = prior_matches;
+
+    if matches.is_empty() && !pending.is_empty() {
+        let first = verify_candidate(
+            github_client,
+            pending.remove(0),
+            local_hash,
+            local_skill_md,
+            "store-search",
+        )
+        .await;
+        let first_should_stop = matches!(first.verification.as_str(), "exact" | "rate-limited")
+            || (!exhaustive && first.description_match && dominant_first);
+        matches.push(first);
+        if first_should_stop {
+            return Ok((matches, candidates));
+        }
+    }
+
+    for batch in pending.chunks(MAX_CONCURRENT_VERIFICATIONS) {
         let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_VERIFICATIONS));
         let mut jobs = tokio::task::JoinSet::new();
         for candidate in batch {
@@ -58,7 +151,14 @@ pub async fn search(
                     .await
                     .map_err(|error| SkillsageError::Task(error.to_string()))?;
                 Ok::<LocalSkillMatch, SkillsageError>(
-                    verify_candidate(&github_client, candidate, &local_hash, &local_skill_md).await,
+                    verify_candidate(
+                        &github_client,
+                        candidate,
+                        &local_hash,
+                        &local_skill_md,
+                        "store-search",
+                    )
+                    .await,
                 )
             });
         }
@@ -83,10 +183,11 @@ pub async fn search(
     matches.sort_by(|left, right| {
         verification_rank(&left.verification)
             .cmp(&verification_rank(&right.verification))
+            .then_with(|| right.description_match.cmp(&left.description_match))
             .then_with(|| right.candidate.installs.cmp(&left.candidate.installs))
             .then_with(|| left.candidate.id.cmp(&right.candidate.id))
     });
-    Ok(matches)
+    Ok((matches, candidates))
 }
 
 async fn search_candidates(
@@ -94,6 +195,10 @@ async fn search_candidates(
     name: &str,
 ) -> Result<Vec<SkillSearchResult>, SkillsageError> {
     let candidates = client.search(name).await?;
+    Ok(prepare_candidates(name, candidates))
+}
+
+fn prepare_candidates(name: &str, candidates: Vec<SkillSearchResult>) -> Vec<SkillSearchResult> {
     let mut candidates = candidates
         .into_iter()
         .filter(|candidate| is_name_match(name, candidate) && validate_candidate(candidate).is_ok())
@@ -104,15 +209,19 @@ async fn search_candidates(
             .cmp(&left.installs)
             .then_with(|| left.id.cmp(&right.id))
     });
-    Ok(candidates)
+    let mut seen = HashSet::new();
+    candidates.retain(|candidate| seen.insert((candidate.source.clone(), candidate.slug.clone())));
+    candidates
 }
 
 async fn verify_candidate(
     github_client: &GitHubClient,
-    candidate: SkillSearchResult,
+    mut candidate: SkillSearchResult,
     local_hash: &str,
     local_skill_md: &str,
+    match_basis: &str,
 ) -> LocalSkillMatch {
+    let mut description_match = false;
     let verification = match repository_parts(&candidate.source) {
         Ok((owner, repo)) => {
             let probe = lockfile::SkillLockRecord {
@@ -129,7 +238,24 @@ async fn verify_candidate(
                 claude_distributed: false,
             };
             match remote::fetch_latest_with_probe(github_client, &probe, local_skill_md).await {
-                Ok((version, Some(files))) => {
+                Ok((version, probe)) => {
+                    if let Ok(parsed) = parse_skill_md(&probe.skill_md) {
+                        description_match =
+                            descriptions_match(local_skill_md, &parsed.manifest.description);
+                        if candidate.description.is_none() {
+                            candidate.description = Some(parsed.manifest.description);
+                        }
+                    }
+                    let Some(files) = probe.files else {
+                        return LocalSkillMatch {
+                            candidate,
+                            verification: "different".to_string(),
+                            remote_version: Some(version),
+                            remote_hash: None,
+                            description_match,
+                            match_basis: match_basis.to_string(),
+                        };
+                    };
                     let remote_hash = lockfile::content_hash_files(
                         &files
                             .iter()
@@ -143,7 +269,6 @@ async fn verify_candidate(
                         Some(remote_hash),
                     )
                 }
-                Ok((version, None)) => ("different", Some(version), None),
                 Err(error) => (verification_for_error(&error), None, None),
             }
         }
@@ -155,7 +280,26 @@ async fn verify_candidate(
         verification: verification.0.to_string(),
         remote_version: verification.1,
         remote_hash: verification.2,
+        description_match,
+        match_basis: match_basis.to_string(),
     }
+}
+
+fn descriptions_match(local_skill_md: &str, remote_description: &str) -> bool {
+    let Ok(local) = parse_skill_md(local_skill_md) else {
+        return false;
+    };
+    let local = normalize_description(&local.manifest.description);
+    let remote = normalize_description(remote_description);
+    local.chars().count() >= 16 && local == remote
+}
+
+fn normalize_description(value: &str) -> String {
+    value
+        .chars()
+        .flat_map(char::to_lowercase)
+        .filter(|character| character.is_alphanumeric())
+        .collect()
 }
 
 fn verification_for_error(error: &SkillsageError) -> &'static str {
@@ -233,7 +377,11 @@ pub fn link_at(
     next.owner = owner.to_string();
     next.repo = repo.to_string();
     next.skill_path = Some(candidate.slug.clone());
-    next.source = format!("https://www.skills.sh/{}", candidate.id);
+    next.source = if candidate.url.starts_with("https://github.com/") {
+        candidate.url.clone()
+    } else {
+        format!("https://www.skills.sh/{}", candidate.id)
+    };
     next.current_version = remote_version
         .filter(|version| !version.is_empty())
         .unwrap_or("unverified")
@@ -321,7 +469,10 @@ fn ensure_real_skill_directory(path: &std::path::Path) -> Result<(), SkillsageEr
 
 #[cfg(test)]
 mod tests {
-    use super::{is_name_match, link_at, verification_for_error, verification_rank};
+    use super::{
+        descriptions_match, is_name_match, link_at, prepare_candidates, verification_for_error,
+        verification_rank, PreferredRemote,
+    };
     use crate::core::lifecycle::install::{install_test_skill_at, TEST_SKILL_ID};
     use crate::core::repo::{layout::RepoLayout, lockfile};
     use crate::core::store::models::SkillSearchResult;
@@ -348,6 +499,53 @@ mod tests {
         let candidate = candidate();
         assert!(is_name_match("skillsage-phase2-test", &candidate));
         assert!(!is_name_match("other-skill", &candidate));
+    }
+
+    #[test]
+    fn matches_only_substantial_normalized_descriptions() {
+        let local = "---\nname: sample\ndescription: Helps users inspect and improve existing projects.\n---\n";
+        assert!(descriptions_match(
+            local,
+            "Helps users inspect, and improve existing projects!"
+        ));
+        assert!(!descriptions_match(local, "A different description."));
+        let short = "---\nname: sample\ndescription: Helper.\n---\n";
+        assert!(!descriptions_match(short, "Helper"));
+    }
+
+    #[test]
+    fn builds_a_direct_candidate_from_an_npx_source_hint() {
+        let candidate = PreferredRemote {
+            owner: "obra".into(),
+            repo: "superpowers".into(),
+            skill_path: Some("skills/brainstorming".into()),
+            source_url: "https://github.com/obra/superpowers".into(),
+        }
+        .into_candidate("brainstorming");
+        assert_eq!(candidate.id, "obra/superpowers/brainstorming");
+        assert_eq!(candidate.slug, "skills/brainstorming");
+        assert_eq!(candidate.source, "obra/superpowers");
+    }
+
+    #[test]
+    fn deduplicates_candidates_and_sorts_by_install_count() {
+        let mut popular = candidate();
+        popular.id = "popular/repo/skillsage-phase2-test".into();
+        popular.source = "popular/repo".into();
+        popular.installs = 100_000;
+        let mut duplicate = popular.clone();
+        duplicate.id = "duplicate-id-for-the-same-source-and-path".into();
+        duplicate.installs = 5;
+        let mut niche = candidate();
+        niche.installs = 10;
+
+        let prepared = prepare_candidates(
+            "skillsage-phase2-test",
+            vec![niche, duplicate, popular.clone()],
+        );
+        assert_eq!(prepared.len(), 2);
+        assert_eq!(prepared[0].source, popular.source);
+        assert_eq!(prepared[0].installs, 100_000);
     }
 
     #[test]

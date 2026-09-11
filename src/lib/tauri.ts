@@ -192,6 +192,8 @@ async function previewInvoke<T>(
         verification: "exact",
         remoteVersion: "preview-remote",
         remoteHash: "preview-local",
+        descriptionMatch: true,
+        matchBasis: "store-search",
       },
     ] as T;
   }

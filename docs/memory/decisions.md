@@ -194,6 +194,11 @@ Reason: Audit problems remain discoverable without interrupting the detail flow 
 Decision: A `local://` installed skill may be explicitly matched to a validated skills.sh/GitHub candidate from its row menu. Matching verifies candidate current content against the local directory fingerprint, ranks exact matches first, and returns the verification state plus repository metadata. Linking updates only the lock record's remote metadata and preserves the existing local directory and content hash; it does not download or replace files.
 Reason: Skills installed by CLI or copied into the shared directory should be able to enter the existing update chain without silently changing local content. A name match is not proof of identical contents, while an exact current-directory fingerprint is strong evidence and gives the user a fast, explainable recommendation. Search and linking remain user-triggered.
 
+## 2026-09-11 - Bounded local-skill source matching
+
+Decision: Local matching first verifies compatible NPX lock provenance, otherwise checks only the top three deduplicated store candidates and expands to twenty only on request. Strict normalized description equality and install-count dominance may stop candidate expansion, while only full content hashes count as exact matches; session caches prevent repeated searches and verification.
+Reason: This preserves explicit verification while avoiding broad GitHub request bursts for common skill names and older local copies.
+
 ## 2026-08-20 - Single shared public-directory install model (supersedes per-tool distribution)
 
 Decision: Skills no longer install into a private central repository (`~/.skillsage/{remote,local}`) and get distributed to a general tool registry. Every skill installs as real content directly into `~/.agents/skills/<name>/`; Claude may separately receive a managed compatibility link. This supersedes the old central-repository, supported-tools, and Windows-link decisions.

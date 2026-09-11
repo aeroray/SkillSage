@@ -30,8 +30,9 @@ export function setClaudeDistribution(skillId: string, distributed: boolean) {
   });
 }
 
-export function searchLocalSkillMatches(skillId: string) {
+export function searchLocalSkillMatches(skillId: string, exhaustive = false) {
   return invokeCommand<LocalSkillMatch[]>("search_local_skill_matches", {
+    exhaustive,
     skillId,
   });
 }

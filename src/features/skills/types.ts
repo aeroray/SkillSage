@@ -28,6 +28,8 @@ export type LocalSkillMatch = SkillSearchResult & {
     | string;
   remoteVersion?: string;
   remoteHash?: string;
+  descriptionMatch: boolean;
+  matchBasis: "npx-lock" | "store-search" | string;
 };
 
 export type InstalledSkillsList = {

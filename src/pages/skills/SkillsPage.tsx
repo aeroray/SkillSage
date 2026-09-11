@@ -234,14 +234,18 @@ function LocalMatchContent({
   error,
   loading,
   onLink,
+  onSearchMore,
   pending,
+  showSearchMore,
   skill,
 }: {
   candidates: LocalSkillMatch[];
   error?: string;
   loading: boolean;
   onLink: (candidate: LocalSkillMatch) => void;
+  onSearchMore: () => void;
   pending: boolean;
+  showSearchMore: boolean;
   skill: InstalledSkill;
 }) {
   const exactCandidate = candidates.find(
@@ -347,12 +351,19 @@ function LocalMatchContent({
                   >
                     {verificationLabel(candidate)}
                   </Badge>
+                  {candidate.matchBasis === "npx-lock" ? (
+                    <Badge variant="outline">NPX 安装记录</Badge>
+                  ) : candidate.descriptionMatch ? (
+                    <Badge variant="outline">说明一致</Badge>
+                  ) : null}
                 </div>
                 <p className="mt-2 truncate text-xs text-muted-foreground">
                   仓库 {candidate.source} · 路径 {candidate.slug}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  安装量 {candidate.installs.toLocaleString("zh-CN")}
+                  {candidate.installs > 0
+                    ? `安装量 ${candidate.installs.toLocaleString("zh-CN")}`
+                    : "来源记录未包含安装量"}
                   {candidate.remoteVersion
                     ? ` · 远端提交 ${shortRevision(candidate.remoteVersion)}`
                     : " · 暂无远端版本"}
@@ -381,6 +392,12 @@ function LocalMatchContent({
               </Button>
             </div>
           ))}
+          {showSearchMore ? (
+            <Button onClick={onSearchMore} variant="outline">
+              <Search data-icon="inline-start" />
+              搜索更多候选
+            </Button>
+          ) : null}
         </div>
       )}
     </div>
@@ -578,6 +595,7 @@ export function SkillsPage() {
   const [matchSkill, setMatchSkill] = useState<InstalledSkill>();
   const [matchCandidates, setMatchCandidates] = useState<LocalSkillMatch[]>([]);
   const [matchLoading, setMatchLoading] = useState(false);
+  const [matchExhaustive, setMatchExhaustive] = useState(false);
   const [matchError, setMatchError] = useState<string>();
   const matchRequestId = useRef(0);
   const [uninstallTarget, setUninstallTarget] = useState<InstalledSkill>();
@@ -663,16 +681,25 @@ export function SkillsPage() {
     setMatchSkill(undefined);
     setMatchCandidates([]);
     setMatchError(undefined);
+    setMatchExhaustive(false);
   };
-  const openOnlineMatch = async (skill: InstalledSkill) => {
+  const loadOnlineMatches = async (
+    skill: InstalledSkill,
+    exhaustive: boolean,
+  ) => {
     const requestId = ++matchRequestId.current;
-    setMatchSkill(skill);
-    setMatchCandidates([]);
+    if (!exhaustive) {
+      setMatchSkill(skill);
+      setMatchCandidates([]);
+    }
     setMatchError(undefined);
     setMatchLoading(true);
     try {
-      const result = await searchLocalSkillMatches(skill.id);
-      if (requestId === matchRequestId.current) setMatchCandidates(result);
+      const result = await searchLocalSkillMatches(skill.id, exhaustive);
+      if (requestId === matchRequestId.current) {
+        setMatchCandidates(result);
+        setMatchExhaustive(exhaustive);
+      }
     } catch (reason) {
       if (requestId === matchRequestId.current) {
         setMatchError(normalizeTauriError(reason));
@@ -680,6 +707,9 @@ export function SkillsPage() {
     } finally {
       if (requestId === matchRequestId.current) setMatchLoading(false);
     }
+  };
+  const openOnlineMatch = (skill: InstalledSkill) => {
+    void loadOnlineMatches(skill, false);
   };
   const confirmOnlineMatch = async (candidate: LocalSkillMatch) => {
     if (!matchSkill) return;
@@ -1010,7 +1040,17 @@ export function SkillsPage() {
             error={matchError ?? management.error}
             loading={matchLoading}
             onLink={(candidate) => void confirmOnlineMatch(candidate)}
+            onSearchMore={() => void loadOnlineMatches(matchSkill, true)}
             pending={Boolean(management.pending)}
+            showSearchMore={
+              !matchExhaustive &&
+              matchCandidates.length > 0 &&
+              !matchCandidates.some(
+                (candidate) =>
+                  candidate.verification === "exact" ||
+                  candidate.matchBasis === "npx-lock",
+              )
+            }
             skill={matchSkill}
           />
         ) : null}

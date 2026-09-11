@@ -1,6 +1,6 @@
 use crate::core::github::{
     client::GitHubClient,
-    download::{fetch_skill_files, fetch_skill_files_with_probe},
+    download::{fetch_skill_files, fetch_skill_files_with_probe, SkillProbe},
 };
 use crate::core::repo::lockfile::SkillLockRecord;
 use crate::core::store::models::SkillFile;
@@ -22,7 +22,7 @@ pub async fn fetch_latest_with_client(
     let commit = client
         .get_latest_commit_sha(&record.owner, &record.repo)
         .await?;
-    let files = fetch_at_commit(record, &client, &commit).await?;
+    let files = fetch_at_commit(record, client, &commit).await?;
     Ok((commit, files))
 }
 
@@ -30,7 +30,7 @@ pub async fn fetch_latest_with_probe(
     client: &GitHubClient,
     record: &SkillLockRecord,
     local_skill_md: &str,
-) -> Result<(String, Option<Vec<SkillFile>>), SkillsageError> {
+) -> Result<(String, SkillProbe), SkillsageError> {
     let commit = client
         .get_latest_commit_sha(&record.owner, &record.repo)
         .await?;
