@@ -22,10 +22,11 @@ guarantee that doesn't actually hold was pure complexity with no real benefit. S
 entry for the replacement design (direct install into `~/.agents/skills/`, no tool
 concept at all).
 
-The current product has one deliberate compatibility exception: an installed skill may
-create a managed link in Claude's `~/.claude/skills/<name>` directory. This does not
-restore the old registry or multi-tool distribution model; do not generalize it into
-tool detection, batch distribution, or per-tool isolation.
+The current product has two deliberate compatibility exceptions: an installed skill may
+create a managed link in Claude Code's `~/.claude/skills/<name>` directory or Work Buddy's
+`~/.workbuddy-ai/skills/<name>` directory. This does not restore the old registry or
+multi-tool distribution model; do not generalize these explicit adapters into tool
+detection, batch distribution, or per-tool isolation.
 
 ## Historical specification files retired
 

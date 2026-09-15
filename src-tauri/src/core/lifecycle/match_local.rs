@@ -236,6 +236,7 @@ async fn verify_candidate(
                 installed_at: String::new(),
                 description: String::new(),
                 claude_distributed: false,
+                workbuddy_distributed: false,
             };
             match github_client.get_latest_commit_sha(owner, repo).await {
                 Ok(version) => match remote::fetch_with_probe_at(

@@ -240,7 +240,7 @@ Reason: Skills can include binary assets such as PNG files, which must not make 
 Decision: Skills no longer install into a private central repository (`~/.skillsage/{remote,local}`) and get distributed to a general tool registry. Every skill installs as real content directly into `~/.agents/skills/<name>/`; Claude may separately receive a managed compatibility link. This supersedes the old central-repository, supported-tools, and Windows-link decisions.
 Reason: Investigation found the promised per-tool isolation doesn't hold in practice — other AI tools already read from shared locations (this exact `~/.agents/skills/` path was already referenced in this codebase as a migration-scan source) regardless of whether SkillSage links into their own directory. Maintaining platform-specific symlink/junction/conflict/takeover machinery in service of an isolation guarantee that doesn't actually hold added real complexity and attack surface for no real benefit.
 
-Decision: Tool detection, the 5-tool registry, and general "adjust distribution"/"batch distribution" functionality remain removed; only the explicit Claude compatibility link is supported per skill.
+Decision: Tool detection, the 5-tool registry, and general "adjust distribution"/"batch distribution" functionality remain removed; only the explicit Claude Code and Work Buddy compatibility links are supported per skill.
 Reason: Claude needs a separate readable path, but a narrow adapter avoids recreating a general tool-management subsystem.
 
 Decision: `~/.skillsage/` contains only the lock file, tmp, and settings — never skill content or version snapshots. `SkillLockRecord.distributed_to` is removed; `RepoLayout` gained `public_root` and one flat `skill(name)` accessor replacing the owner-namespaced `remote_skill()`/flat `local_skill()` split.
@@ -263,6 +263,11 @@ Reason: A single-skill confirmation can explain the blast radius while avoiding 
 
 Decision: A skill can optionally link from `~/.claude/skills/<name>` to its real `~/.agents/skills/<name>` directory; Windows uses a junction and macOS uses a symlink, and uninstall removes the owned link first.
 Reason: Claude currently does not read the shared directory, while a link preserves one skill copy and keeps removal safe.
+
+## 2026-09-15 - Work Buddy compatibility distribution
+
+Decision: A skill can optionally link from `~/.workbuddy-ai/skills/<name>` to its real `~/.agents/skills/<name>` directory, with an independent per-skill UI toggle alongside Claude Code.
+Reason: Work Buddy uses a separate local skill root, while explicit adapters preserve one shared copy without reintroducing a general tool registry.
 
 ## 2026-08-20 - Historical specifications retired
 

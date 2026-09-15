@@ -9,8 +9,8 @@ use crate::error::SkillsageError;
 use super::{atomic, layout::RepoLayout};
 
 /// The lockfile format version this build reads and writes. Bumped from 1 to
-/// 2 alongside the single-shared-directory redesign; Claude compatibility
-/// distribution is an optional field within this format.
+/// 2 alongside the single-shared-directory redesign; tool compatibility
+/// distribution fields are optional for backwards compatibility.
 pub const LOCK_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,6 +33,8 @@ pub struct SkillLockRecord {
     pub description: String,
     #[serde(default)]
     pub claude_distributed: bool,
+    #[serde(default)]
+    pub workbuddy_distributed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -15,6 +15,7 @@ function skill(overrides: Partial<InstalledSkill>): InstalledSkill {
     currentHash: "hash",
     installedAt: "0",
     claudeDistributed: false,
+    workbuddyDistributed: false,
     ...overrides,
   };
 }

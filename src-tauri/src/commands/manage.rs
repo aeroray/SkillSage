@@ -2,6 +2,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::core::claude;
+use crate::core::distribution::DistributionTarget;
 use crate::core::github::client::GitHubClient;
 use crate::core::lifecycle::{install, match_local, remote, update};
 use crate::core::migrate::classifier::find_legacy_remote;
@@ -9,6 +10,7 @@ use crate::core::paths;
 use crate::core::repo::{layout::RepoLayout, lockfile::SkillLockRecord};
 use crate::core::settings;
 use crate::core::store::client::StoreClient;
+use crate::core::workbuddy;
 use crate::error::SkillsageError;
 use crate::state::AppState;
 
@@ -29,6 +31,7 @@ pub async fn refresh_installed() -> Result<InstalledSkillsList, SkillsageError> 
             .into_values()
             .map(|mut record| {
                 record.claude_distributed = claude::is_distributed_at(&layout, &record)?;
+                record.workbuddy_distributed = workbuddy::is_distributed_at(&layout, &record)?;
                 Ok(record)
             })
             .collect::<Result<Vec<_>, SkillsageError>>()?;
@@ -279,10 +282,31 @@ pub async fn set_claude_distribution(
     distributed: bool,
     state: State<'_, AppState>,
 ) -> Result<SkillLockRecord, SkillsageError> {
+    set_distribution(skill_id, distributed, state, DistributionTarget::ClaudeCode).await
+}
+
+#[tauri::command]
+pub async fn set_workbuddy_distribution(
+    skill_id: String,
+    distributed: bool,
+    state: State<'_, AppState>,
+) -> Result<SkillLockRecord, SkillsageError> {
+    set_distribution(skill_id, distributed, state, DistributionTarget::WorkBuddy).await
+}
+
+async fn set_distribution(
+    skill_id: String,
+    distributed: bool,
+    state: State<'_, AppState>,
+    target: DistributionTarget,
+) -> Result<SkillLockRecord, SkillsageError> {
     let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
-        claude::set_at(&layout, &skill_id, distributed)
+        match target {
+            DistributionTarget::ClaudeCode => claude::set_at(&layout, &skill_id, distributed),
+            DistributionTarget::WorkBuddy => workbuddy::set_at(&layout, &skill_id, distributed),
+        }
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))?

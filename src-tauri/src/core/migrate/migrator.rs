@@ -142,6 +142,7 @@ async fn prepare_adoption(
             installed_at: lockfile::unix_timestamp(),
             description: parsed.manifest.description,
             claude_distributed: false,
+            workbuddy_distributed: false,
         },
         None => lockfile::SkillLockRecord {
             id: format!("local/{}", item.name),
@@ -155,6 +156,7 @@ async fn prepare_adoption(
             installed_at: lockfile::unix_timestamp(),
             description: parsed.manifest.description,
             claude_distributed: false,
+            workbuddy_distributed: false,
         },
     };
     Ok(PreparedAdoption {
@@ -211,6 +213,7 @@ async fn verify_legacy_source(
         installed_at: String::new(),
         description: String::new(),
         claude_distributed: false,
+        workbuddy_distributed: false,
     };
     let files = remote::fetch_at(&probe, &candidate.version).await.ok()?;
     let fetched_hash = lockfile::content_hash_files(

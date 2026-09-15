@@ -34,9 +34,9 @@ import {
   RefreshCw,
   ScanSearch,
   Search,
+  Share2,
   SquareArrowRightEnter,
   Trash2,
-  Unlink2,
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -56,9 +56,13 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { Dialog } from "../../components/ui/dialog";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { Input } from "../../components/ui/input";
@@ -198,7 +202,10 @@ function SkillDetailContent({
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="muted">{skill.source || "本地技能"}</Badge>
         <Badge variant={skill.claudeDistributed ? "success" : "muted"}>
-          {skill.claudeDistributed ? "已分发至 Claude" : "未分发至 Claude"}
+          Claude Code · {skill.claudeDistributed ? "已分发" : "未分发"}
+        </Badge>
+        <Badge variant={skill.workbuddyDistributed ? "success" : "muted"}>
+          Work Buddy · {skill.workbuddyDistributed ? "已分发" : "未分发"}
         </Badge>
       </div>
 
@@ -434,6 +441,31 @@ function LocalMatchContent({
   );
 }
 
+function DistributionStatus({
+  distributed,
+  label,
+}: {
+  distributed: boolean;
+  label: string;
+}) {
+  return (
+    <span
+      aria-label={`${label}${distributed ? "已分发" : "未分发"}`}
+      className={`flex min-w-0 items-center gap-1.5 ${
+        distributed ? "font-medium text-success" : "text-muted-foreground"
+      }`}
+      title={`${label}${distributed ? "已分发" : "未分发"}`}
+    >
+      {distributed ? (
+        <CheckCircle2 aria-hidden="true" className="size-3.5 shrink-0" />
+      ) : (
+        <Circle aria-hidden="true" className="size-3.5 shrink-0" />
+      )}
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
+
 function SkillRow({
   checking,
   checked,
@@ -442,6 +474,7 @@ function SkillRow({
   onCheck,
   onCheckUpdate,
   onClaudeDistribution,
+  onWorkBuddyDistribution,
   onDetail,
   onOnlineMatch,
   onOpenDirectory,
@@ -458,7 +491,11 @@ function SkillRow({
   interactionDisabled: boolean;
   onCheck: (checked: boolean) => void;
   onCheckUpdate: (skill: InstalledSkill) => void;
-  onClaudeDistribution: (skill: InstalledSkill) => void;
+  onClaudeDistribution: (skill: InstalledSkill, distributed: boolean) => void;
+  onWorkBuddyDistribution: (
+    skill: InstalledSkill,
+    distributed: boolean,
+  ) => void;
   onDetail: (skill: InstalledSkill) => void;
   onOnlineMatch: (skill: InstalledSkill) => void;
   onOpenDirectory: (skill: InstalledSkill) => void;
@@ -504,25 +541,15 @@ function SkillRow({
           <p>{sourceLabel(skill.source)}</p>
           <p>安装于 {formatInstalledAt(skill.installedAt)}</p>
         </div>
-        <div className="min-w-0 text-xs">
-          <p
-            className={`flex items-center gap-1.5 font-medium ${
-              skill.claudeDistributed
-                ? "text-success"
-                : "text-muted-foreground"
-            }`}
-          >
-            {skill.claudeDistributed ? (
-              <CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />
-            ) : (
-              <Circle aria-hidden="true" className="size-4 shrink-0" />
-            )}
-            <span className="truncate">
-              {skill.claudeDistributed
-                ? "已分发至 Claude Code"
-                : "未分发至 Claude Code"}
-            </span>
-          </p>
+        <div aria-label="分发状态" className="flex min-w-0 flex-col gap-1 text-xs">
+          <DistributionStatus
+            distributed={skill.claudeDistributed}
+            label="Claude Code"
+          />
+          <DistributionStatus
+            distributed={skill.workbuddyDistributed}
+            label="Work Buddy"
+          />
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -578,15 +605,34 @@ function SkillRow({
                 <FolderOpen />
                 打开技能目录
               </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={controlsDisabled}
-                onSelect={() => onClaudeDistribution(skill)}
-              >
-                {skill.claudeDistributed ? <Unlink2 /> : <Link2 />}
-                {skill.claudeDistributed
-                  ? "取消分发至 Claude"
-                  : "分发至 Claude"}
-              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Share2 />
+                  分发到工具
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuCheckboxItem
+                    checked={skill.claudeDistributed}
+                    disabled={controlsDisabled}
+                    onCheckedChange={(checked) =>
+                      onClaudeDistribution(skill, checked === true)
+                    }
+                    onSelect={(event) => event.preventDefault()}
+                  >
+                    Claude Code
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={skill.workbuddyDistributed}
+                    disabled={controlsDisabled}
+                    onCheckedChange={(checked) =>
+                      onWorkBuddyDistribution(skill, checked === true)
+                    }
+                    onSelect={(event) => event.preventDefault()}
+                  >
+                    Work Buddy
+                  </DropdownMenuCheckboxItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
               <DropdownMenuItem
                 disabled={controlsDisabled}
                 onSelect={() => onUninstall(skill)}
@@ -780,10 +826,24 @@ export function SkillsPage() {
       variant: update?.updateAvailable ? "info" : "success",
     });
   };
-  const toggleClaudeDistribution = async (skill: InstalledSkill) => {
+  const toggleClaudeDistribution = async (
+    skill: InstalledSkill,
+    distributed: boolean,
+  ) => {
     const updated = await management.setClaudeDistribution(
       skill.id,
-      !skill.claudeDistributed,
+      distributed,
+      { refresh: false },
+    );
+    if (updated) updateInstalledSkill(updated);
+  };
+  const toggleWorkBuddyDistribution = async (
+    skill: InstalledSkill,
+    distributed: boolean,
+  ) => {
+    const updated = await management.setWorkbuddyDistribution(
+      skill.id,
+      distributed,
       { refresh: false },
     );
     if (updated) updateInstalledSkill(updated);
@@ -1195,13 +1255,16 @@ export function SkillsPage() {
                               )
                             }
                             onCheckUpdate={(item) => void checkSingleUpdate(item)}
-                            onClaudeDistribution={(item) =>
-                              void toggleClaudeDistribution(item)
+                            onClaudeDistribution={(item, distributed) =>
+                              void toggleClaudeDistribution(item, distributed)
                             }
                             onDetail={setDetailSkill}
                             onOnlineMatch={(item) => void openOnlineMatch(item)}
                             onOpenDirectory={(item) => void openDirectory(item)}
                             onUninstall={setUninstallTarget}
+                            onWorkBuddyDistribution={(item, distributed) =>
+                              void toggleWorkBuddyDistribution(item, distributed)
+                            }
                             onUpdate={(item) => void updateSingleSkill(item)}
                             pending={management.pending === skill.id}
                             skill={skill}

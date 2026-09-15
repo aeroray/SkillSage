@@ -30,6 +30,13 @@ export function setClaudeDistribution(skillId: string, distributed: boolean) {
   });
 }
 
+export function setWorkbuddyDistribution(skillId: string, distributed: boolean) {
+  return invokeCommand<InstalledSkill>("set_workbuddy_distribution", {
+    skillId,
+    distributed,
+  });
+}
+
 export function searchLocalSkillMatches(skillId: string, exhaustive = false) {
   return invokeCommand<LocalSkillMatch[]>("search_local_skill_matches", {
     exhaustive,

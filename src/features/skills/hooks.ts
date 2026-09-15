@@ -7,6 +7,7 @@ import {
   linkLocalSkill as linkLocalSkillApi,
   refreshInstalled,
   setClaudeDistribution,
+  setWorkbuddyDistribution,
   uninstallSkill,
   updateSkill,
 } from "./api";
@@ -189,6 +190,7 @@ export function useSkillUpdates() {
 
 type SkillManagementAction =
   | "claude"
+  | "workbuddy"
   | "match"
   | "uninstall"
   | "update";
@@ -252,6 +254,17 @@ export function useSkillManagement(onCompleted: () => void) {
         skillId,
         () => setClaudeDistribution(skillId, distributed),
         "claude",
+        options,
+      ),
+    setWorkbuddyDistribution: (
+      skillId: string,
+      distributed: boolean,
+      options?: SkillManagementOptions,
+    ) =>
+      run(
+        skillId,
+        () => setWorkbuddyDistribution(skillId, distributed),
+        "workbuddy",
         options,
       ),
     linkLocalSkill: (

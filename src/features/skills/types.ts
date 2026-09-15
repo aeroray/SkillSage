@@ -12,6 +12,7 @@ export type InstalledSkill = {
   currentHash: string;
   installedAt: string;
   claudeDistributed: boolean;
+  workbuddyDistributed: boolean;
 };
 
 export type LocalSkillMatch = SkillSearchResult & {

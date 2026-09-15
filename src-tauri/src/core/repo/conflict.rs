@@ -156,6 +156,7 @@ mod tests {
             installed_at: "1".into(),
             description: String::new(),
             claude_distributed: false,
+            workbuddy_distributed: false,
         }
     }
 

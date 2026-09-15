@@ -34,6 +34,7 @@ pub fn run() {
             commands::manage::update_skill,
             commands::manage::uninstall_skill,
             commands::manage::set_claude_distribution,
+            commands::manage::set_workbuddy_distribution,
             commands::store::get_leaderboard,
             commands::store::get_skill_detail,
             commands::store::search_skills,

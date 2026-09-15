@@ -72,6 +72,7 @@ const previewSkills = [
 let previewSettings = { proxyUrl: "", githubTokenConfigured: false };
 let previewSkillTranslations: Record<string, string> = {};
 const previewClaudeDistributed = new Set<string>();
+const previewWorkbuddyDistributed = new Set<string>();
 const previewMatchedLocalSkills = new Set<string>();
 const previewLocalMatch = {
   id: "vercel-labs/agent-skills/local-research",
@@ -174,6 +175,7 @@ async function previewInvoke<T>(
           currentHash: "9c8b7a6d5e4f3210",
           installedAt: "2026-08-18T08:00:00Z",
           claudeDistributed: previewClaudeDistributed.has(skill.id),
+          workbuddyDistributed: previewWorkbuddyDistributed.has(skill.id),
         })),
         {
           id: localMatched ? previewLocalMatch.id : "local/local-research",
@@ -189,6 +191,7 @@ async function previewInvoke<T>(
           currentHash: "preview-local",
           installedAt: "2026-08-18T08:00:00Z",
           claudeDistributed: false,
+          workbuddyDistributed: previewWorkbuddyDistributed.has("local/local-research"),
         },
       ],
     } as T;
@@ -211,6 +214,28 @@ async function previewInvoke<T>(
       currentHash: "preview",
       installedAt: "2026-08-18T08:00:00Z",
       claudeDistributed: distributed,
+      workbuddyDistributed: previewWorkbuddyDistributed.has(skillId),
+    } as T;
+  }
+  if (command === "set_workbuddy_distribution") {
+    const skillId = String(args?.skillId ?? "");
+    const distributed = args?.distributed === true;
+    if (distributed) previewWorkbuddyDistributed.add(skillId);
+    else previewWorkbuddyDistributed.delete(skillId);
+    const skill = previewSkills.find((item) => item.id === skillId);
+    const [owner = "local", repo = "local"] = (skill?.source ?? "local/local").split("/");
+    return {
+      id: skillId,
+      name: skill?.name ?? skillId.split("/").at(-1) ?? skillId,
+      owner,
+      repo,
+      source: skill?.source ?? "local://local-research",
+      description: skill?.description ?? "用于整理本地研究资料。",
+      currentVersion: "preview",
+      currentHash: "preview",
+      installedAt: "2026-08-18T08:00:00Z",
+      claudeDistributed: previewClaudeDistributed.has(skillId),
+      workbuddyDistributed: distributed,
     } as T;
   }
   if (command === "search_local_skill_matches") {
@@ -239,6 +264,7 @@ async function previewInvoke<T>(
       currentHash: "preview-local",
       installedAt: "2026-08-18T08:00:00Z",
       claudeDistributed: false,
+      workbuddyDistributed: false,
     } as T;
   }
   if (command === "get_settings") return previewSettings as T;

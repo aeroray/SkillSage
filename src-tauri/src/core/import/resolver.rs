@@ -228,6 +228,7 @@ pub fn import_at(
             installed_at: lockfile::unix_timestamp(),
             description: parsed.manifest.description.clone(),
             claude_distributed: false,
+            workbuddy_distributed: false,
         },
     );
     if let Err(error) = lockfile::save(layout, &lock) {

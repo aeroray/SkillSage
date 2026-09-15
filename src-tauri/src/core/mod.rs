@@ -1,5 +1,5 @@
-#[allow(dead_code)]
 pub mod claude;
+pub mod distribution;
 pub mod github;
 pub mod import;
 pub mod lifecycle;
@@ -12,3 +12,4 @@ pub mod skill;
 pub mod store;
 pub mod sync;
 pub mod url_install;
+pub mod workbuddy;
