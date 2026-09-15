@@ -481,6 +481,7 @@ function SkillRow({
   onUninstall,
   onUpdate,
   pending,
+  distributionPending,
   skill,
   updating,
   updateAvailable,
@@ -502,11 +503,13 @@ function SkillRow({
   onUninstall: (skill: InstalledSkill) => void;
   onUpdate: (skill: InstalledSkill) => void;
   pending: boolean;
+  distributionPending: boolean;
   skill: InstalledSkill;
   updating: boolean;
   updateAvailable: boolean;
 }) {
   const busy = pending || checking;
+  const rowBusy = checking || (pending && !distributionPending);
   const controlsDisabled = busy || interactionDisabled;
   const isLocalSkill = skill.source.startsWith("local://");
   const hasRemoteUpdateSource =
@@ -516,7 +519,7 @@ function SkillRow({
     <div aria-busy={busy} className="relative">
       <div
         className={`grid gap-4 border-b border-border px-5 py-4 last:border-b-0 transition-[filter,opacity] duration-200 lg:grid-cols-[auto_minmax(0,1fr)_180px_150px_auto] lg:items-center ${
-          busy ? "pointer-events-none select-none blur-[2px] opacity-60" : ""
+          rowBusy ? "pointer-events-none select-none blur-[2px] opacity-60" : ""
         }`}
       >
         <Checkbox
@@ -542,14 +545,23 @@ function SkillRow({
           <p>安装于 {formatInstalledAt(skill.installedAt)}</p>
         </div>
         <div aria-label="分发状态" className="flex min-w-0 flex-col gap-1 text-xs">
-          <DistributionStatus
-            distributed={skill.claudeDistributed}
-            label="Claude Code"
-          />
-          <DistributionStatus
-            distributed={skill.workbuddyDistributed}
-            label="Work Buddy"
-          />
+          {distributionPending ? (
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+              分发中
+            </span>
+          ) : (
+            <>
+              <DistributionStatus
+                distributed={skill.claudeDistributed}
+                label="Claude Code"
+              />
+              <DistributionStatus
+                distributed={skill.workbuddyDistributed}
+                label="Work Buddy"
+              />
+            </>
+          )}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -645,7 +657,7 @@ function SkillRow({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {busy ? (
+      {rowBusy ? (
         <div
           className="absolute inset-0 flex items-center justify-center gap-2 bg-card/45 text-xs font-medium text-muted-foreground"
           role="status"
@@ -835,7 +847,14 @@ export function SkillsPage() {
       distributed,
       { refresh: false },
     );
-    if (updated) updateInstalledSkill(updated);
+    if (updated) {
+      updateInstalledSkill({
+        ...skill,
+        ...updated,
+        claudeDistributed: distributed,
+        workbuddyDistributed: skill.workbuddyDistributed,
+      });
+    }
   };
   const toggleWorkBuddyDistribution = async (
     skill: InstalledSkill,
@@ -846,7 +865,14 @@ export function SkillsPage() {
       distributed,
       { refresh: false },
     );
-    if (updated) updateInstalledSkill(updated);
+    if (updated) {
+      updateInstalledSkill({
+        ...skill,
+        ...updated,
+        claudeDistributed: skill.claudeDistributed,
+        workbuddyDistributed: distributed,
+      });
+    }
   };
   const updateSingleSkill = async (skill: InstalledSkill) => {
     const result = await management.update(skill.id);
@@ -1267,6 +1293,11 @@ export function SkillsPage() {
                             }
                             onUpdate={(item) => void updateSingleSkill(item)}
                             pending={management.pending === skill.id}
+                            distributionPending={
+                              management.pending === skill.id &&
+                              (management.pendingAction?.kind === "claude" ||
+                                management.pendingAction?.kind === "workbuddy")
+                            }
                             skill={skill}
                             updating={
                               management.pendingAction?.skillId === skill.id &&

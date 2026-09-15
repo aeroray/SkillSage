@@ -34,13 +34,6 @@ impl DistributionTarget {
             Self::WorkBuddy => layout.ensure_workbuddy_root(),
         }
     }
-
-    fn set_record_state(self, record: &mut SkillLockRecord, distributed: bool) {
-        match self {
-            Self::ClaudeCode => record.claude_distributed = distributed,
-            Self::WorkBuddy => record.workbuddy_distributed = distributed,
-        }
-    }
 }
 
 pub fn set_at(
@@ -67,7 +60,8 @@ pub fn set_at(
     };
 
     let mut next = current.clone();
-    target.set_record_state(&mut next, distributed);
+    next.claude_distributed = is_distributed_at(layout, &next, DistributionTarget::ClaudeCode)?;
+    next.workbuddy_distributed = is_distributed_at(layout, &next, DistributionTarget::WorkBuddy)?;
     lock.skills.insert(skill_id.to_string(), next.clone());
     if let Err(error) = lockfile::save(layout, &lock) {
         let recovery = if changed {
@@ -308,6 +302,47 @@ mod tests {
         let lock = lockfile::load(&layout).expect("lock should load");
         assert!(!lock.skills[TEST_SKILL_ID].claude_distributed);
         assert!(!lock.skills[TEST_SKILL_ID].workbuddy_distributed);
+        fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[test]
+    fn preserves_an_existing_tool_link_when_another_tool_is_enabled() {
+        let root = std::env::temp_dir().join(format!(
+            "skillsage-distribution-stale-state-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create shared test parent");
+        let layout = RepoLayout::new(root.join("central"), root.join("public"));
+        install_test_skill_at(&layout).expect("fixture should install");
+
+        set_at(&layout, TEST_SKILL_ID, true, DistributionTarget::ClaudeCode)
+            .expect("Claude link should be created");
+        let mut lock = lockfile::load(&layout).expect("lock should load");
+        lock.skills
+            .get_mut(TEST_SKILL_ID)
+            .expect("fixture should be tracked")
+            .claude_distributed = false;
+        lockfile::save(&layout, &lock).expect("stale lock should save");
+
+        let updated = set_at(&layout, TEST_SKILL_ID, true, DistributionTarget::WorkBuddy)
+            .expect("Work Buddy link should be created");
+        assert!(updated.claude_distributed);
+        assert!(updated.workbuddy_distributed);
+
+        let lock = lockfile::load(&layout).expect("lock should load");
+        assert!(lock.skills[TEST_SKILL_ID].claude_distributed);
+        assert!(lock.skills[TEST_SKILL_ID].workbuddy_distributed);
+
+        set_at(
+            &layout,
+            TEST_SKILL_ID,
+            false,
+            DistributionTarget::ClaudeCode,
+        )
+        .expect("Claude link should be removed");
+        set_at(&layout, TEST_SKILL_ID, false, DistributionTarget::WorkBuddy)
+            .expect("Work Buddy link should be removed");
         fs::remove_dir_all(root).expect("remove test root");
     }
 }
