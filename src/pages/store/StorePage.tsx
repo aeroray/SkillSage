@@ -41,8 +41,9 @@ import {
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { Input } from "../../components/ui/input";
+import { ScrollArea } from "../../components/ui/scroll-area";
 import { Skeleton } from "../../components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group";
 import {
   Tooltip,
   TooltipContent,
@@ -70,23 +71,19 @@ import type {
   SkillSearchResult,
 } from "../../features/store/types";
 
-const leaderboardTabs = [
-  {
-    icon: Flame,
-    iconClassName: "text-warning",
-    label: "热门",
-    value: "all-time",
-  },
-  {
-    icon: TrendingUp,
-    iconClassName: "text-primary",
-    label: "趋势",
-    value: "trending",
-  },
-  { icon: Rocket, iconClassName: "text-success", label: "爆款", value: "hot" },
+/**
+ * Leaderboard ranges. These are a single-select filter over one list, not
+ * tabs over separate panels, so they render as a segmented control. The
+ * icons stay in one neutral tone and only the active segment takes the
+ * accent — three differently-coloured icons competed with the content and
+ * broke the system's one-accent rule.
+ */
+const leaderboardRanges = [
+  { icon: Flame, label: "热门", value: "all-time" },
+  { icon: TrendingUp, label: "趋势", value: "trending" },
+  { icon: Rocket, label: "爆款", value: "hot" },
 ] satisfies Array<{
   icon: typeof Flame;
-  iconClassName: string;
   label: string;
   value: LeaderboardRange;
 }>;
@@ -494,7 +491,7 @@ export function StorePage() {
 
   const isSearching = !isSearchComposing && query.trim().length >= 2;
   const activeLeaderboardLabel =
-    leaderboardTabs.find((tab) => tab.value === range)?.label ?? "排行榜";
+    leaderboardRanges.find((item) => item.value === range)?.label ?? "排行榜";
   const displaySkills = isSearching ? searchResults : leaderboardSkills;
   const displayLoading = isSearching ? searchLoading : leaderboardLoading;
   const displayError = isSearching ? searchError : leaderboardError;
@@ -586,7 +583,7 @@ export function StorePage() {
     translationLoadingSkillId === detail?.id;
 
   return (
-    <div>
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader description="浏览并安装 AI Agent 技能。" title="技能商店" />
 
       {/* Quick install happens on the grid, where the detail dialog (the only
@@ -600,39 +597,42 @@ export function StorePage() {
         />
       ) : null}
 
-      <section aria-labelledby="leaderboard-title" className="mt-8">
+      {/* The results region scrolls; the header and toolbar above it stay
+          fixed so the range selector and search field are always reachable. */}
+      <section
+        aria-labelledby="leaderboard-title"
+        className="mt-8 flex min-h-0 flex-1 flex-col"
+      >
         <div className="flex items-center gap-4">
           <h2 className="sr-only" id="leaderboard-title">
             {isSearching ? `“${query.trim()}”的结果` : "技能排行榜"}
           </h2>
           {!isSearching ? (
-            <div className="flex shrink-0 items-center gap-1">
-              <Tabs
-                onValueChange={(value) => setRange(value as LeaderboardRange)}
+            <div className="flex shrink-0 items-center gap-2">
+              {/* A segmented single-select. ToggleGroup already owns the
+                  roving focus, keyboard handling and pressed state, so the
+                  active segment needs no hand-written ring or shadow. */}
+              <ToggleGroup
+                aria-label="排行榜范围"
+                className="rounded-lg border border-border bg-muted/60 p-0.5"
+                onValueChange={(value) => {
+                  if (value) setRange(value as LeaderboardRange);
+                }}
+                type="single"
                 value={range}
               >
-                <TabsList
-                  aria-label="排行榜范围"
-                  className="gap-1 rounded-lg border border-border bg-muted/60 p-1"
-                >
-                  {leaderboardTabs.map(
-                    ({ icon: Icon, iconClassName, label, value }) => (
-                      <TabsTrigger
-                        className="items-center gap-1 px-2 text-sm data-[state=active]:bg-background data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
-                        key={value}
-                        value={value}
-                      >
-                        <Icon
-                          aria-hidden="true"
-                          className={iconClassName}
-                          data-icon="inline-start"
-                        />
-                        {label}
-                      </TabsTrigger>
-                    ),
-                  )}
-                </TabsList>
-              </Tabs>
+                {leaderboardRanges.map(({ icon: Icon, label, value }) => (
+                  <ToggleGroupItem
+                    className="h-7 gap-1.5 px-2.5 text-xs data-[state=on]:bg-background data-[state=on]:font-semibold data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+                    key={value}
+                    size="sm"
+                    value={value}
+                  >
+                    <Icon aria-hidden="true" data-icon="inline-start" />
+                    {label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -697,29 +697,31 @@ export function StorePage() {
             <LoadingCards />
           </div>
         ) : groups.length > 0 ? (
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {groups.map((group) => (
-              <SkillCard
-                description={group.primary.description}
-                descriptionMode={
-                  descriptionModes[group.primary.id] ??
-                  (translations[group.primary.id] ? "translated" : "original")
-                }
-                group={group}
-                installedSkillIds={installedSkillIds}
-                key={group.source}
-                onOpen={openDetail}
-                onQuickInstall={quickInstall}
-                quickInstallDisabled={
-                  installedLoading ||
-                  installState.installing ||
-                  conflictCheck.checking
-                }
-                quickInstallingSkillId={quickInstallingSkillId}
-                translatedDescription={translations[group.primary.id]}
-              />
-            ))}
-          </div>
+          <ScrollArea className="mt-5 min-h-0 flex-1">
+            <div className="grid gap-4 pb-1 md:grid-cols-2 xl:grid-cols-3">
+              {groups.map((group) => (
+                <SkillCard
+                  description={group.primary.description}
+                  descriptionMode={
+                    descriptionModes[group.primary.id] ??
+                    (translations[group.primary.id] ? "translated" : "original")
+                  }
+                  group={group}
+                  installedSkillIds={installedSkillIds}
+                  key={group.source}
+                  onOpen={openDetail}
+                  onQuickInstall={quickInstall}
+                  quickInstallDisabled={
+                    installedLoading ||
+                    installState.installing ||
+                    conflictCheck.checking
+                  }
+                  quickInstallingSkillId={quickInstallingSkillId}
+                  translatedDescription={translations[group.primary.id]}
+                />
+              ))}
+            </div>
+          </ScrollArea>
         ) : (
           <div className="mt-5">
             <EmptyState

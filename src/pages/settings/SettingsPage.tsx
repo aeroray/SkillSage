@@ -8,6 +8,7 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldTitle } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
+import { ScrollArea } from "../../components/ui/scroll-area";
 import { Skeleton } from "../../components/ui/skeleton";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { AccentControl } from "../../components/common/AccentControl";
@@ -103,11 +104,15 @@ export function SettingsPage() {
   };
 
   return (
-    <div>
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader description="管理外观、GitHub 凭据、网络和应用数据。Token 仅保存在本机。" title="设置" />
       <ErrorBanner className="mb-6" error={error} onRetry={() => void refresh()} />
 
-      <div className="grid grid-cols-2 items-start gap-5">
+      {/* Settings is the one surface whose content legitimately exceeds the
+          viewport, so it scrolls as a whole. It still scrolls inside its own
+          region rather than the page, keeping the shell free of scrollbars. */}
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="grid grid-cols-2 items-start gap-5 pb-1">
         <div className="flex min-w-0 flex-col gap-5">
           <Card>
             <CardHeader className="flex flex-row items-start gap-4">
@@ -196,7 +201,8 @@ export function SettingsPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
+        </div>
+      </ScrollArea>
 
       <SyncImportDialog onApplySettings={applyImportedSettings} onClose={() => setSyncOpen(false)} onCompleted={() => { void refresh(); }} open={syncOpen} />
     </div>

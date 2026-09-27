@@ -26,6 +26,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
+import { ScrollArea } from "../../components/ui/scroll-area";
 import { Skeleton } from "../../components/ui/skeleton";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -251,7 +252,7 @@ export function AdoptPage() {
   };
 
   return (
-    <div>
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         actions={
           <Button disabled={working} onClick={refreshPage} variant="outline">
@@ -273,8 +274,8 @@ export function AdoptPage() {
         onRetry={refreshPage}
       />
 
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <CardHeader className="flex shrink-0 flex-row items-start justify-between gap-4">
           <div className="min-w-0">
             <CardTitle>扫描结果</CardTitle>
             <CardDescription className="mt-1">
@@ -309,7 +310,10 @@ export function AdoptPage() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 pb-5">
+        {/* The candidate list owns the scrolling so the page header and the
+            scan summary stay put no matter how many entries are found. */}
+        <ScrollArea className="min-h-0 flex-1">
+          <CardContent className="flex flex-col gap-3 pb-5">
           {scanning ? (
             <div aria-busy="true" className="flex flex-col gap-3">
               <Skeleton className="h-20 w-full" />
@@ -342,7 +346,8 @@ export function AdoptPage() {
               <p className="text-sm text-muted-foreground">共享目录里的技能都已由 SkillSage 管理。</p>
             </div>
           )}
-        </CardContent>
+          </CardContent>
+        </ScrollArea>
       </Card>
 
       <AlertDialog

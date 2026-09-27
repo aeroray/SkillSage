@@ -82,6 +82,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { Separator } from "../../components/ui/separator";
+import { ScrollArea } from "../../components/ui/scroll-area";
 import { Skeleton } from "../../components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group";
 import { useToast } from "../../components/ui/toast-context";
@@ -1245,7 +1246,7 @@ export function SkillsPage() {
   };
 
   return (
-    <div>
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         actions={
           <div className="flex items-center gap-2">
@@ -1295,9 +1296,9 @@ export function SkillsPage() {
         onRetry={refreshPage}
       />
 
-      <Card className="mb-6 overflow-hidden">
-        <CardContent className="p-0">
-          <div className="flex flex-col gap-4 bg-muted/20 p-4">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <div className="flex shrink-0 flex-col gap-4 bg-muted/20 p-4">
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative min-w-56 flex-1 basis-56">
                 <label className="sr-only" htmlFor="installed-skill-search">
@@ -1338,7 +1339,7 @@ export function SkillsPage() {
                   <SelectContent>
                     <SelectGroup>
                       <SelectItem value="recent">最近安装</SelectItem>
-                      <SelectItem value="name">名称</SelectItem>
+                      <SelectItem value="name">技能名称</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -1369,10 +1370,10 @@ export function SkillsPage() {
                     {direction === "desc"
                       ? sort === "recent"
                         ? "最新安装在前"
-                        : "名称从后往前"
+                        : "技能名称从后往前"
                       : sort === "recent"
                         ? "最早安装在前"
-                        : "名称从前往后"}
+                        : "技能名称从前往后"}
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -1492,23 +1493,10 @@ export function SkillsPage() {
               {/* The toolbar swaps to selection actions once anything is
                   picked. This is what gives "select all" a purpose: the
                   selection drives distribution and uninstall, not only the
-                  update check. */}
+                  update check. Each button carries its own count, so no
+                  separate "N selected" readout is needed. */}
               {selectedSkills.length > 0 ? (
                 <div className="ml-auto flex flex-wrap items-center gap-2">
-                  <span
-                    aria-live="polite"
-                    className="text-xs text-foreground/70"
-                  >
-                    已选 {selectedSkills.length} 个
-                  </span>
-                  <Button
-                    onClick={() => setSelectedIds([])}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <X data-icon="inline-start" />
-                    取消选择
-                  </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -1675,8 +1663,12 @@ export function SkillsPage() {
               )}
             </div>
           </div>
-          <Separator className="bg-foreground/20" />
-          <div className="p-4">
+          <Separator className="shrink-0 bg-foreground/20" />
+          {/* The list owns the scrolling. Page chrome (header, filters,
+              action bar) stays fixed, so a long library never pushes it
+              off-screen or adds a second scrollbar. */}
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="p-4">
             {skillsLoading ? (
               <SkillsLoadingState />
             ) : skills.length === 0 ? (
@@ -1792,7 +1784,8 @@ export function SkillsPage() {
                 ))}
               </Accordion>
             )}
-          </div>
+            </div>
+          </ScrollArea>
         </CardContent>
       </Card>
 

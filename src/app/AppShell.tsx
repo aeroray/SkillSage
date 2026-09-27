@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { Download, FolderInput, Library, Settings, Store } from "lucide-react";
 import { Button } from "../components/ui/button";
-import { ScrollArea } from "../components/ui/scroll-area";
 import { useThemeStore } from "../features/theme/store";
 import { useAppUpdateStore } from "../features/update/store";
 import { Skeleton } from "../components/ui/skeleton";
@@ -107,8 +106,12 @@ export function AppShell() {
   return (
     <>
       <ThemeSync />
-      <div className="flex min-h-screen bg-background text-foreground">
-        <aside className="flex min-h-screen w-[228px] shrink-0 flex-col border-r border-border bg-sidebar px-5 py-6 text-sidebar-foreground">
+      {/* The shell fills the viewport and never scrolls itself. Pages are
+          flex columns that fill this height and put scrolling on their own
+          list region, so a long list cannot push the page chrome off-screen
+          or introduce a second scrollbar. */}
+      <div className="flex h-screen overflow-hidden bg-background text-foreground">
+        <aside className="flex h-full w-[228px] shrink-0 flex-col border-r border-border bg-sidebar px-5 py-6 text-sidebar-foreground">
           <div className="flex items-center gap-3 px-1">
             <img
               alt="SkillSage · 技匠"
@@ -129,20 +132,18 @@ export function AppShell() {
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1">
-          <ScrollArea className="h-screen">
-            <div className="mx-auto w-full max-w-[1280px] px-8 py-8 lg:px-12 lg:py-10">
-              <Suspense fallback={<PageLoadingState />}>
-                <Routes>
-                  <Route element={<StorePage />} path="/store/*" />
-                  <Route element={<SkillsPage />} path="/skills" />
-                  <Route element={<AdoptPage />} path="/adopt" />
-                  <Route element={<SettingsPage />} path="/settings" />
-                  <Route element={<Navigate replace to="/skills" />} path="*" />
-                </Routes>
-              </Suspense>
-            </div>
-          </ScrollArea>
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="mx-auto flex h-full w-full max-w-[1280px] flex-col overflow-hidden px-8 py-8 lg:px-12 lg:py-10">
+            <Suspense fallback={<PageLoadingState />}>
+              <Routes>
+                <Route element={<StorePage />} path="/store/*" />
+                <Route element={<SkillsPage />} path="/skills" />
+                <Route element={<AdoptPage />} path="/adopt" />
+                <Route element={<SettingsPage />} path="/settings" />
+                <Route element={<Navigate replace to="/skills" />} path="*" />
+              </Routes>
+            </Suspense>
+          </div>
         </main>
       </div>
     </>
