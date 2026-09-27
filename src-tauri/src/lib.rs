@@ -120,6 +120,18 @@ pub fn run() {
                     // failures) in the log. Without it an update failure is
                     // reported only as a one-line error with no context.
                     .level(log::LevelFilter::Debug)
+                    // The HTML scraper logs one DEBUG line per element it tests
+                    // against a selector, so parsing a single skills.sh
+                    // leaderboard emitted 79 lines for one page and buried
+                    // everything else. Its own diagnostics are not useful for
+                    // supporting this app, so they are capped at Warn.
+                    //
+                    // `reqwest` is deliberately left at Debug: its "starting
+                    // new connection" lines are the only record of which
+                    // update mirror won the race, and that is the first thing
+                    // to look at when an update check misbehaves.
+                    .level_for("selectors", log::LevelFilter::Warn)
+                    .level_for("html5ever", log::LevelFilter::Warn)
                     .build(),
             )?;
             Ok(())
