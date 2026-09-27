@@ -100,6 +100,7 @@ import type {
   ToolOption,
 } from "../../features/skills/types";
 import {
+  countSkillsByDistribution,
   countSkillsBySource,
   countSkillsByStatus,
   filterAndSortSkills,
@@ -107,11 +108,13 @@ import {
   isRemoteUpdateable,
   searchSkills,
   sourceLabel,
+  type SkillDistributionMatch,
   type SkillSortDirection,
   type SkillSortMode,
   type SkillSourceFilter,
   type SkillStatusFilter,
 } from "../../features/skills/selectors";
+import { DistributionFilter } from "../../features/skills/DistributionFilter";
 import { normalizeTauriError } from "../../lib/tauri";
 import { cn } from "../../lib/utils";
 
@@ -766,6 +769,14 @@ export function SkillsPage() {
   const [search, setSearch] = useState("");
   const [source, setSource] = useState<SkillSourceFilter>("all");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
+  /** Which tools to filter by, and how many of them a skill must be in. Kept
+   * as two pieces of state because they are two questions: an empty tool list
+   * means "not filtering", not "distributed to nothing". */
+  const [distributionToolIds, setDistributionToolIds] = useState<string[]>([]);
+  /** Defaults to `any`, so choosing tools shows the full picture first instead
+   * of dropping straight into an outcome that is usually empty. */
+  const [distributionMatch, setDistributionMatch] =
+    useState<SkillDistributionMatch>("any");
   const [sort, setSort] = useState<SkillSortMode>("recent");
   const [direction, setDirection] = useState<SkillSortDirection>("desc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -835,8 +846,19 @@ export function SkillsPage() {
         sort,
         source,
         status,
+        distribution: { match: distributionMatch, toolIds: distributionToolIds },
       }),
-    [direction, search, skills, sort, source, status, updatesById],
+    [
+      direction,
+      distributionMatch,
+      distributionToolIds,
+      search,
+      skills,
+      sort,
+      source,
+      status,
+      updatesById,
+    ],
   );
 
   const groups = useMemo(() => {
@@ -928,14 +950,34 @@ export function SkillsPage() {
     () => countSkillsByStatus(searchedSkills, updatesById),
     [searchedSkills, updatesById],
   );
+  // Counted over the same search-only set as the other facets, so a chip's
+  // number does not collapse to the count of whichever mode is active.
+  const distributionCounts = useMemo(
+    () => countSkillsByDistribution(searchedSkills, distributionToolIds),
+    [distributionToolIds, searchedSkills],
+  );
+  // The tools offered here are the ones the rows themselves can show, so the
+  // filter never names a tool that no row could ever match.
+  const filterTools = useMemo(
+    () =>
+      tools.filter(
+        (tool) =>
+          detectedTools.includes(tool.id) ||
+          skills.some((skill) => skill.distributedTo.includes(tool.id)),
+      ),
+    [detectedTools, skills, tools],
+  );
   const activeFilterCount =
     (source === "all" ? 0 : 1) +
     (status === "all" ? 0 : 1) +
+    (distributionToolIds.length > 0 ? 1 : 0) +
     (search.trim() ? 1 : 0);
   const resetFilters = useCallback(() => {
     setSearch("");
     setSource("all");
     setStatus("all");
+    setDistributionToolIds([]);
+    setDistributionMatch("any");
   }, []);
   const pageError =
     directoryError ?? skillsError ?? updatesError ?? management.error;
@@ -1483,6 +1525,14 @@ export function SkillsPage() {
                   </Tooltip>
                 ) : null}
               </div>
+              <DistributionFilter
+                counts={distributionCounts}
+                match={distributionMatch}
+                onMatchChange={setDistributionMatch}
+                onToolIdsChange={setDistributionToolIds}
+                toolIds={distributionToolIds}
+                tools={filterTools}
+              />
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
