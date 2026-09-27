@@ -289,6 +289,17 @@ Reason: The registry has ~19 tools that need a link. Showing all of them per ski
 Decision: Links left in `LEGACY_SKILLS_DIRS` (the old `.workbuddy-ai/skills`) are removed at startup, but only when they point back into the shared directory, and the emptied folder is deleted.
 Reason: Those links pointed at a directory no tool reads, which is precisely why an uninstalled tool still looked available. Restricting removal to links that resolve inside the shared directory means an unrelated entry in a leftover folder is never deleted.
 
+## 2026-09-27 - Release notes live in the repository, one file per tag
+
+Decision: Release notes are authored in `docs/releases/<tag>.md`; `scripts/load-release-notes.mjs` reads the tag's file and exposes it as the workflow's `body` output, failing the job when the file is missing or empty. `generateReleaseNotes` is off.
+Reason: The notes were previously inlined in `release.yml`'s `releaseBody`, so they had to be hand-edited for every release and — if that was forgotten — were reused verbatim, silently publishing the previous version's notes under the new tag. Nothing in the pipeline could catch it. Keeping one file per tag also makes the notes reviewable in the release commit rather than buried in workflow YAML.
+
+Decision: The loader is Node, not a bash heredoc, even though the job runs on bash-capable runners.
+Reason: The matrix includes `windows-latest`, where `$GITHUB_OUTPUT` is a Windows path and shell heredocs are the fragile part. Node also lets the delimiter collision and the missing-file case be checked before writing anything.
+
+Decision: `generateReleaseNotes` is `false` now that a body is authored.
+Reason: With an authored body GitHub would otherwise risk prepending an auto-generated commit list to it. The v1.0.2 release body was inspected to confirm only the authored text is published.
+
 ## 2026-09-27 - Mirror racing for the in-app updater
 
 Decision: The update check and download race every configured GitHub mirror plus direct GitHub concurrently, and use whichever returns a valid manifest first. The list is `core/mirrors.rs`'s `MIRRORS`: `gh.catmak.name`, `cdn.akaere.online`, `fastgit.cc`, `githubdog.com`, `github.geekery.cn`, measured against the real manifest with a warm connection.
