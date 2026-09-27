@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-27T09:53:14.285Z",
+  "generatedAt": "2026-09-27T12:42:52.086Z",
   "title": "Design System: SkillSage · 技匠",
   "extensions": {
     "colorMeta": {
@@ -353,6 +353,10 @@
       "description": "签名组件。技能分发状态的两种表达：列表里用圆点 + 计数（●○○ 1/3，可扫视、行高恒定），详情里用文字徽章（Claude Code · 已分发，可确认）。两者都不是纯图标。",
       "html": "<span class=\"ds-dist\" aria-label=\"分发状态：1 / 3\"><span class=\"ds-dot ds-dot-on\"></span><span class=\"ds-dot\"></span><span class=\"ds-dot\"></span><span class=\"ds-dist-count\">1/3</span></span>\n<span class=\"ds-dist-badge\">Claude Code · 已分发</span>",
       "css": ".ds-dist { display: inline-flex; align-items: center; gap: 8px; font-size: 0.75rem; } .ds-dist > span:not(.ds-dist-count) { width: 8px; height: 8px; border-radius: 999px; } .ds-dot { border: 1px solid color-mix(in srgb, var(--app-color-muted-foreground, #5f6c7e) 60%, transparent); } .ds-dot-on { background: var(--app-color-primary, #0d9488); } .ds-dist-count { color: var(--app-color-muted-foreground, #5f6c7e); font-variant-numeric: tabular-nums; } .ds-dist-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--app-color-success, #0d9488) 10%, transparent); color: var(--app-color-success-text, #0b7a6f); font-size: 0.75rem; font-weight: 500; }"
+    },
+    {
+      "name": "Multi-Select Filter",
+      "description": "两个轴的分发筛选：工具多选下拉 + 三个结果 chip（全部 / 已全部分发 / 有未分发）。「全部」永不禁用，因为它是唯一的出口；后两者计数之和恒等于总数。"
     }
   ],
   "narrative": {
@@ -505,6 +509,10 @@
         "name": "「深浅不是反相」规则",
         "body": "深色模式不是浅色模式取反：它降低表面亮度差（#0b0d11 → #11161d → #171d25），同时提高文字对比度（正文 17.72:1）。深色下的主色换成明亮青，因为深青在 OLED 黑上不够亮。",
         "section": "elevation"
+      },
+      {
+        "title": "「多选筛选是两个轴」规则",
+        "detail": "多选筛选拆成「哪些项」（多选下拉）与「结果如何」（全部 / 已全部分发 / 有未分发）。后两个互为补集，计数相加恒等于总数；「全部」是这一行的出口，放宽结果但保留已选项——没有它，第一次选完项就会落进通常是空列表的「已全部分发」，看起来像筛选坏了。未选任何项时不渲染 chip。"
       }
     ],
     "dos": [
@@ -529,7 +537,8 @@
       "Do 让所有浮层的外观来自 dialog-shell.ts，页脚是组件的一部分。",
       "Do 设置类页面用分区导航，一次只渲染一个分区。",
       "Do 让列表行高恒定：同类状态用符号 + 计数，不要每个占一行。",
-      "Do 新增主题时补齐 primary 的六个 token（含 -text 与 -foreground）并做对比度检查。"
+      "Do 新增主题时补齐 primary 的六个 token（含 -text 与 -foreground）并做对比度检查。",
+      "Do 让「打开目录」在目标不存在时降级到最近的存在祖先并说明打开了哪一个，而不是静默失败。"
     ],
     "donts": [
       "Don't 用 text-muted-foreground 渲染彩色底上的文字（chip、彩色 Badge）——实测只有 3.5:1 左右。",
@@ -555,7 +564,8 @@
       "Don't 在对话框里各写一套按钮行；用 footer。",
       "Don't 用多列卡片瀑布排设置项；那没有阅读顺序。",
       "Don't 让列表行高随取值数量增长。",
-      "Don't 只覆盖主题的填充色而不覆盖它的文字色。"
+      "Don't 只覆盖主题的填充色而不覆盖它的文字色。",
+      "Don't 用「打开目录」顺手创建缺失的目录：目录存在是「已安装」的判定信号，创建它会让未安装的工具显示为已安装。"
     ]
   }
 }
