@@ -27,6 +27,14 @@
   --color-success: var(--app-color-success);
   --color-warning: var(--app-color-warning);
   --color-destructive: var(--app-color-destructive);
+  /* Text-safe counterparts of the status hues. The vivid fills stay on the
+     `--color-*` tokens (used for icons, bars, and 10%-tint backgrounds), while
+     anything that renders the hue *as text* uses these, which clear 4.5:1 on
+     both the card and their own 10% tint. */
+  --color-primary-text: var(--app-color-primary-text);
+  --color-success-text: var(--app-color-success-text);
+  --color-warning-text: var(--app-color-warning-text);
+  --color-destructive-text: var(--app-color-destructive-text);
   --radius-sm: calc(var(--app-radius) - 2px);
   --radius-md: var(--app-radius);
   --radius-lg: var(--app-radius-lg);
@@ -43,7 +51,10 @@
   --app-color-card: #ffffff;
   --app-color-card-foreground: #17202a;
   --app-color-muted: #eef1f4;
-  --app-color-muted-foreground: #718096;
+  /* #718096 measured 3.54–4.02:1 against the light surfaces, below the 4.5:1
+     floor for body and placeholder text. Darkened to clear it on all three
+     (muted 4.71 / background 4.94 / card 5.34). */
+  --app-color-muted-foreground: #5f6c7e;
   --app-color-secondary: #eef1f4;
   --app-color-secondary-foreground: #27313c;
   --app-color-border: #e1e6eb;
@@ -62,6 +73,13 @@
   --app-color-success: #0f9f94;
   --app-color-warning: #b7791f;
   --app-color-destructive: #c2413d;
+  /* Text-safe status hues (see the @theme block). Measured on the card and on
+     each hue's own 10% tint: primary 4.56/5.02, success 5.21/4.69,
+     warning 5.61, destructive 5.10/4.43→darkened for the tint. */
+  --app-color-primary-text: #0a7d70;
+  --app-color-success-text: #0b7a6f;
+  --app-color-warning-text: #8f5d11;
+  --app-color-destructive-text: #b23b37;
   --app-radius: 0.625rem;
   --app-radius-lg: 0.875rem;
   --app-radius-none: 0;
@@ -103,6 +121,13 @@
   --app-color-success: #75e6d7;
   --app-color-warning: #e6b867;
   --app-color-destructive: #f08078;
+  /* Dark mode's vivid fills already clear 4.5:1 as text on its surfaces
+     (success 6.47+, warning 9.87, destructive 6.97), so the text tokens
+     intentionally alias them rather than inventing near-duplicates. */
+  --app-color-primary-text: #75e6d7;
+  --app-color-success-text: #75e6d7;
+  --app-color-warning-text: #e6b867;
+  --app-color-destructive-text: #f08078;
   --app-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
   --app-shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.42);
 }

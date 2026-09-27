@@ -49,7 +49,7 @@ function Navigation({ ariaLabel, className, items }: { ariaLabel: string; classN
         <NavLink
           className={({ isActive }) => cn(
             "group flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
-            isActive ? "bg-primary-soft text-primary" : "text-sidebar-foreground hover:bg-muted hover:text-foreground",
+            isActive ? "bg-primary-soft text-primary-text" : "text-sidebar-foreground hover:bg-muted hover:text-foreground",
           )}
           key={path}
           to={path}

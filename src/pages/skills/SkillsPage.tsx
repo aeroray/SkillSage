@@ -16,6 +16,8 @@ import {
   AccordionTrigger,
 } from "../../components/ui/accordion";
 import {
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
   ArrowRight,
   CircleAlert,
   Circle,
@@ -30,6 +32,7 @@ import {
   Library,
   LoaderCircle,
   Link2,
+  MinusCircle,
   MoreHorizontal,
   RefreshCw,
   ScanSearch,
@@ -60,6 +63,9 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -77,6 +83,7 @@ import {
 } from "../../components/ui/select";
 import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group";
 import { useToast } from "../../components/ui/toast-context";
 import {
   Tooltip,
@@ -100,9 +107,14 @@ import type {
   LocalSkillMatch,
 } from "../../features/skills/types";
 import {
+  countSkillsBySource,
+  countSkillsByStatus,
   filterAndSortSkills,
   groupByAuthor,
+  isRemoteUpdateable,
+  searchSkills,
   sourceLabel,
+  type SkillSortDirection,
   type SkillSortMode,
   type SkillSourceFilter,
   type SkillStatusFilter,
@@ -112,6 +124,20 @@ import { normalizeTauriError } from "../../lib/tauri";
 function shortRevision(revision: string) {
   return revision.length > 12 ? revision.slice(0, 8) : revision;
 }
+
+const SOURCE_FILTERS: Array<{ label: string; value: SkillSourceFilter }> = [
+  { label: "全部", value: "all" },
+  { label: "远端", value: "remote" },
+  { label: "本地", value: "local" },
+  { label: "内置", value: "builtin" },
+];
+
+const STATUS_FILTERS: Array<{ label: string; value: SkillStatusFilter }> = [
+  { label: "全部", value: "all" },
+  { label: "有更新", value: "update" },
+  { label: "已最新", value: "current" },
+  { label: "无更新源", value: "no-source" },
+];
 
 function formatInstalledAt(value: string) {
   const numeric = Number(value);
@@ -302,7 +328,7 @@ function LocalMatchContent({
           正在查询远端技能…
         </div>
       ) : error ? (
-        <p className="text-sm leading-6 text-destructive" role="alert">
+        <p className="text-sm leading-6 text-destructive-text" role="alert">
           {error}
         </p>
       ) : candidates.length === 0 ? (
@@ -329,7 +355,7 @@ function LocalMatchContent({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs leading-5" sideOffset={6}>
-                  匹配只会更新来源记录，不会替换本地文件。只有完成内容验证的候选可以匹配。
+                  匹配只会更新来源记录，不会替换本地文件。只有内容完全一致的候选才会记录远端版本；内容不一致的候选仍可匹配，但会标记为未验证。
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -342,7 +368,7 @@ function LocalMatchContent({
           </div>
           {rateLimited ? (
             <p
-              className="flex items-center gap-2 text-xs leading-5 text-destructive"
+              className="flex items-center gap-2 text-xs leading-5 text-destructive-text"
               role="status"
             >
               <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
@@ -450,9 +476,8 @@ function DistributionStatus({
 }) {
   return (
     <span
-      aria-label={`${label}${distributed ? "已分发" : "未分发"}`}
       className={`flex min-w-0 items-center gap-1.5 ${
-        distributed ? "font-medium text-success" : "text-muted-foreground"
+        distributed ? "font-medium text-success-text" : "text-muted-foreground"
       }`}
       title={`${label}${distributed ? "已分发" : "未分发"}`}
     >
@@ -462,6 +487,9 @@ function DistributionStatus({
         <Circle aria-hidden="true" className="size-3.5 shrink-0" />
       )}
       <span className="truncate">{label}</span>
+      {/* A `<span>` has no nameable role, so an aria-label here would be
+          discarded. The state has to be real text to reach a screen reader. */}
+      <span className="sr-only">{distributed ? "已分发" : "未分发"}</span>
     </span>
   );
 }
@@ -511,9 +539,7 @@ function SkillRow({
   const busy = pending || checking;
   const rowBusy = checking || (pending && !distributionPending);
   const controlsDisabled = busy || interactionDisabled;
-  const isLocalSkill = skill.source.startsWith("local://");
-  const hasRemoteUpdateSource =
-    !isLocalSkill && !skill.source.startsWith("builtin://");
+  const hasRemoteUpdateSource = isRemoteUpdateable(skill);
 
   return (
     <div aria-busy={busy} className="relative">
@@ -544,7 +570,7 @@ function SkillRow({
           <p>{sourceLabel(skill.source)}</p>
           <p>安装于 {formatInstalledAt(skill.installedAt)}</p>
         </div>
-        <div aria-label="分发状态" className="flex min-w-0 flex-col gap-1 text-xs">
+        <div aria-label="分发状态" className="flex min-w-0 flex-col gap-1 text-xs" role="group">
           {distributionPending ? (
             <span className="flex items-center gap-1.5 text-muted-foreground">
               <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
@@ -615,7 +641,7 @@ function SkillRow({
                 onSelect={() => onOpenDirectory(skill)}
               >
                 <FolderOpen />
-                打开技能目录
+                打开此技能文件夹
               </DropdownMenuItem>
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
@@ -689,6 +715,9 @@ export function SkillsPage() {
     updates,
   } = useSkillUpdates();
   const refreshPage = useCallback(() => {
+    // Clear the open-directory error so it cannot permanently mask a later
+    // refresh failure behind a stale message.
+    setDirectoryError(undefined);
     void refreshSkills();
   }, [refreshSkills]);
   const rescanSkills = useCallback(() => {
@@ -701,6 +730,7 @@ export function SkillsPage() {
   const [source, setSource] = useState<SkillSourceFilter>("all");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
   const [sort, setSort] = useState<SkillSortMode>("recent");
+  const [direction, setDirection] = useState<SkillSortDirection>("desc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [detailSkill, setDetailSkill] = useState<InstalledSkill>();
   const [localDescriptionModes, setLocalDescriptionModes] = useState<
@@ -721,19 +751,32 @@ export function SkillsPage() {
   const [githubUrlOpen, setGithubUrlOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [directoryError, setDirectoryError] = useState<string>();
-  const [bulkUpdating, setBulkUpdating] = useState(false);
-  const [bulkUpdateProgress, setBulkUpdateProgress] = useState({
-    completed: 0,
-    total: 0,
-  });
+  /** Progress for whichever batch action is running, so the action bar can
+   * report it and every batch button can lock consistently. */
+  const [bulkAction, setBulkAction] = useState<{
+    kind: "update" | "distribute" | "uninstall";
+    completed: number;
+    total: number;
+  }>();
+  const [bulkUninstallOpen, setBulkUninstallOpen] = useState(false);
+  const bulkWorking = bulkAction !== undefined;
   const [completedUpdateIds, setCompletedUpdateIds] = useState<Set<string>>(
     () => new Set(),
   );
 
   useEffect(() => {
-    setSelectedIds((current) =>
-      current.filter((id) => skills.some((skill) => skill.id === id)),
-    );
+    // Selection is general-purpose: it drives check-updates, batch distribute,
+    // and batch uninstall, so it tracks every installed skill. Each action
+    // narrows it to the subset it can actually operate on instead (see
+    // `selectedUpdateable`), which is what keeps "check updates" from ever
+    // dragging a local skill into a remote check.
+    const availableIds = new Set(skills.map((skill) => skill.id));
+    setSelectedIds((current) => {
+      // Return the same array when nothing was dropped so this does not force
+      // a re-render on every skills refresh.
+      const next = current.filter((id) => availableIds.has(id));
+      return next.length === current.length ? current : next;
+    });
   }, [skills]);
 
   const visibleUpdates = useMemo(
@@ -750,30 +793,101 @@ export function SkillsPage() {
   const filteredSkills = useMemo(
     () =>
       filterAndSortSkills(skills, updatesById, {
+        direction,
         search,
         sort,
         source,
         status,
       }),
-    [search, skills, sort, source, status, updatesById],
+    [direction, search, skills, sort, source, status, updatesById],
   );
 
   const groups = useMemo(() => {
     return groupByAuthor(filteredSkills);
   }, [filteredSkills]);
 
-  const filteredIds = filteredSkills.map((skill) => skill.id);
+  // Controlled open state. `defaultValue` is read only on mount, so author
+  // groups revealed later by a search or refresh would render collapsed even
+  // though every group is meant to start open. Only owners that have not been
+  // offered yet are auto-opened, so a group the user collapses by hand stays
+  // collapsed across filter changes.
+  const [openGroups, setOpenGroups] = useState<string[]>([]);
+  const seenGroupOwners = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const unseen = groups
+      .map(([owner]) => owner)
+      .filter((owner) => !seenGroupOwners.current.has(owner));
+    if (unseen.length === 0) return;
+    unseen.forEach((owner) => seenGroupOwners.current.add(owner));
+    setOpenGroups((current) => [...new Set([...current, ...unseen])]);
+  }, [groups]);
+
+  // Build the id list and the membership set once per filter change. The
+  // previous version ran `selectedIds.includes(...)` inside both an `every`
+  // and a `filter` over every visible row, making selection state O(n*m) and
+  // re-running on every render.
+  const filteredIds = useMemo(
+    () => filteredSkills.map((skill) => skill.id),
+    [filteredSkills],
+  );
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const filteredIdSet = useMemo(() => new Set(filteredIds), [filteredIds]);
+  const updateCheckingIdSet = useMemo(
+    () => new Set(updateCheckingIds),
+    [updateCheckingIds],
+  );
+  const selectedFilteredCount = useMemo(
+    () => filteredIds.reduce((count, id) => count + (selectedIdSet.has(id) ? 1 : 0), 0),
+    [filteredIds, selectedIdSet],
+  );
   const allFilteredSelected =
-    filteredIds.length > 0 &&
-    filteredIds.every((id) => selectedIds.includes(id));
-  const selectedFilteredCount = filteredIds.filter((id) =>
-    selectedIds.includes(id),
-  ).length;
+    filteredIds.length > 0 && selectedFilteredCount === filteredIds.length;
   const filteredSelectionState = allFilteredSelected
     ? true
     : selectedFilteredCount > 0
       ? "indeterminate"
       : false;
+  // The selected skills, and the per-action subsets each batch action can
+  // actually operate on. Keeping the subsets separate is what lets selection
+  // stay general-purpose without an action silently over-reaching.
+  const selectedSkills = useMemo(
+    () => skills.filter((skill) => selectedIdSet.has(skill.id)),
+    [selectedIdSet, skills],
+  );
+  const selectedUpdateable = useMemo(
+    () => selectedSkills.filter(isRemoteUpdateable),
+    [selectedSkills],
+  );
+  const selectedNotClaudeCount = selectedSkills.filter(
+    (skill) => !skill.claudeDistributed,
+  ).length;
+  const selectedNotWorkBuddyCount = selectedSkills.filter(
+    (skill) => !skill.workbuddyDistributed,
+  ).length;
+  // Facet counts come from the search-only set, so a chip's number answers
+  // "how many matches are in this group" instead of collapsing to the count of
+  // whichever facet is currently active.
+  const searchedSkills = useMemo(
+    () => searchSkills(skills, search),
+    [search, skills],
+  );
+  const sourceCounts = useMemo(
+    () => countSkillsBySource(searchedSkills),
+    [searchedSkills],
+  );
+  const statusCounts = useMemo(
+    () => countSkillsByStatus(searchedSkills, updatesById),
+    [searchedSkills, updatesById],
+  );
+  const activeFilterCount =
+    (source === "all" ? 0 : 1) +
+    (status === "all" ? 0 : 1) +
+    (search.trim() ? 1 : 0);
+  const resetFilters = useCallback(() => {
+    setSearch("");
+    setSource("all");
+    setStatus("all");
+  }, []);
   const pageError =
     directoryError ?? skillsError ?? updatesError ?? management.error;
   const openDirectory = async (skill: InstalledSkill) => {
@@ -790,9 +904,37 @@ export function SkillsPage() {
     setUninstallTarget(undefined);
   };
   const checkSelectedUpdates = async () => {
-    if (selectedIds.length === 0) return;
+    const ids = selectedUpdateable.map((skill) => skill.id);
+    if (ids.length === 0) return;
     setCompletedUpdateIds(new Set());
-    const result = await checkUpdatesNow(undefined, selectedIds);
+    const result = await checkUpdatesNow(undefined, ids);
+    if (result === undefined) {
+      toast({
+        description: "请稍后重试。",
+        title: "检查更新失败",
+        variant: "error",
+      });
+      return;
+    }
+    const updateCount = result.filter((item) => item.updateAvailable).length;
+    // Say how many were actually checked: the selection can include local
+    // skills that this action deliberately skips.
+    const skipped = selectedSkills.length - ids.length;
+    const skippedNote =
+      skipped > 0 ? `已跳过 ${skipped} 个没有远端来源的技能。` : "";
+    toast({
+      description:
+        updateCount > 0
+          ? `发现 ${updateCount} 个技能有更新。${skippedNote}`
+          : `已检查 ${ids.length} 个技能，均为最新。${skippedNote}`,
+      title: updateCount > 0 ? "发现可用更新" : "检查完成",
+      variant: updateCount > 0 ? "info" : "success",
+    });
+  };
+  /** Checks every installed remote skill, independent of the selection. */
+  const checkAllUpdates = async () => {
+    setCompletedUpdateIds(new Set());
+    const result = await checkUpdatesNow();
     if (result === undefined) {
       toast({
         description: "请稍后重试。",
@@ -806,7 +948,7 @@ export function SkillsPage() {
       description:
         updateCount > 0
           ? `发现 ${updateCount} 个技能有更新。`
-          : "所有选中技能均已是最新。",
+          : `已检查 ${result.length} 个远端技能，均为最新。`,
       title: updateCount > 0 ? "发现可用更新" : "检查完成",
       variant: updateCount > 0 ? "info" : "success",
     });
@@ -880,15 +1022,109 @@ export function SkillsPage() {
       setCompletedUpdateIds((current) => new Set(current).add(skill.id));
     }
   };
+  /**
+   * Batch distribution runs the existing per-skill pipeline sequentially and
+   * continues past individual failures, mirroring the batch-update flow. Only
+   * skills that actually need the link are targeted, so a second click is a
+   * no-op instead of a re-link of everything.
+   */
+  const distributeSelected = async (
+    target: "claude" | "workbuddy",
+    enable: boolean,
+  ) => {
+    if (bulkWorking) return;
+    const targets = selectedSkills.filter((skill) =>
+      target === "claude"
+        ? skill.claudeDistributed !== enable
+        : skill.workbuddyDistributed !== enable,
+    );
+    if (targets.length === 0) return;
+
+    const label = target === "claude" ? "Claude Code" : "Work Buddy";
+    setBulkAction({ kind: "distribute", completed: 0, total: targets.length });
+    let doneCount = 0;
+    let failedCount = 0;
+    try {
+      for (const skill of targets) {
+        const updated =
+          target === "claude"
+            ? await management.setClaudeDistribution(skill.id, enable, {
+                refresh: false,
+              })
+            : await management.setWorkbuddyDistribution(skill.id, enable, {
+                refresh: false,
+              });
+        if (updated) {
+          doneCount += 1;
+          updateInstalledSkill({
+            ...skill,
+            ...updated,
+            claudeDistributed:
+              target === "claude" ? enable : skill.claudeDistributed,
+            workbuddyDistributed:
+              target === "workbuddy" ? enable : skill.workbuddyDistributed,
+          });
+        } else {
+          failedCount += 1;
+        }
+        setBulkAction((current) =>
+          current ? { ...current, completed: current.completed + 1 } : current,
+        );
+      }
+      await refreshSkills();
+    } finally {
+      setBulkAction(undefined);
+    }
+    toast({
+      description:
+        failedCount > 0
+          ? `已为 ${doneCount} 个技能${enable ? "添加" : "移除"} ${label} 链接，${failedCount} 个失败。`
+          : `已为 ${doneCount} 个技能${enable ? "添加" : "移除"} ${label} 链接。`,
+      title: failedCount > 0 ? "批量分发部分完成" : "批量分发完成",
+      variant: failedCount > 0 ? "warning" : "success",
+    });
+  };
+  const confirmBulkUninstall = async () => {
+    if (bulkWorking || selectedSkills.length === 0) return;
+    const targets = [...selectedSkills];
+    setBulkAction({ kind: "uninstall", completed: 0, total: targets.length });
+    let doneCount = 0;
+    let failedCount = 0;
+    try {
+      for (const skill of targets) {
+        const result = await management.uninstall(skill.id);
+        if (result === undefined) {
+          failedCount += 1;
+        } else {
+          doneCount += 1;
+        }
+        setBulkAction((current) =>
+          current ? { ...current, completed: current.completed + 1 } : current,
+        );
+      }
+      setSelectedIds([]);
+      await refreshSkills();
+    } finally {
+      setBulkAction(undefined);
+      setBulkUninstallOpen(false);
+    }
+    toast({
+      description:
+        failedCount > 0
+          ? `已卸载 ${doneCount} 个技能，${failedCount} 个失败。`
+          : `已卸载 ${doneCount} 个技能。`,
+      title: failedCount > 0 ? "批量卸载部分完成" : "批量卸载完成",
+      variant: failedCount > 0 ? "warning" : "success",
+    });
+  };
   const updateAllSkills = async () => {
-    if (bulkUpdating) return;
+    if (bulkWorking) return;
     const targets = updates.filter(
       (item) => item.updateAvailable && !completedUpdateIds.has(item.id),
     );
     if (targets.length === 0) return;
 
-    setBulkUpdating(true);
-    setBulkUpdateProgress({ completed: 0, total: targets.length });
+    setBulkAction({ kind: "update", completed: 0, total: targets.length });
     let updatedCount = 0;
     let failedCount = 0;
     try {
@@ -900,15 +1136,13 @@ export function SkillsPage() {
         } else {
           failedCount += 1;
         }
-        setBulkUpdateProgress((current) => ({
-          completed: current.completed + 1,
-          total: current.total,
-        }));
+        setBulkAction((current) =>
+          current ? { ...current, completed: current.completed + 1 } : current,
+        );
       }
       await refreshSkills();
     } finally {
-      setBulkUpdating(false);
-      setBulkUpdateProgress({ completed: 0, total: 0 });
+      setBulkAction(undefined);
     }
     toast({
       description:
@@ -1040,7 +1274,7 @@ export function SkillsPage() {
               disabled={
                 skillsLoading ||
                 updatesChecking ||
-                bulkUpdating ||
+                bulkWorking ||
                 Boolean(management.pending)
               }
               onClick={rescanSkills}
@@ -1065,51 +1299,6 @@ export function SkillsPage() {
         <CardContent className="p-0">
           <div className="flex flex-col gap-4 bg-muted/20 p-4">
             <div className="flex flex-wrap items-center gap-3">
-              <Select
-                onValueChange={(value) => setSource(value as SkillSourceFilter)}
-                value={source}
-              >
-                <SelectTrigger aria-label="来源筛选" className="w-32">
-                  <SelectValue placeholder="来源" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="all">全部来源</SelectItem>
-                    <SelectItem value="skills.sh">skills.sh</SelectItem>
-                    <SelectItem value="local">本地导入</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <Select
-                onValueChange={(value) => setStatus(value as SkillStatusFilter)}
-                value={status}
-              >
-                <SelectTrigger aria-label="状态筛选" className="w-32">
-                  <SelectValue placeholder="状态" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="all">全部状态</SelectItem>
-                    <SelectItem value="update">有可用更新</SelectItem>
-                    <SelectItem value="current">已是最新</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <Select
-                onValueChange={(value) => setSort(value as SkillSortMode)}
-                value={sort}
-              >
-                <SelectTrigger aria-label="排序方式" className="w-32">
-                  <SelectValue placeholder="排序" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="recent">最近安装</SelectItem>
-                    <SelectItem value="name">名称</SelectItem>
-                    <SelectItem value="source">来源</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
               <div className="relative min-w-56 flex-1 basis-56">
                 <label className="sr-only" htmlFor="installed-skill-search">
                   搜索已安装技能
@@ -1138,76 +1327,352 @@ export function SkillsPage() {
                   </Button>
                 ) : null}
               </div>
+              <div className="flex items-center gap-1">
+                <Select
+                  onValueChange={(value) => setSort(value as SkillSortMode)}
+                  value={sort}
+                >
+                  <SelectTrigger aria-label="排序方式" className="w-36">
+                    <SelectValue placeholder="排序" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="recent">最近安装</SelectItem>
+                      <SelectItem value="name">名称</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                {/* Direction is its own control so neither order needs an
+                    inverse twin in the list above. */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label={
+                        direction === "desc" ? "改为升序排列" : "改为降序排列"
+                      }
+                      onClick={() =>
+                        setDirection((current) =>
+                          current === "desc" ? "asc" : "desc",
+                        )
+                      }
+                      size="icon"
+                      variant="outline"
+                    >
+                      {direction === "desc" ? (
+                        <ArrowDownWideNarrow aria-hidden="true" />
+                      ) : (
+                        <ArrowUpNarrowWide aria-hidden="true" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={6}>
+                    {direction === "desc"
+                      ? sort === "recent"
+                        ? "最新安装在前"
+                        : "名称从后往前"
+                      : sort === "recent"
+                        ? "最早安装在前"
+                        : "名称从前往后"}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              {activeFilterCount > 0 ? (
+                <Button
+                  onClick={resetFilters}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <X data-icon="inline-start" />
+                  清除筛选（{activeFilterCount}）
+                </Button>
+              ) : null}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-8 shrink-0 text-xs text-foreground/70">
+                  来源
+                </span>
+                <ToggleGroup
+                  aria-label="按来源筛选"
+                  onValueChange={(value) =>
+                    setSource((value || "all") as SkillSourceFilter)
+                  }
+                  size="sm"
+                  type="single"
+                  value={source}
+                >
+                  {SOURCE_FILTERS.map(({ label, value }) => (
+                    <ToggleGroupItem
+                      aria-label={`${label}（${sourceCounts[value]}）`}
+                      disabled={value !== "all" && sourceCounts[value] === 0}
+                      key={value}
+                      value={value}
+                    >
+                      {label}
+                      {/* Inherits the chip's own foreground at reduced opacity
+                          rather than the muted token: muted-on-chip measures
+                          ~3.5:1, below the 4.5:1 floor for text this size. */}
+                      <span className="tabular-nums opacity-80">
+                        {sourceCounts[value]}
+                      </span>
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-8 shrink-0 text-xs text-foreground/70">
+                  状态
+                </span>
+                <ToggleGroup
+                  aria-label="按更新状态筛选"
+                  onValueChange={(value) =>
+                    setStatus((value || "all") as SkillStatusFilter)
+                  }
+                  size="sm"
+                  type="single"
+                  value={status}
+                >
+                  {STATUS_FILTERS.map(({ label, value }) => (
+                    <ToggleGroupItem
+                      aria-label={`${label}（${statusCounts[value]}）`}
+                      disabled={value !== "all" && statusCounts[value] === 0}
+                      key={value}
+                      value={value}
+                    >
+                      {label}
+                      <span className="tabular-nums opacity-80">
+                        {statusCounts[value]}
+                      </span>
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                {statusCounts["no-source"] > 0 ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        aria-label="说明：为什么本地技能没有更新状态"
+                        className="inline-flex cursor-help items-center text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                        role="img"
+                        tabIndex={0}
+                      >
+                        <Info aria-hidden="true" className="size-3.5" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs leading-5" sideOffset={6}>
+                      本地导入和内置技能没有远端来源，无法检查更新，因此单独归为“无更新源”。
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
                 <Checkbox
                   checked={filteredSelectionState}
+                  disabled={filteredIds.length === 0}
                   id="select-filtered"
                   onCheckedChange={(checked) =>
                     setSelectedIds((current) =>
                       checked === true
                         ? [...new Set([...current, ...filteredIds])]
-                        : current.filter((id) => !filteredIds.includes(id)),
+                        : current.filter((id) => !filteredIdSet.has(id)),
                     )
                   }
                 />
                 <Label
-                  className="font-normal text-muted-foreground"
+                  className="font-normal text-foreground/70"
                   htmlFor="select-filtered"
                 >
-                  全选
+                  {filteredIds.length > 0
+                    ? `全选 ${filteredIds.length} 个`
+                    : "没有可选的技能"}
                 </Label>
               </div>
-              <div className="ml-auto flex items-center gap-2">
-                <Button
-                  aria-label="打开技能目录"
-                  disabled={!skillsRoot || skillsLoading}
-                  onClick={() => void openRootDirectory()}
-                  title="打开技能目录"
-                  variant="ghost"
-                >
-                  <FolderOpen data-icon="inline-start" />
-                  打开技能目录
-                </Button>
-              </div>
-              <div className="flex items-center gap-2">
-                {availableUpdateCount > 0 || bulkUpdating ? (
-                  <Button
-                    aria-label={`更新全部 ${availableUpdateCount} 个技能`}
-                    disabled={
-                      bulkUpdating ||
-                      updatesChecking ||
-                      Boolean(management.pending)
-                    }
-                    onClick={() => void updateAllSkills()}
-                    title={`更新全部 ${availableUpdateCount} 个技能`}
+              {/* The toolbar swaps to selection actions once anything is
+                  picked. This is what gives "select all" a purpose: the
+                  selection drives distribution and uninstall, not only the
+                  update check. */}
+              {selectedSkills.length > 0 ? (
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <span
+                    aria-live="polite"
+                    className="text-xs text-foreground/70"
                   >
-                    {bulkUpdating ? (
-                      <LoaderCircle
-                        aria-hidden="true"
-                        className="animate-spin"
-                        data-icon="inline-start"
-                      />
-                    ) : (
-                      <Download data-icon="inline-start" />
-                    )}
-                    {bulkUpdating
-                      ? `更新中 ${bulkUpdateProgress.completed}/${bulkUpdateProgress.total}`
-                      : `更新全部（${availableUpdateCount}）`}
+                    已选 {selectedSkills.length} 个
+                  </span>
+                  <Button
+                    onClick={() => setSelectedIds([])}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <X data-icon="inline-start" />
+                    取消选择
                   </Button>
-                ) : null}
-                <Button
-                  disabled={
-                    selectedIds.length === 0 || updatesChecking || bulkUpdating
-                  }
-                  onClick={() => void checkSelectedUpdates()}
-                  variant="secondary"
-                >
-                  <RefreshCw data-icon="inline-start" />
-                  {updatesChecking ? "检查中" : "检查更新"}
-                </Button>
-              </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        disabled={bulkWorking || Boolean(management.pending)}
+                        size="sm"
+                        variant="outline"
+                      >
+                        <Share2 data-icon="inline-start" />
+                        批量分发
+                        <ChevronDown data-icon="inline-end" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-56">
+                      <DropdownMenuLabel>
+                        为选中的技能管理工具链接
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        disabled={selectedNotClaudeCount === 0}
+                        onSelect={() => void distributeSelected("claude", true)}
+                      >
+                        <CheckCircle2 />
+                        添加到 Claude Code
+                        {selectedNotClaudeCount > 0 ? (
+                          <DropdownMenuShortcut>
+                            {selectedNotClaudeCount}
+                          </DropdownMenuShortcut>
+                        ) : null}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={selectedSkills.length - selectedNotClaudeCount === 0}
+                        onSelect={() => void distributeSelected("claude", false)}
+                      >
+                        <MinusCircle />
+                        从 Claude Code 移除
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        disabled={selectedNotWorkBuddyCount === 0}
+                        onSelect={() =>
+                          void distributeSelected("workbuddy", true)
+                        }
+                      >
+                        <CheckCircle2 />
+                        添加到 Work Buddy
+                        {selectedNotWorkBuddyCount > 0 ? (
+                          <DropdownMenuShortcut>
+                            {selectedNotWorkBuddyCount}
+                          </DropdownMenuShortcut>
+                        ) : null}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={
+                          selectedSkills.length - selectedNotWorkBuddyCount === 0
+                        }
+                        onSelect={() =>
+                          void distributeSelected("workbuddy", false)
+                        }
+                      >
+                        <MinusCircle />
+                        从 Work Buddy 移除
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex">
+                        <Button
+                          disabled={
+                            selectedUpdateable.length === 0 ||
+                            updatesChecking ||
+                            bulkWorking
+                          }
+                          onClick={() => void checkSelectedUpdates()}
+                          size="sm"
+                          variant="secondary"
+                        >
+                          <RefreshCw data-icon="inline-start" />
+                          {updatesChecking
+                            ? "检查中"
+                            : `检查更新（${selectedUpdateable.length}）`}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      className="max-w-xs leading-5"
+                      sideOffset={6}
+                    >
+                      {selectedUpdateable.length > 0
+                        ? `检查选中的 ${selectedUpdateable.length} 个远端技能`
+                        : "选中的技能都没有远端来源，无法检查更新"}
+                    </TooltipContent>
+                  </Tooltip>
+                  <Button
+                    disabled={bulkWorking || Boolean(management.pending)}
+                    onClick={() => setBulkUninstallOpen(true)}
+                    size="sm"
+                    variant="destructive"
+                  >
+                    <Trash2 data-icon="inline-start" />
+                    卸载（{selectedSkills.length}）
+                  </Button>
+                </div>
+              ) : (
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex">
+                        <Button
+                          aria-label="打开共享技能目录"
+                          disabled={!skillsRoot || skillsLoading}
+                          onClick={() => void openRootDirectory()}
+                          size="sm"
+                          variant="ghost"
+                        >
+                          <FolderOpen data-icon="inline-start" />
+                          打开共享目录
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-sm leading-5" sideOffset={6}>
+                      所有技能都装在这里：
+                      <span className="mt-1 block font-mono text-xs">
+                        {skillsRoot ?? "加载中…"}
+                      </span>
+                    </TooltipContent>
+                  </Tooltip>
+                  {availableUpdateCount > 0 || bulkAction ? (
+                    <Button
+                      aria-label={`更新全部 ${availableUpdateCount} 个技能`}
+                      disabled={
+                        bulkWorking ||
+                        updatesChecking ||
+                        Boolean(management.pending)
+                      }
+                      onClick={() => void updateAllSkills()}
+                      size="sm"
+                      title={`更新全部 ${availableUpdateCount} 个技能`}
+                    >
+                      {bulkAction?.kind === "update" ? (
+                        <LoaderCircle
+                          aria-hidden="true"
+                          className="animate-spin"
+                          data-icon="inline-start"
+                        />
+                      ) : (
+                        <Download data-icon="inline-start" />
+                      )}
+                      {bulkAction?.kind === "update"
+                        ? `更新中 ${bulkAction.completed}/${bulkAction.total}`
+                        : `更新全部（${availableUpdateCount}）`}
+                    </Button>
+                  ) : null}
+                  <Button
+                    disabled={skillsLoading || updatesChecking || bulkWorking}
+                    onClick={() => void checkAllUpdates()}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    <RefreshCw data-icon="inline-start" />
+                    {updatesChecking ? "检查中" : "检查全部更新"}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
           <Separator className="bg-foreground/20" />
@@ -1231,15 +1696,27 @@ export function SkillsPage() {
               />
             ) : groups.length === 0 ? (
               <EmptyState
-                description="换个搜索词或筛选条件试试。"
+                action={
+                  activeFilterCount > 0 ? (
+                    <Button onClick={resetFilters} variant="secondary">
+                      清除筛选条件
+                    </Button>
+                  ) : undefined
+                }
+                description={
+                  activeFilterCount > 0
+                    ? "当前筛选条件下没有技能，清除筛选后可看到全部技能。"
+                    : "换个搜索词或筛选条件试试。"
+                }
                 icon={Search}
                 title="没有匹配的技能"
               />
             ) : (
               <Accordion
                 className="flex flex-col gap-3"
-                defaultValue={groups.map(([owner]) => owner)}
+                onValueChange={setOpenGroups}
                 type="multiple"
+                value={openGroups}
               >
                 {groups.map(([owner, ownerSkills]) => (
                   <AccordionItem
@@ -1261,8 +1738,8 @@ export function SkillsPage() {
                       <div>
                         {ownerSkills.map((skill) => (
                           <SkillRow
-                            checking={updateCheckingIds.includes(skill.id)}
-                            checked={selectedIds.includes(skill.id)}
+                            checking={updateCheckingIdSet.has(skill.id)}
+                            checked={selectedIdSet.has(skill.id)}
                             description={
                               localDescriptionModes[skill.id] ===
                                 "translated" ||
@@ -1271,7 +1748,7 @@ export function SkillsPage() {
                                 ? translations[skill.id] ?? skill.description
                                 : skill.description
                             }
-                            interactionDisabled={bulkUpdating}
+                            interactionDisabled={bulkWorking}
                             key={skill.id}
                             onCheck={(checked) =>
                               setSelectedIds((current) =>
@@ -1401,6 +1878,39 @@ export function SkillsPage() {
               variant="destructive"
             >
               {management.pending ? "卸载中" : "卸载"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        onOpenChange={(open) => !open && setBulkUninstallOpen(false)}
+        open={bulkUninstallOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              确认卸载 {selectedSkills.length} 个技能
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              会删除这些技能在共享目录中的文件夹和记录，所有读取该目录的 AI
+              工具会立即失去它们，不影响未选中的技能。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-40 overflow-hidden rounded-md border border-border bg-muted/40 p-3">
+            <p className="font-mono text-xs leading-5 text-muted-foreground">
+              {selectedSkills.map((skill) => skill.name).join("、")}
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkWorking}
+              onClick={() => void confirmBulkUninstall()}
+              variant="destructive"
+            >
+              {bulkAction?.kind === "uninstall"
+                ? `卸载中 ${bulkAction.completed}/${bulkAction.total}`
+                : `卸载 ${selectedSkills.length} 个`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
