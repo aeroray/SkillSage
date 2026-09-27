@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   checkInstallConflict,
@@ -26,6 +26,32 @@ let installedSkillsPromise: Promise<InstalledSkillsList> | undefined;
  * recognized as superseded and kept out of the cache. */
 let installedSkillsGeneration = 0;
 
+/** Stable snapshot for "nothing loaded yet". A fresh object here would make
+ * `useSyncExternalStore` re-render forever. The empty root is falsy, which is
+ * how every consumer already distinguishes "not loaded" from a real path. */
+const EMPTY_INSTALLED: InstalledSkillsList = { skills: [], skillsRoot: "" };
+
+const installedSubscribers = new Set<() => void>();
+
+/**
+ * Publishes a new cache value to every mounted consumer. The sidebar and the
+ * skills page both read this cache, so a change made on one surface (install,
+ * uninstall, distribution toggle) has to reach the other without a reload.
+ */
+function publishInstalledSkills(next: InstalledSkillsList | undefined) {
+  cachedInstalledSkills = next;
+  installedSubscribers.forEach((notify) => notify());
+}
+
+function subscribeInstalledSkills(notify: () => void) {
+  installedSubscribers.add(notify);
+  return () => installedSubscribers.delete(notify);
+}
+
+function getInstalledSkillsSnapshot() {
+  return cachedInstalledSkills ?? EMPTY_INSTALLED;
+}
+
 function loadInstalledSkills(force = false) {
   if (!force) {
     if (cachedInstalledSkills) return Promise.resolve(cachedInstalledSkills);
@@ -37,8 +63,7 @@ function loadInstalledSkills(force = false) {
     .then((result) => {
       // A newer refresh may have started while this one was in flight; caching
       // then would overwrite fresher data with stale data.
-      if (generation === installedSkillsGeneration)
-        cachedInstalledSkills = result;
+      if (generation === installedSkillsGeneration) publishInstalledSkills(result);
       return result;
     })
     .finally(() => {
@@ -51,17 +76,19 @@ function loadInstalledSkills(force = false) {
 /** Refresh the shared installed-skill cache after another flow changes the
  * public skills directory, such as adopting an existing skill. */
 export function refreshInstalledSkillsCache() {
-  cachedInstalledSkills = undefined;
+  publishInstalledSkills(undefined);
   return loadInstalledSkills(true);
 }
 
 export function useInstalledSkills() {
-  const [skills, setSkills] = useState<InstalledSkill[]>(
-    () => cachedInstalledSkills?.skills ?? [],
+  // `useSyncExternalStore` keeps every consumer on the same cache value, so
+  // the sidebar counts cannot drift from the list after a mutation.
+  const snapshot = useSyncExternalStore(
+    subscribeInstalledSkills,
+    getInstalledSkillsSnapshot,
   );
-  const [skillsRoot, setSkillsRoot] = useState(
-    () => cachedInstalledSkills?.skillsRoot,
-  );
+  const skills = snapshot.skills;
+  const skillsRoot = snapshot.skillsRoot;
   const [loading, setLoading] = useState(() => !cachedInstalledSkills);
   const [error, setError] = useState<string>();
   const requestId = useRef(0);
@@ -71,11 +98,9 @@ export function useInstalledSkills() {
     setLoading(true);
     setError(undefined);
     try {
-      const result = await loadInstalledSkills(force);
-      if (currentRequest === requestId.current) {
-        setSkillsRoot(result.skillsRoot);
-        setSkills(result.skills);
-      }
+      await loadInstalledSkills(force);
+      // The cache publishes on success; only the request-scoped state is
+      // settled here so a superseded request cannot clear a newer one.
     } catch (reason) {
       if (currentRequest === requestId.current)
         setError(normalizeTauriError(reason));
@@ -85,19 +110,14 @@ export function useInstalledSkills() {
   }, []);
 
   const updateSkill = useCallback((updatedSkill: InstalledSkill) => {
-    setSkills((current) =>
-      current.map((skill) =>
+    const current = cachedInstalledSkills;
+    if (!current) return;
+    publishInstalledSkills({
+      ...current,
+      skills: current.skills.map((skill) =>
         skill.id === updatedSkill.id ? updatedSkill : skill,
       ),
-    );
-    if (cachedInstalledSkills) {
-      cachedInstalledSkills = {
-        ...cachedInstalledSkills,
-        skills: cachedInstalledSkills.skills.map((skill) =>
-          skill.id === updatedSkill.id ? updatedSkill : skill,
-        ),
-      };
-    }
+    });
   }, []);
 
   useEffect(() => {

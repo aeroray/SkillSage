@@ -140,6 +140,23 @@ export function SettingsPage() {
           </Card>
 
           <Card>
+            <CardHeader className="flex flex-row items-start gap-4">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary"><RefreshCw aria-hidden="true" className="h-5 w-5" /></div>
+              <div><CardTitle>设备同步</CardTitle><CardDescription className="mt-1">在设备间迁移技能和应用设置。</CardDescription></div>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 pb-5">
+              <div className="flex items-start justify-between gap-5 rounded-lg border border-border bg-muted/30 p-4">
+                <div className="min-w-0 flex-1"><p className="text-sm font-medium text-foreground">同步数据</p><p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">包含远程技能记录、技能说明译文、显示模式、主题色和代理设置。GitHub Token 不会导出。</p></div>
+                <div className="flex shrink-0 flex-col items-stretch gap-2"><Button onClick={() => setSyncOpen(true)} variant="outline"><Upload data-icon="inline-start" />导入同步数据</Button><Button disabled={loading || syncExport.exporting || !settings} onClick={() => void exportSyncData()}><Download data-icon="inline-start" />{syncExport.exporting ? "导出中…" : "导出同步数据"}</Button></div>
+              </div>
+              {syncExport.error ? <ErrorBanner error={syncExport.error} /> : null}
+              {syncExport.path ? <Alert><Download /><AlertDescription>同步数据已导出到：{displayPath(syncExport.path)}</AlertDescription></Alert> : null}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-5">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-4">
               <div className="flex min-w-0 items-center gap-4"><div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><Info aria-hidden="true" className="h-5 w-5" /></div><div><CardTitle>关于与更新</CardTitle><CardDescription className="mt-1">技匠（SkillSage）技能管理器与版本信息。</CardDescription></div></div>
               <Badge className="shrink-0" variant="muted">v{appVersion}</Badge>
@@ -172,9 +189,7 @@ export function SettingsPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
 
-        <div className="flex min-w-0 flex-col gap-5">
           <Card>
             <CardHeader className="flex flex-row items-start gap-4">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><Palette aria-hidden="true" className="h-5 w-5" /></div>
@@ -183,21 +198,6 @@ export function SettingsPage() {
             <CardContent className="flex flex-col gap-5 pb-5">
               <Field className="justify-between gap-4" orientation="horizontal"><FieldTitle>显示模式</FieldTitle><ThemeControl /></Field>
               <Field className="justify-between gap-4" orientation="horizontal"><FieldTitle>主题色</FieldTitle><AccentControl /></Field>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-start gap-4">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary"><RefreshCw aria-hidden="true" className="h-5 w-5" /></div>
-              <div><CardTitle>设备同步</CardTitle><CardDescription className="mt-1">在设备间迁移技能和应用设置。</CardDescription></div>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4 pb-5">
-              <div className="flex items-start justify-between gap-5 rounded-lg border border-border bg-muted/30 p-4">
-                <div className="min-w-0 flex-1"><p className="text-sm font-medium text-foreground">同步数据</p><p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">包含远程技能记录、技能说明译文、显示模式、主题色和代理设置。GitHub Token 不会导出。</p></div>
-                <div className="flex shrink-0 flex-col items-stretch gap-2"><Button onClick={() => setSyncOpen(true)} variant="outline"><Upload data-icon="inline-start" />导入同步数据</Button><Button disabled={loading || syncExport.exporting || !settings} onClick={() => void exportSyncData()}><Download data-icon="inline-start" />{syncExport.exporting ? "导出中…" : "导出同步数据"}</Button></div>
-              </div>
-              {syncExport.error ? <ErrorBanner error={syncExport.error} /> : null}
-              {syncExport.path ? <Alert><Download /><AlertDescription>同步数据已导出到：{displayPath(syncExport.path)}</AlertDescription></Alert> : null}
             </CardContent>
           </Card>
         </div>

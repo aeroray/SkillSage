@@ -27,6 +27,7 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { ScrollArea } from "../../components/ui/scroll-area";
+import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -275,9 +276,11 @@ export function AdoptPage() {
       />
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <CardHeader className="flex shrink-0 flex-row items-start justify-between gap-4">
+        {/* Same toolbar band as 我的技能: muted surface, fixed height, with the
+            list below it as the only scrolling region. */}
+        <CardHeader className="flex shrink-0 flex-row items-center justify-between gap-4 bg-muted/20 p-4">
           <div className="min-w-0">
-            <CardTitle>扫描结果</CardTitle>
+            <CardTitle className="text-sm font-medium">扫描结果</CardTitle>
             <CardDescription className="mt-1">
               {scan?.items.length ?? 0} 个条目，可直接采纳 {adoptableCount} 个。
             </CardDescription>
@@ -304,16 +307,21 @@ export function AdoptPage() {
               />
               <span>全选</span>
             </label>
-            <Button disabled={selected.length === 0 || working} onClick={() => void submit()}>
+            <Button
+              disabled={selected.length === 0 || working}
+              onClick={() => void submit()}
+              size="sm"
+            >
               <FolderInput data-icon="inline-start" />
-              {executing ? "采纳中…" : "采纳所选"}
+              {executing ? "采纳中…" : `采纳所选（${selected.length}）`}
             </Button>
           </div>
         </CardHeader>
+        <Separator className="shrink-0 bg-foreground/20" />
         {/* The candidate list owns the scrolling so the page header and the
             scan summary stay put no matter how many entries are found. */}
         <ScrollArea className="min-h-0 flex-1">
-          <CardContent className="flex flex-col gap-3 pb-5">
+          <CardContent className="flex flex-col gap-3 p-4">
           {scanning ? (
             <div aria-busy="true" className="flex flex-col gap-3">
               <Skeleton className="h-20 w-full" />

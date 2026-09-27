@@ -42,6 +42,7 @@ import {
 } from "../../components/ui/dropdown-menu";
 import { Input } from "../../components/ui/input";
 import { ScrollArea } from "../../components/ui/scroll-area";
+import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group";
 import {
@@ -120,11 +121,15 @@ function LoadingCards() {
     <div
       aria-busy="true"
       aria-label="正在加载技能列表"
-      className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+      // Mirrors the real grid's container queries so the skeleton occupies the
+      // same columns and the layout does not jump when results arrive.
+      className="@container"
     >
-      {Array.from({ length: 6 }, (_, index) => (
-        <Skeleton className="h-48 rounded-lg" key={index} />
-      ))}
+      <div className="grid gap-4 @lg:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
+        {Array.from({ length: 8 }, (_, index) => (
+          <Skeleton className="h-36 rounded-lg" key={index} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -159,7 +164,7 @@ function SkillCard({
       : description;
   return (
     <Card
-      className="cursor-pointer shadow-sm transition-[background-color,border-color] duration-150 hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="h-full cursor-pointer gap-0 py-0 shadow-sm transition-[background-color,border-color] duration-150 hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       onClick={() => onOpen(primary.id)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -171,17 +176,19 @@ function SkillCard({
       role="group"
       tabIndex={0}
     >
-      <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
+      <CardHeader className="flex flex-row items-start justify-between gap-3 py-4 pb-3">
         <div className="min-w-0">
-          <CardTitle className="truncate text-lg">{primary.name}</CardTitle>
+          <CardTitle className="truncate text-base">{primary.name}</CardTitle>
           <CardDescription className="mt-1 truncate font-mono text-xs">
             {source}
           </CardDescription>
-          {!installed && displayedDescription ? (
-            <CardDescription className="mt-3 line-clamp-2 text-xs leading-5">
-              {displayedDescription}
-            </CardDescription>
-          ) : null}
+          {/* The description slot is reserved at a fixed two lines whether or
+              not this card shows one. Installed cards hide it by design, and
+              without the reservation they would render short and leave a
+              hollow void once the grid stretches them to the row height. */}
+          <CardDescription className="mt-3 line-clamp-2 min-h-10 text-xs leading-5">
+            {installed ? "" : displayedDescription ?? ""}
+          </CardDescription>
         </div>
         {installed ? (
           <Button
@@ -212,7 +219,9 @@ function SkillCard({
           </Button>
         )}
       </CardHeader>
-      <CardContent className="pb-4 pt-0">
+      {/* Pushed to the card's bottom edge so every card in a row aligns its
+          metadata line regardless of description length. */}
+      <CardContent className="mt-auto pb-4 pt-0">
         <div className="flex min-h-8 items-center justify-between gap-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <Download aria-hidden="true" className="size-3.5" />
@@ -597,144 +606,159 @@ export function StorePage() {
         />
       ) : null}
 
-      {/* The results region scrolls; the header and toolbar above it stay
-          fixed so the range selector and search field are always reachable. */}
+      {/* Same workspace shape as 我的技能: one Card whose header is the
+          toolbar and whose body is the only scrolling region. */}
       <section
         aria-labelledby="leaderboard-title"
-        className="mt-8 flex min-h-0 flex-1 flex-col"
+        className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="flex items-center gap-4">
-          <h2 className="sr-only" id="leaderboard-title">
-            {isSearching ? `“${query.trim()}”的结果` : "技能排行榜"}
-          </h2>
-          {!isSearching ? (
-            <div className="flex shrink-0 items-center gap-2">
-              {/* A segmented single-select. ToggleGroup already owns the
-                  roving focus, keyboard handling and pressed state, so the
-                  active segment needs no hand-written ring or shadow. */}
-              <ToggleGroup
-                aria-label="排行榜范围"
-                className="rounded-lg border border-border bg-muted/60 p-0.5"
-                onValueChange={(value) => {
-                  if (value) setRange(value as LeaderboardRange);
-                }}
-                type="single"
-                value={range}
-              >
-                {leaderboardRanges.map(({ icon: Icon, label, value }) => (
-                  <ToggleGroupItem
-                    className="h-7 gap-1.5 px-2.5 text-xs data-[state=on]:bg-background data-[state=on]:font-semibold data-[state=on]:text-foreground data-[state=on]:shadow-sm"
-                    key={value}
-                    size="sm"
-                    value={value}
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+            <div className="flex shrink-0 flex-wrap items-center gap-3 bg-muted/20 p-4">
+              <h2 className="sr-only" id="leaderboard-title">
+                {isSearching ? `“${query.trim()}”的结果` : "技能排行榜"}
+              </h2>
+              {!isSearching ? (
+                <div className="flex shrink-0 items-center gap-2">
+                  {/* A segmented single-select. ToggleGroup already owns the
+                      roving focus, keyboard handling and pressed state, so the
+                      active segment needs no hand-written ring or shadow. */}
+                  <ToggleGroup
+                    aria-label="排行榜范围"
+                    className="rounded-lg border border-border bg-muted/60 p-0.5"
+                    onValueChange={(value) => {
+                      if (value) setRange(value as LeaderboardRange);
+                    }}
+                    type="single"
+                    value={range}
                   >
-                    <Icon aria-hidden="true" data-icon="inline-start" />
-                    {label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-              <Tooltip>
-                <TooltipTrigger asChild>
+                    {leaderboardRanges.map(({ icon: Icon, label, value }) => (
+                      <ToggleGroupItem
+                        className="h-7 gap-1.5 px-2.5 text-xs data-[state=on]:bg-background data-[state=on]:font-semibold data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+                        key={value}
+                        size="sm"
+                        value={value}
+                      >
+                        <Icon aria-hidden="true" data-icon="inline-start" />
+                        {label}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        aria-label={`刷新${activeLeaderboardLabel}技能`}
+                        disabled={leaderboardLoading}
+                        onClick={refreshLeaderboard}
+                        size="icon"
+                        variant="ghost"
+                      >
+                        <RefreshCw aria-hidden="true" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      刷新{activeLeaderboardLabel}技能
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              ) : null}
+              <div className="relative ml-auto min-w-56 flex-1 basis-56">
+                <label className="sr-only" htmlFor="skill-search">
+                  搜索技能
+                </label>
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  className="search-input appearance-none py-0 pl-9 pr-11 font-normal !text-sm !leading-5 placeholder:text-sm placeholder:opacity-80"
+                  autoComplete="off"
+                  id="skill-search"
+                  onChange={(event) => setQuery(event.target.value)}
+                  onCompositionEnd={() => setIsSearchComposing(false)}
+                  onCompositionStart={() => setIsSearchComposing(true)}
+                  placeholder="搜索技能"
+                  type="search"
+                  value={query}
+                />
+                {query ? (
                   <Button
-                    aria-label={`刷新${activeLeaderboardLabel}技能`}
-                    disabled={leaderboardLoading}
-                    onClick={refreshLeaderboard}
-                    size="icon"
+                    aria-label="清除搜索"
+                    className="absolute right-0 top-1/2 size-9 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setIsSearchComposing(false);
+                      setQuery("");
+                    }}
+                    title="清除搜索"
+                    type="button"
                     variant="ghost"
                   >
-                    <RefreshCw aria-hidden="true" />
+                    <X aria-hidden="true" />
                   </Button>
-                </TooltipTrigger>
-                <TooltipContent>刷新{activeLeaderboardLabel}技能</TooltipContent>
-              </Tooltip>
+                ) : null}
+              </div>
             </div>
-          ) : null}
-          <div className="relative ml-auto min-w-0 flex-1">
-            <label className="sr-only" htmlFor="skill-search">
-              搜索技能
-            </label>
-            <Search
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              className="search-input appearance-none py-0 pl-9 pr-11 font-normal !text-sm !leading-5 placeholder:text-sm placeholder:opacity-80"
-              autoComplete="off"
-              id="skill-search"
-              onChange={(event) => setQuery(event.target.value)}
-              onCompositionEnd={() => setIsSearchComposing(false)}
-              onCompositionStart={() => setIsSearchComposing(true)}
-              placeholder="搜索技能"
-              type="search"
-              value={query}
-            />
-            {query ? (
-              <Button
-                aria-label="清除搜索"
-                className="absolute right-0 top-1/2 size-9 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setIsSearchComposing(false);
-                  setQuery("");
-                }}
-                title="清除搜索"
-                type="button"
-                variant="ghost"
-              >
-                <X aria-hidden="true" />
-              </Button>
-            ) : null}
-          </div>
-        </div>
-        {displayError ? (
-          <ErrorBanner
-            className="mt-5"
-            error={displayError}
-            onOpenSettings={() => navigate("/settings")}
-            onRetry={isSearching ? refreshSearch : refreshLeaderboard}
-          />
-        ) : displayLoading ? (
-          <div className="mt-5">
-            <LoadingCards />
-          </div>
-        ) : groups.length > 0 ? (
-          <ScrollArea className="mt-5 min-h-0 flex-1">
-            <div className="grid gap-4 pb-1 md:grid-cols-2 xl:grid-cols-3">
-              {groups.map((group) => (
-                <SkillCard
-                  description={group.primary.description}
-                  descriptionMode={
-                    descriptionModes[group.primary.id] ??
-                    (translations[group.primary.id] ? "translated" : "original")
-                  }
-                  group={group}
-                  installedSkillIds={installedSkillIds}
-                  key={group.source}
-                  onOpen={openDetail}
-                  onQuickInstall={quickInstall}
-                  quickInstallDisabled={
-                    installedLoading ||
-                    installState.installing ||
-                    conflictCheck.checking
-                  }
-                  quickInstallingSkillId={quickInstallingSkillId}
-                  translatedDescription={translations[group.primary.id]}
+            <Separator className="shrink-0 bg-foreground/20" />
+            {displayError ? (
+              <div className="p-4">
+                <ErrorBanner
+                  error={displayError}
+                  onOpenSettings={() => navigate("/settings")}
+                  onRetry={isSearching ? refreshSearch : refreshLeaderboard}
                 />
-              ))}
+              </div>
+            ) : displayLoading ? (
+              <div className="p-4">
+                <LoadingCards />
+              </div>
+            ) : groups.length > 0 ? (
+              <ScrollArea className="min-h-0 flex-1">
+                {/* Container queries, not viewport breakpoints: the grid lives
+                    in a container 228px narrower than the viewport, so `xl:`
+                    (1280px) would not produce a third column until the window
+                    reached ~1508px. Keyed to the container, the columns track
+                    the space the grid actually has. */}
+                <div className="@container p-4">
+                  <div className="grid gap-4 @lg:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
+                {groups.map((group) => (
+                  <SkillCard
+                    description={group.primary.description}
+                    descriptionMode={
+                      descriptionModes[group.primary.id] ??
+                      (translations[group.primary.id] ? "translated" : "original")
+                    }
+                    group={group}
+                    installedSkillIds={installedSkillIds}
+                    key={group.source}
+                    onOpen={openDetail}
+                    onQuickInstall={quickInstall}
+                    quickInstallDisabled={
+                      installedLoading ||
+                      installState.installing ||
+                      conflictCheck.checking
+                    }
+                    quickInstallingSkillId={quickInstallingSkillId}
+                    translatedDescription={translations[group.primary.id]}
+                  />
+                ))}
+              </div>
             </div>
-          </ScrollArea>
-        ) : (
-          <div className="mt-5">
-            <EmptyState
-              description={
-                isSearching
-                  ? "换一个关键词试试，或者浏览排行榜中的热门技能。"
-                  : "暂时没有可展示的技能。"
-              }
-              icon={Search}
-              title="没有找到技能"
-            />
-          </div>
-        )}
+              </ScrollArea>
+            ) : (
+              <div className="p-4">
+                <EmptyState
+                  description={
+                    isSearching
+                      ? "换一个关键词试试，或者浏览排行榜中的热门技能。"
+                      : "暂时没有可展示的技能。"
+                  }
+                  icon={Search}
+                  title="没有找到技能"
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       <Dialog

@@ -1,9 +1,26 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import { Download, FolderInput, Library, Settings, Store } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Download,
+  FolderInput,
+  FolderOpen,
+  Library,
+  Settings,
+  Store,
+} from "lucide-react";
 import { Button } from "../components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../components/ui/tooltip";
+import { openSkillsRoot } from "../features/skills/api";
+import { useInstalledSkills } from "../features/skills/hooks";
 import { useThemeStore } from "../features/theme/store";
 import { useAppUpdateStore } from "../features/update/store";
+import { copyText } from "../lib/clipboard";
 import { Skeleton } from "../components/ui/skeleton";
 import { cn } from "../lib/utils";
 
@@ -65,6 +82,107 @@ function PageLoadingState() {
   return <div aria-busy="true" aria-label="正在加载页面" className="flex flex-col gap-6"><Skeleton className="h-9 w-64" /><Skeleton className="h-4 w-96" /><Skeleton className="h-48 w-full" /></div>;
 }
 
+/**
+ * The shared directory is the product's central fact: every skill lives here
+ * and every AI tool reads it. The sidebar is the natural home for it, which
+ * also gives the previously empty rail a job.
+ */
+function SidebarWorkspace() {
+  const { loading, skills, skillsRoot } = useInstalledSkills();
+  const [copied, setCopied] = useState(false);
+
+  const claudeCount = skills.filter((skill) => skill.claudeDistributed).length;
+  const workbuddyCount = skills.filter((skill) => skill.workbuddyDistributed).length;
+
+  const copyPath = async () => {
+    if (!skillsRoot) return;
+    try {
+      await copyText(skillsRoot);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard access can be refused; the path stays selectable either way.
+    }
+  };
+
+  const stats = [
+    { label: "已安装", value: skills.length },
+    { label: "Claude Code", value: claudeCount },
+    { label: "Work Buddy", value: workbuddyCount },
+  ];
+
+  return (
+    <section
+      aria-label="共享技能目录"
+      className="mt-6 flex flex-col gap-3 rounded-lg border border-border bg-card/60 p-3"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-xs font-medium text-foreground">共享技能目录</h2>
+        <div className="flex items-center gap-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label="复制共享目录路径"
+                disabled={!skillsRoot}
+                onClick={() => void copyPath()}
+                size="icon"
+                variant="ghost"
+              >
+                {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent sideOffset={6}>
+              {copied ? "已复制路径" : "复制路径"}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label="打开共享目录"
+                disabled={!skillsRoot}
+                onClick={() => void openSharedDirectory(skillsRoot)}
+                size="icon"
+                variant="ghost"
+              >
+                <FolderOpen aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent sideOffset={6}>在文件管理器中打开</TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+
+      <p
+        className="truncate font-mono text-xs leading-4 text-muted-foreground"
+        title={skillsRoot ?? undefined}
+      >
+        {skillsRoot ?? "加载中…"}
+      </p>
+
+      <dl className="flex flex-col gap-1.5 border-t border-border pt-3">
+        {stats.map(({ label, value }) => (
+          <div className="flex items-baseline justify-between gap-2" key={label}>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="text-xs font-medium tabular-nums text-foreground">
+              {loading ? "—" : value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+/** Opens the shared root through the same Rust command the page toolbar uses. */
+async function openSharedDirectory(path: string | undefined) {
+  if (!path) return;
+  try {
+    await openSkillsRoot(path);
+  } catch {
+    // A failed open is non-fatal here; the skills page surfaces it in full.
+  }
+}
+
 function SidebarUpdateCard() {
   const available = useAppUpdateStore((state) => state.available);
   const error = useAppUpdateStore((state) => state.error);
@@ -111,8 +229,8 @@ export function AppShell() {
           list region, so a long list cannot push the page chrome off-screen
           or introduce a second scrollbar. */}
       <div className="flex h-screen overflow-hidden bg-background text-foreground">
-        <aside className="flex h-full w-[228px] shrink-0 flex-col border-r border-border bg-sidebar px-5 py-6 text-sidebar-foreground">
-          <div className="flex items-center gap-3 px-1">
+        <aside className="flex h-full w-[228px] shrink-0 flex-col border-r border-border bg-sidebar px-4 py-5 text-sidebar-foreground">
+          <div className="flex items-center gap-3 px-2">
             <img
               alt="SkillSage · 技匠"
               className="size-9 shrink-0 rounded-md object-cover"
@@ -124,16 +242,18 @@ export function AppShell() {
             </div>
           </div>
 
-          <Navigation ariaLabel="主导航" className="mt-12" items={navigation} />
+          <Navigation ariaLabel="主导航" className="mt-6" items={navigation} />
 
-          <div className="mt-auto flex flex-col gap-5">
+          <SidebarWorkspace />
+
+          <div className="mt-auto flex flex-col gap-4 pt-6">
             <SidebarUpdateCard />
             <Navigation ariaLabel="应用设置" items={settingsNavigation} />
           </div>
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="mx-auto flex h-full w-full max-w-[1280px] flex-col overflow-hidden px-8 py-8 lg:px-12 lg:py-10">
+          <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col overflow-hidden px-8 py-8 lg:px-10 lg:py-9">
             <Suspense fallback={<PageLoadingState />}>
               <Routes>
                 <Route element={<StorePage />} path="/store/*" />
