@@ -102,6 +102,7 @@ export function SettingsPage() {
     (state) => state.lastCheckedAt,
   );
   const checkAppUpdate = useAppUpdateStore((state) => state.check);
+  const appUpdateSource = useAppUpdateStore((state) => state.source);
   const lastCheckedLabel = formatLastChecked(appUpdateLastCheckedAt);
   const appUpdateBusy =
     appUpdatePhase === "downloading" || appUpdatePhase === "installing";
@@ -429,6 +430,11 @@ export function SettingsPage() {
                       {lastCheckedLabel
                         ? `上次检查：${lastCheckedLabel}`
                         : "启动后会自动检查一次"}
+                      {/* Naming the source makes a slow or failing mirror
+                          diagnosable instead of invisible. */}
+                      {appUpdateSource
+                        ? ` · 通过 ${appUpdateSource === "direct" ? "GitHub 直连" : appUpdateSource}`
+                        : ""}
                     </p>
                     {appUpdateError ? (
                       <p className="mt-1 line-clamp-2 text-xs text-destructive-text">
