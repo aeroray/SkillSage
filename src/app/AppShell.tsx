@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from "react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
   Check,
   Copy,
@@ -16,6 +16,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "../components/ui/tooltip";
+import {
+  TitleBar,
+  TitleBarBrand,
+} from "../components/layout/TitleBar";
+import { TitleBarActionsProvider } from "../components/layout/page-actions";
 import { openSkillsRoot } from "../features/skills/api";
 import { useInstalledSkills } from "../features/skills/hooks";
 import { useThemeStore } from "../features/theme/store";
@@ -36,6 +41,16 @@ const navigation = [
 ];
 
 const settingsNavigation = [{ icon: Settings, label: "设置", path: "/settings" }];
+
+/** Page titles live here rather than in each page's header, so the title bar
+ * can show the current surface without the page rendering a heading. */
+function usePageTitle() {
+  const { pathname } = useLocation();
+  if (pathname.startsWith("/store")) return "技能商店";
+  if (pathname.startsWith("/adopt")) return "采纳技能";
+  if (pathname.startsWith("/settings")) return "设置";
+  return "我的技能";
+}
 
 function ThemeSync() {
   const accent = useThemeStore((state) => state.accent);
@@ -114,7 +129,7 @@ function SidebarWorkspace() {
   return (
     <section
       aria-label="共享技能目录"
-      className="mt-6 flex flex-col gap-3 rounded-lg border border-border bg-card/60 p-3"
+      className="mt-5 flex flex-col gap-3 rounded-lg border border-border bg-card/60 p-3"
     >
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xs font-medium text-foreground">共享技能目录</h2>
@@ -215,6 +230,13 @@ function SidebarUpdateCard() {
 
 export function AppShell() {
   const checkOnStartup = useAppUpdateStore((state) => state.checkOnStartup);
+  const title = usePageTitle();
+  const [actionsHost, setActionsHost] = useState<HTMLElement | null>(null);
+  // A callback ref is required: the title bar's slot is a fresh DOM node on
+  // every remount, and only a ref observes that.
+  const actionsRef = useCallback((node: HTMLElement | null) => {
+    setActionsHost(node);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void checkOnStartup(), 1200);
@@ -226,45 +248,47 @@ export function AppShell() {
       <ThemeSync />
       {/* The shell fills the viewport and never scrolls itself. Pages are
           flex columns that fill this height and put scrolling on their own
-          list region, so a long list cannot push the page chrome off-screen
-          or introduce a second scrollbar. */}
-      <div className="flex h-screen overflow-hidden bg-background text-foreground">
-        <aside className="flex h-full w-[228px] shrink-0 flex-col border-r border-border bg-sidebar px-4 py-5 text-sidebar-foreground">
-          <div className="flex items-center gap-3 px-2">
-            <img
-              alt="SkillSage · 技匠"
-              className="size-9 shrink-0 rounded-md object-cover"
-              src="/skillsage-logo.png"
+          list region, so a long list cannot push the chrome off-screen or
+          introduce a second scrollbar. */}
+      <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+        <TitleBar
+          actionsRef={actionsRef}
+          brand={
+            <TitleBarBrand
+              logoSrc="/skillsage-logo.png"
+              product="SkillSage"
+              productZh="技匠"
             />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold tracking-tight text-foreground">SkillSage</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">技匠</p>
+          }
+          title={title}
+        />
+
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <aside className="flex h-full w-[228px] shrink-0 flex-col border-r border-border bg-sidebar px-4 py-4 text-sidebar-foreground">
+            <Navigation ariaLabel="主导航" items={navigation} />
+            <SidebarWorkspace />
+            <div className="mt-auto flex flex-col gap-4 pt-5">
+              <SidebarUpdateCard />
+              <Navigation ariaLabel="应用设置" items={settingsNavigation} />
             </div>
-          </div>
+          </aside>
 
-          <Navigation ariaLabel="主导航" className="mt-6" items={navigation} />
-
-          <SidebarWorkspace />
-
-          <div className="mt-auto flex flex-col gap-4 pt-6">
-            <SidebarUpdateCard />
-            <Navigation ariaLabel="应用设置" items={settingsNavigation} />
-          </div>
-        </aside>
-
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col overflow-hidden px-8 py-8 lg:px-10 lg:py-9">
-            <Suspense fallback={<PageLoadingState />}>
-              <Routes>
-                <Route element={<StorePage />} path="/store/*" />
-                <Route element={<SkillsPage />} path="/skills" />
-                <Route element={<AdoptPage />} path="/adopt" />
-                <Route element={<SettingsPage />} path="/settings" />
-                <Route element={<Navigate replace to="/skills" />} path="*" />
-              </Routes>
-            </Suspense>
-          </div>
-        </main>
+          <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col overflow-hidden px-8 py-6 lg:px-10 lg:py-7">
+              <TitleBarActionsProvider value={actionsHost}>
+                <Suspense fallback={<PageLoadingState />}>
+                  <Routes>
+                    <Route element={<StorePage />} path="/store/*" />
+                    <Route element={<SkillsPage />} path="/skills" />
+                    <Route element={<AdoptPage />} path="/adopt" />
+                    <Route element={<SettingsPage />} path="/settings" />
+                    <Route element={<Navigate replace to="/skills" />} path="*" />
+                  </Routes>
+                </Suspense>
+              </TitleBarActionsProvider>
+            </div>
+          </main>
+        </div>
       </div>
     </>
   );

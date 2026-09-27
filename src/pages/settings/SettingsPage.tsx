@@ -12,7 +12,6 @@ import { ScrollArea } from "../../components/ui/scroll-area";
 import { Skeleton } from "../../components/ui/skeleton";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { AccentControl } from "../../components/common/AccentControl";
-import { PageHeader } from "../../components/common/PageHeader";
 import { ThemeControl } from "../../components/common/ThemeControl";
 import { useSettings } from "../../features/settings/hooks";
 import { SyncImportDialog } from "../sync/SyncImportDialog";
@@ -105,8 +104,7 @@ export function SettingsPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageHeader description="管理外观、GitHub 凭据、网络和应用数据。Token 仅保存在本机。" title="设置" />
-      <ErrorBanner className="mb-6" error={error} onRetry={() => void refresh()} />
+      <ErrorBanner className="mb-4" error={error} onRetry={() => void refresh()} />
 
       {/* Settings is the one surface whose content legitimately exceeds the
           viewport, so it scrolls as a whole. It still scrolls inside its own

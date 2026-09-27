@@ -17,7 +17,6 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
-import { PageHeader } from "../../components/common/PageHeader";
 import { PathConflictDialog } from "../../components/common/PathConflictDialog";
 import {
   SkillDescriptionPanel,
@@ -593,14 +592,15 @@ export function StorePage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageHeader description="浏览并安装 AI Agent 技能。" title="技能商店" />
-
+      {/* The page name lives in the title bar. The store's own controls are
+          list filters, so they stay in the card toolbar rather than moving
+          up. */}
       {/* Quick install happens on the grid, where the detail dialog (the only
           other place install errors render) is not open. Surface failures here
           so a failed quick install is never silent. */}
       {!selectedSkillId && (installState.error ?? conflictCheck.error) ? (
         <ErrorBanner
-          className="mt-5"
+          className="mb-4"
           error={installState.error ?? conflictCheck.error}
           onOpenSettings={() => navigate("/settings")}
         />

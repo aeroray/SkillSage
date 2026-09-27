@@ -30,7 +30,7 @@ import { ScrollArea } from "../../components/ui/scroll-area";
 import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
-import { PageHeader } from "../../components/common/PageHeader";
+import { PageActions } from "../../components/layout/page-actions";
 import { useToast } from "../../components/ui/toast-context";
 import {
   openAdoptPath,
@@ -254,22 +254,20 @@ export function AdoptPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageHeader
-        actions={
-          <Button disabled={working} onClick={refreshPage} variant="outline">
-            <ScanSearch data-icon="inline-start" />
-            重新扫描
-          </Button>
-        }
-        description={
-          scan
-            ? `扫描 ${displayPath(scan.scannedRoot)}，把已在共享目录中但还未被跟踪的技能纳入管理。`
-            : "扫描共享技能目录，把已经在那里但还未被跟踪的技能纳入管理。"
-        }
-        title="采纳技能"
-      />
+      <PageActions>
+        <Button
+          disabled={working}
+          onClick={refreshPage}
+          size="sm"
+          variant="outline"
+        >
+          <ScanSearch data-icon="inline-start" />
+          重新扫描
+        </Button>
+      </PageActions>
+
       <ErrorBanner
-        className="mb-6"
+        className="mb-4"
         error={pageError}
         onOpenSettings={() => navigate("/settings")}
         onRetry={refreshPage}
@@ -280,7 +278,11 @@ export function AdoptPage() {
             list below it as the only scrolling region. */}
         <CardHeader className="flex shrink-0 flex-row items-center justify-between gap-4 bg-muted/20 p-4">
           <div className="min-w-0">
-            <CardTitle className="text-sm font-medium">扫描结果</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {scan
+                ? `扫描 ${displayPath(scan.scannedRoot)}`
+                : "共享技能目录"}
+            </CardTitle>
             <CardDescription className="mt-1">
               {scan?.items.length ?? 0} 个条目，可直接采纳 {adoptableCount} 个。
             </CardDescription>

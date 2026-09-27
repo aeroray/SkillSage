@@ -45,7 +45,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
-import { PageHeader } from "../../components/common/PageHeader";
+import { PageActions } from "../../components/layout/page-actions";
 import { ImportDialog } from "../import/ImportDialog";
 import { GithubUrlInstallDialog } from "../store/GithubUrlInstallDialog";
 import {
@@ -1247,50 +1247,48 @@ export function SkillsPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageHeader
-        actions={
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button aria-label="手动导入技能" variant="outline">
-                  <SquareArrowRightEnter data-icon="inline-start" />
-                  手动导入
-                  <ChevronDown data-icon="inline-end" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onSelect={() => setImportOpen(true)}>
-                    <FolderOpen />
-                    导入本地技能
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setGithubUrlOpen(true)}>
-                    <GitBranch />
-                    GitHub 链接安装
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              disabled={
-                skillsLoading ||
-                updatesChecking ||
-                bulkWorking ||
-                Boolean(management.pending)
-              }
-              onClick={rescanSkills}
-              variant="outline"
-            >
-              <ScanSearch data-icon="inline-start" />
-              重新扫描
+      {/* The page name lives in the title bar, so this surface starts straight
+          into its toolbar. Only the real actions are portalled up. */}
+      <PageActions>
+        <Button
+          disabled={
+            skillsLoading ||
+            updatesChecking ||
+            bulkWorking ||
+            Boolean(management.pending)
+          }
+          onClick={rescanSkills}
+          size="sm"
+          variant="outline"
+        >
+          <ScanSearch data-icon="inline-start" />
+          重新扫描
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm">
+              <SquareArrowRightEnter data-icon="inline-start" />
+              手动导入
+              <ChevronDown data-icon="inline-end" />
             </Button>
-          </div>
-        }
-        description="查看和更新已安装技能。"
-        title="我的技能"
-      />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuGroup>
+              <DropdownMenuItem onSelect={() => setImportOpen(true)}>
+                <FolderOpen />
+                导入本地技能
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setGithubUrlOpen(true)}>
+                <GitBranch />
+                GitHub 链接安装
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </PageActions>
+
       <ErrorBanner
-        className="mb-6"
+        className="mb-4"
         error={pageError}
         onOpenSettings={() => navigate("/settings")}
         onRetry={refreshPage}
