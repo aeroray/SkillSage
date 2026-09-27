@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-27T12:42:52.086Z",
+  "generatedAt": "2026-09-27T14:21:41.256Z",
   "title": "Design System: SkillSage · 技匠",
   "extensions": {
     "colorMeta": {
@@ -355,8 +355,8 @@
       "css": ".ds-dist { display: inline-flex; align-items: center; gap: 8px; font-size: 0.75rem; } .ds-dist > span:not(.ds-dist-count) { width: 8px; height: 8px; border-radius: 999px; } .ds-dot { border: 1px solid color-mix(in srgb, var(--app-color-muted-foreground, #5f6c7e) 60%, transparent); } .ds-dot-on { background: var(--app-color-primary, #0d9488); } .ds-dist-count { color: var(--app-color-muted-foreground, #5f6c7e); font-variant-numeric: tabular-nums; } .ds-dist-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--app-color-success, #0d9488) 10%, transparent); color: var(--app-color-success-text, #0b7a6f); font-size: 0.75rem; font-weight: 500; }"
     },
     {
-      "name": "Multi-Select Filter",
-      "description": "两个轴的分发筛选：工具多选下拉 + 三个结果 chip（全部 / 已全部分发 / 有未分发）。「全部」永不禁用，因为它是唯一的出口；后两者计数之和恒等于总数。"
+      "name": "Distribution Filter",
+      "description": "「分发」这一行：已安装工具各一个可点选徽章（并集筛选），选中后出现一个反选开关。徽章用 Badge 的几何但实现为 button + aria-pressed；工具多时横向滚动且不显示滚动条。"
     }
   ],
   "narrative": {
@@ -513,6 +513,10 @@
       {
         "title": "「多选筛选是两个轴」规则",
         "detail": "多选筛选拆成「哪些项」（多选下拉）与「结果如何」（全部 / 已全部分发 / 有未分发）。后两个互为补集，计数相加恒等于总数；「全部」是这一行的出口，放宽结果但保留已选项——没有它，第一次选完项就会落进通常是空列表的「已全部分发」，看起来像筛选坏了。未选任何项时不渲染 chip。"
+      },
+      {
+        "title": "「可筛选的实体本身就是控件」规则",
+        "detail": "把已安装的工具直接做成可点选的徽章（并集），而不是藏进下拉再配一组「结果模式」chip。前者展示可筛选的范围，后者要求用户先给问题命名。反选是整组选择的属性，做成一个开关而不是第三个徽章，且只在有选中项时出现。徽章行横向滚动时用 no-scrollbar，滚动条会与徽章争夺注意力。"
       }
     ],
     "dos": [
@@ -538,7 +542,9 @@
       "Do 设置类页面用分区导航，一次只渲染一个分区。",
       "Do 让列表行高恒定：同类状态用符号 + 计数，不要每个占一行。",
       "Do 新增主题时补齐 primary 的六个 token（含 -text 与 -foreground）并做对比度检查。",
-      "Do 让「打开目录」在目标不存在时降级到最近的存在祖先并说明打开了哪一个，而不是静默失败。"
+      "Do 让「打开目录」在目标不存在时降级到最近的存在祖先并说明打开了哪一个，而不是静默失败。",
+      "Do 让可筛选的实体本身成为控件（工具徽章），而不是把它藏进下拉再配一组「结果模式」chip。",
+      "Do 横向滚动的徽章行用 no-scrollbar：滚动条会与徽章争夺注意力，而滚轮与键盘仍然可达。"
     ],
     "donts": [
       "Don't 用 text-muted-foreground 渲染彩色底上的文字（chip、彩色 Badge）——实测只有 3.5:1 左右。",

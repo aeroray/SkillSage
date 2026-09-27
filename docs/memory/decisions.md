@@ -1,14 +1,14 @@
 # Decisions
 
+## 2026-09-27 - Distribution filtering: the tools are the control
+
+Decision: The "分发" row renders one clickable badge per installed tool. Selecting several is a union, and a single "反选" toggle inverts the result. `SkillDistributionFilter` is `{ toolIds, inverted }`.
+Reason: Two earlier designs were rejected during the build, and the reasons are worth keeping. A dropdown of tools paired with four outcome chips (任一 / 全部 / 均无 / 部分) made the user name the question before asking it — "distributed to any" and "distributed to none" are only meaningful once the user has already decided that "all" and "missing" are not what they meant. Reducing that to two complementary chips (已全部分发 / 有未分发) then dropped the user straight into whichever was usually empty as soon as a tool was picked, and an empty list reads as a broken filter rather than a truthful answer. Making the tools themselves the control shows what can be filtered by, needs no mode to be chosen, and leaves inverting as a property of the whole selection rather than a third thing to pick. An empty `toolIds` never filters, in either direction, so clearing the selection always restores the full list; the invert toggle is hidden until something is selected, since inverting nothing means every skill and so says nothing. The badge row scrolls horizontally with `no-scrollbar` because a visible track would compete with the badges beside it.
+
 ## 2026-09-27 - Opening a missing directory falls back to its nearest existing ancestor
 
 Decision: `open_path` opens the nearest existing ancestor when the requested directory is absent, and returns `{ opened, exact }` so the caller can name the folder that was actually shown. It never creates the missing directory.
 Reason: A tool that has never been used has no `skills/` directory of its own — Cline's registry entry is `.cline/skills`, and `~/.cline` exists while `~/.cline/skills` does not — so "打开目录" did nothing at all and read as a broken button. Creating the directory instead was rejected: `ToolResolver::detected` treats the skills directory *or its parent* existing as the signal that a tool is installed, so creating one would make an uninstalled tool report itself as installed and appear in every skill row. `open_skill_directory` stays strict, because an installed skill's directory is expected to exist and a fallback there would hide a broken install behind a plausible-looking folder.
-
-## 2026-09-27 - Distribution filtering is two axes
-
-Decision: The distribution filter is a tool multi-select plus an outcome of `any` ("全部"), `all` ("已全部分发") or `missing` ("有未分发"). An empty tool list means the axis is not filtering.
-Reason: Pick the tools, then pick an outcome. `all` and `missing` are exact complements, so their counts always sum to the total, and `any` is the row's escape hatch — without it the first tool selection would drop straight into `all`, which is usually an empty list and reads as a broken filter rather than a truthful answer. The empty state's "清除筛选条件" cannot serve as that escape because it clears the tools too. An earlier four-mode version (any / all / none / some-but-not-all) was rejected as a distinction without a decision: "distributed to any" and "distributed to none" are only meaningful once the user has already decided that "all" and "missing" are not what they meant. The chips stay hidden until a tool is chosen so zeroes are not read as answers.
 
 ## 2026-08-17 - Use local MemoryCustodian memory
 
