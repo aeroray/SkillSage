@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-27T07:21:20.834Z",
+  "generatedAt": "2026-09-27T07:35:21.589Z",
   "title": "Design System: SkillSage · 技匠",
   "extensions": {
     "colorMeta": {
@@ -322,9 +322,16 @@
     {
       "name": "Store Card",
       "kind": "card",
-      "description": "签名组件。商店的技能卡片。只占自己内容的高度（网格 items-start），不预留空的描述位——已安装卡片没有描述可显示，就让它矮一点。",
-      "html": "<div class=\"ds-scard\"><div class=\"ds-scard-top\"><div><p class=\"ds-scard-name\">frontend-design</p><p class=\"ds-scard-src\">vercel-labs/agent-skills</p></div><span class=\"ds-scard-state\">已安装</span></div><div class=\"ds-scard-foot\"><span>128.4K 次安装</span><span>同仓库还有 1 个</span></div></div>\n<div class=\"ds-scard ds-scard-tall\"><div class=\"ds-scard-top\"><div><p class=\"ds-scard-name\">spreadsheets</p><p class=\"ds-scard-src\">openai/skills</p><p class=\"ds-scard-desc\">Tools for creating, editing, and analyzing spreadsheets.</p></div><span class=\"ds-scard-state ds-scard-state-cta\">快速安装</span></div><div class=\"ds-scard-foot\"><span>48.6K 次安装</span><span>同仓库还有 1 个</span></div></div>",
-      "css": ".ds-scard { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-lg, 14px); background: var(--app-color-card, #ffffff); box-shadow: 0 1px 2px rgba(23, 32, 42, 0.045); } .ds-scard-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; } .ds-scard-name { margin: 0; color: var(--app-color-foreground, #17202a); font-size: 0.875rem; font-weight: 500; } .ds-scard-src { margin: 2px 0 0; color: var(--app-color-muted-foreground, #5f6c7e); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.75rem; } .ds-scard-desc { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 8px 0 0; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; line-height: 1.25rem; } .ds-scard-state { flex: none; display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-md, 10px); background: var(--app-color-secondary, #eef1f4); color: var(--app-color-secondary-foreground, #27313c); font-size: 0.75rem; font-weight: 500; } .ds-scard-state-cta { border-color: transparent; background: transparent; } .ds-scard-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; }"
+      "description": "签名组件。商店的技能卡片。等高（网格 items-stretch + 卡片 h-full + 页脚 mt-auto），不显示描述——描述长度不定，正是卡片高度参差的原因，它留在详情弹窗里。实测统一 116px。",
+      "html": "<div class=\"ds-scard\"><div class=\"ds-scard-top\"><div><p class=\"ds-scard-name\">frontend-design</p><p class=\"ds-scard-src\">vercel-labs/agent-skills</p></div><span class=\"ds-scard-state\">已安装</span></div><div class=\"ds-scard-foot\"><span>128.4K 次安装</span><span>同仓库还有 1 个</span></div></div>\n<div class=\"ds-scard\"><div class=\"ds-scard-top\"><div><p class=\"ds-scard-name\">spreadsheets</p><p class=\"ds-scard-src\">openai/skills</p></div><span class=\"ds-scard-state ds-scard-state-cta\">快速安装</span></div><div class=\"ds-scard-foot\"><span>48.6K 次安装</span><span>同仓库还有 1 个</span></div></div>",
+      "css": ".ds-scard { display: flex; flex-direction: column; height: 116px; padding: 16px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-lg, 14px); background: var(--app-color-card, #ffffff); box-shadow: 0 1px 2px rgba(23, 32, 42, 0.045); } .ds-scard-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; } .ds-scard-name { margin: 0; color: var(--app-color-foreground, #17202a); font-size: 0.875rem; font-weight: 500; } .ds-scard-src { margin: 2px 0 0; color: var(--app-color-muted-foreground, #5f6c7e); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.75rem; } .ds-scard-state { flex: none; display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-md, 10px); background: var(--app-color-secondary, #eef1f4); color: var(--app-color-secondary-foreground, #27313c); font-size: 0.75rem; font-weight: 500; } .ds-scard-state-cta { border-color: transparent; background: transparent; } .ds-scard-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; }"
+    },
+    {
+      "name": "Window Controls",
+      "kind": "custom",
+      "description": "签名组件。自绘的最小化 / 最大化 / 关闭。图标按视觉墨迹配平，而不是按盒子：X 用 20px、Square 用 14px、Minus 用 16px，使三者墨迹落在 9.3–10.5px。",
+      "html": "<div class=\"ds-wctl\" data-tauri-drag-region=\"false\"><button class=\"ds-wctl-btn\" aria-label=\"最小化\">─</button><button class=\"ds-wctl-btn\" aria-label=\"最大化\">□</button><button class=\"ds-wctl-btn ds-wctl-close\" aria-label=\"关闭\">✕</button></div>",
+      "css": ".ds-wctl { display: flex; align-items: center; gap: 1px; } .ds-wctl-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: none; border-radius: var(--radius-md, 10px); background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.875rem; cursor: pointer; } .ds-wctl-btn:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-wctl-close:hover { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 15%, transparent); color: var(--app-color-destructive-text, #b23b37); }"
     }
   ],
   "narrative": {
@@ -408,7 +415,12 @@
       },
       {
         "name": "「不留空占位」规则",
-        "body": "不要为了对齐而预留空白块。卡片、列表项只占自己内容的高度（网格用 items-start）。用等高占位去\"对齐\"会造出一块与缺失内容等高的空白——那正是要消除的东西。少内容就矮一点，这是正确的，不是缺陷。",
+        "body": "不要为了对齐而预留空白块。要等高，就让所有项的结构一致（字段数、行数相同），而不是给缺内容的项塞一个等高的空块——那正是要消除的东西。列表项不参与等高时，网格用 items-start 让各自贴合内容。",
+        "section": "layout"
+      },
+      {
+        "name": "「图标按视觉重量配平」规则",
+        "body": "Lucide 的图形在 24x24 viewBox 里留白不同，所以相同的盒子尺寸并不等于相同的视觉大小：Square 占 18 单位，X 只占 12 单位——同为 14px 时前者画出 10.5px 的墨迹，后者只有 7px。同一排图标要按墨迹配平，而不是按盒子：X 用 size-5、Square 用默认、Minus 用 size-4（横线只有高度没有宽度，同样需要放大）。",
         "section": "layout"
       },
       {
@@ -436,7 +448,7 @@
       "Do 把页面操作 portal 到标题栏，页面自己不画页头。",
       "Do 给标题栏的拖拽区写 data-tauri-drag-region=\"deep\"，否则子元素拖不动。",
       "Do 按容器选按钮尺寸：标题栏用 xs，卡片用 sm，页面主操作用 default。",
-      "Do 让卡片和列表项只占自己内容的高度，网格用 items-start。"
+      "Do 要等高就让各项结构一致（字段数、行数相同），而不是预留空块。"
     ],
     "donts": [
       "Don't 用 text-muted-foreground 渲染彩色底上的文字（chip、彩色 Badge）——实测只有 3.5:1 左右。",
@@ -452,7 +464,7 @@
       "Don't 给页面画自己的页头（标题 + 描述）；标题栏已经有页面名。",
       "Don't 在标题栏上自己实现双击最大化；Tauri 的拖拽脚本已经做了。",
       "Don't 用裸 data-tauri-drag-region；子元素会变成拖不动的死区。",
-      "Don't 为对齐预留空白块；内容少就让元素矮一点。"
+      "Don't 为对齐预留空白块；让各项结构一致，而不是塞等高占位。"
     ]
   }
 }
