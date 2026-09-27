@@ -1,11 +1,39 @@
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { create } from "zustand";
+import { getSettings } from "../settings/api";
 import { isBrowserPreview, normalizeTauriError } from "../../lib/tauri";
 
 export type AppUpdatePhase = "idle" | "available" | "downloading" | "installing" | "error";
 
 const LAST_CHECKED_AT_KEY = "skillsage.update.lastCheckedAt";
+
+/**
+ * The configured proxy, if any.
+ *
+ * Every other HTTP client in the app is built through
+ * `settings::load_runtime` and honours the user's proxy. The updater plugin is
+ * not: it builds its own client, and the only way to give it the proxy is the
+ * `proxy` option on `check()` / `downloadAndInstall()`. Without this, update
+ * checks fail on any network where GitHub is reachable only through the proxy
+ * — while store and skill downloads keep working, which makes it look like a
+ * broken update endpoint rather than a missing setting.
+ *
+ * Read at call time rather than cached, so changing the proxy in Settings takes
+ * effect on the next check without a restart.
+ */
+async function proxyOption(): Promise<string | undefined> {
+  if (!isDesktopRuntime()) return undefined;
+  try {
+    const settings = await getSettings();
+    const proxy = settings.proxyUrl?.trim();
+    return proxy ? proxy : undefined;
+  } catch {
+    // A settings read failure must not block the update check; the check simply
+    // runs without a proxy, exactly as it did before.
+    return undefined;
+  }
+}
 
 type AppUpdateState = {
   available: Update | null;
@@ -75,7 +103,7 @@ export const useAppUpdateStore = create<AppUpdateState>((set, get) => ({
 
     set({ checking: true, error: undefined });
     try {
-      const next = await check({ timeout: 12_000 });
+      const next = await check({ proxy: await proxyOption(), timeout: 12_000 });
       const checkedAt = new Date().toISOString();
       const previous = get().available;
       if (previous !== next) closeUpdate(previous);

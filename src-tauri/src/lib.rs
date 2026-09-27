@@ -110,7 +110,11 @@ pub fn run() {
                             file_name: Some("skillsage.log".into()),
                         },
                     )])
-                    .level(log::LevelFilter::Info)
+                    // `Debug` keeps the updater plugin's own diagnostics
+                    // ("checking for updates <url>", "using proxy", request
+                    // failures) in the log. Without it an update failure is
+                    // reported only as a one-line error with no context.
+                    .level(log::LevelFilter::Debug)
                     .build(),
             )?;
             Ok(())
