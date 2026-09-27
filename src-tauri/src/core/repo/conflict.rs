@@ -111,9 +111,10 @@ impl PendingTakeover {
     }
 
     /// Permanently remove the displaced foreign path after the new install
-    /// and lockfile have both been committed.
+    /// and lockfile have both been committed. Uses `remove_path` because the
+    /// displaced entry may be a stray file, not only a directory.
     pub fn finalize(self) -> Result<(), SkillsageError> {
-        super::atomic::remove_dir(&self.backup_path)
+        super::atomic::remove_path(&self.backup_path)
     }
 }
 

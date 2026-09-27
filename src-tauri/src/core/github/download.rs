@@ -4,7 +4,7 @@ use std::sync::Arc;
 use super::super::limits::{MAX_REMOTE_SKILL_FILES, MAX_REMOTE_SKILL_TOTAL_BYTES};
 use super::{
     client::GitHubClient,
-    tree::{find_skill_files, find_skill_files_with_path},
+    tree::find_skill_files_with_path,
 };
 
 use crate::core::store::models::SkillFile;
@@ -23,8 +23,9 @@ pub async fn fetch_skill_files(
     commit: &str,
     skill_path: &str,
 ) -> Result<Vec<SkillFile>, SkillsageError> {
-    let files = find_skill_files(client, owner, repo, commit, skill_path).await?;
-    download_files(client, owner, repo, commit, files, None).await
+    let (resolved_path, files) =
+        find_skill_files_with_path(client, owner, repo, commit, skill_path).await?;
+    download_files(client, owner, repo, commit, files, &resolved_path, None).await
 }
 
 pub async fn fetch_skill_files_with_path(
@@ -36,7 +37,8 @@ pub async fn fetch_skill_files_with_path(
 ) -> Result<(String, Vec<SkillFile>), SkillsageError> {
     let (resolved_path, files) =
         find_skill_files_with_path(client, owner, repo, commit, skill_path).await?;
-    let downloaded = download_files(client, owner, repo, commit, files, None).await?;
+    let downloaded =
+        download_files(client, owner, repo, commit, files, &resolved_path, None).await?;
     Ok((resolved_path, downloaded))
 }
 
@@ -48,17 +50,21 @@ pub async fn fetch_skill_files_with_probe(
     skill_path: &str,
     local_skill_md: &str,
 ) -> Result<SkillProbe, SkillsageError> {
-    let files = find_skill_files(client, owner, repo, commit, skill_path).await?;
+    let (resolved_path, files) =
+        find_skill_files_with_path(client, owner, repo, commit, skill_path).await?;
     if files.len() > MAX_REMOTE_SKILL_FILES {
         return Err(SkillsageError::ResponseTooLarge(format!(
             "技能目录包含超过 {MAX_REMOTE_SKILL_FILES} 个文件"
         )));
     }
-    let skill_file = files
-        .iter()
-        .find(|file| file.ends_with("/SKILL.md") || *file == "SKILL.md")
-        .cloned()
-        .ok_or_else(|| SkillsageError::PathNotFound("SKILL.md".into()))?;
+    // Use the resolver's authoritative root rather than guessing it from the
+    // file list, so a nested `.../SKILL.md` can never be mistaken for the
+    // skill's own manifest.
+    let skill_file = if resolved_path.is_empty() {
+        "SKILL.md".to_string()
+    } else {
+        format!("{resolved_path}/SKILL.md")
+    };
     let url = format!("https://raw.githubusercontent.com/{owner}/{repo}/{commit}/{skill_file}");
     let contents = client.get_text(&url).await?;
     if contents != local_skill_md {
@@ -73,6 +79,7 @@ pub async fn fetch_skill_files_with_probe(
         repo,
         commit,
         files,
+        &resolved_path,
         Some((skill_file, contents.clone())),
     )
     .await?;
@@ -88,6 +95,7 @@ async fn download_files(
     repo: &str,
     commit: &str,
     files: Vec<String>,
+    actual_prefix: &str,
     prefetched: Option<(String, String)>,
 ) -> Result<Vec<SkillFile>, SkillsageError> {
     if files.len() > MAX_REMOTE_SKILL_FILES {
@@ -95,11 +103,6 @@ async fn download_files(
             "技能目录包含超过 {MAX_REMOTE_SKILL_FILES} 个文件"
         )));
     }
-    let actual_prefix = files
-        .iter()
-        .find_map(|file| file.strip_suffix("/SKILL.md"))
-        .unwrap_or("")
-        .to_string();
     let prefetched_path = prefetched.as_ref().map(|(path, _)| path.as_str());
     let prefetched_contents = prefetched.as_ref().map(|(_, contents)| contents.clone());
     let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_FILE_DOWNLOADS));
@@ -109,7 +112,7 @@ async fn download_files(
 
     if let (Some(path), Some(contents)) = (prefetched_path, prefetched_contents) {
         downloaded.push(SkillFile {
-            path: relative_path(path, &actual_prefix),
+            path: relative_path(path, actual_prefix),
             contents: contents.into_bytes(),
         });
     }
@@ -122,7 +125,7 @@ async fn download_files(
         let owner = owner.to_string();
         let repo = repo.to_string();
         let commit = commit.to_string();
-        let actual_prefix = actual_prefix.clone();
+        let actual_prefix = actual_prefix.to_string();
         let semaphore = semaphore.clone();
         jobs.spawn(async move {
             let _permit = semaphore

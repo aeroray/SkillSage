@@ -1,10 +1,16 @@
 use serde::Deserialize;
+use std::sync::Arc;
 
 use crate::core::limits::{MAX_GITHUB_TREE_ENTRIES, MAX_REMOTE_SKILL_CANDIDATES};
 use crate::core::skill::parser::parse_skill_md;
 use crate::error::SkillsageError;
 
 use super::client::GitHubClient;
+
+/// Cap on simultaneous per-candidate manifest probes. Mirrors the bounded
+/// concurrency the file downloader uses so a repository with many candidate
+/// skills cannot open an unbounded number of requests at once.
+const MAX_CONCURRENT_MANIFEST_PROBES: usize = 8;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct GitTreeResponse {
@@ -18,18 +24,6 @@ pub struct GitTreeEntry {
     pub path: String,
     #[serde(rename = "type")]
     pub entry_type: String,
-}
-
-pub async fn find_skill_files(
-    client: &GitHubClient,
-    owner: &str,
-    repo: &str,
-    commit: &str,
-    skill_path: &str,
-) -> Result<Vec<String>, SkillsageError> {
-    find_skill_files_with_path(client, owner, repo, commit, skill_path)
-        .await
-        .map(|(_, files)| files)
 }
 
 pub async fn find_skill_files_with_path(
@@ -144,18 +138,52 @@ async fn find_skill_file_by_manifest(
         )));
     }
 
-    for candidate in candidates {
-        let url = format!("https://raw.githubusercontent.com/{owner}/{repo}/{commit}/{candidate}");
-        let contents = client.get_text(&url).await?;
+    // Probe candidates concurrently with bounded concurrency: this path runs
+    // whenever a skill's manifest name differs from its directory name, and a
+    // sequential loop could issue up to MAX_REMOTE_SKILL_CANDIDATES serial
+    // round-trips. The original index is carried through so the earliest
+    // matching candidate still wins, preserving the previous semantics.
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_MANIFEST_PROBES));
+    let mut jobs = tokio::task::JoinSet::new();
+    for (index, candidate) in candidates.into_iter().enumerate() {
+        let client = client.clone();
+        let owner = owner.to_string();
+        let repo = repo.to_string();
+        let commit = commit.to_string();
+        let semaphore = semaphore.clone();
+        jobs.spawn(async move {
+            let _permit = semaphore
+                .acquire_owned()
+                .await
+                .map_err(|error| SkillsageError::Task(error.to_string()))?;
+            let url = format!("https://raw.githubusercontent.com/{owner}/{repo}/{commit}/{candidate}");
+            let contents = client.get_text(&url).await?;
+            Ok::<_, SkillsageError>((index, candidate, contents))
+        });
+    }
+
+    let mut matched: Option<(usize, String)> = None;
+    while let Some(result) = jobs.join_next().await {
+        let (index, candidate, contents) =
+            result.map_err(|error| SkillsageError::Task(error.to_string()))??;
         let Ok(parsed) = parse_skill_md(&contents) else {
             continue;
         };
-        if manifest_matches_skill_path(&parsed.manifest.name, requested_path) {
-            return Ok(candidate);
+        // `map_or` rather than `is_none_or`, which postdates the crate's
+        // pinned `rust-version`.
+        if manifest_matches_skill_path(&parsed.manifest.name, requested_path)
+            && matched
+                .as_ref()
+                .map_or(true, |(best, _)| index < *best)
+        {
+            matched = Some((index, candidate));
         }
     }
 
-    Err(SkillsageError::PathNotFound(exact_skill_file.into()))
+    match matched {
+        Some((_, candidate)) => Ok(candidate),
+        None => Err(SkillsageError::PathNotFound(exact_skill_file.into())),
+    }
 }
 
 fn manifest_matches_skill_path(manifest_name: &str, requested_path: &str) -> bool {

@@ -162,11 +162,18 @@ fn create_link(
     std::os::unix::fs::symlink(source, target_path)?;
     #[cfg(windows)]
     {
-        let output = std::process::Command::new("cmd")
-            .args(["/C", "mklink", "/J"])
-            .arg(target_path)
-            .arg(source)
-            .output()?;
+        use std::os::windows::process::CommandExt;
+
+        // `cmd /C` re-parses its command line, so the paths must be passed as
+        // pre-quoted raw arguments. `Command::arg` only quotes on whitespace
+        // and does not escape cmd.exe metacharacters: a home directory such as
+        // `C:\Users\a&b` would be split at `&`, creating the junction against a
+        // truncated path and running the remainder as a second command.
+        let mut command = std::process::Command::new("cmd");
+        command.arg("/C").arg("mklink").arg("/J");
+        command.raw_arg(quote_for_cmd(target_path));
+        command.raw_arg(quote_for_cmd(source));
+        let output = command.output()?;
         if !output.status.success() {
             let reason = String::from_utf8_lossy(&output.stderr).trim().to_string();
             let reason = if reason.is_empty() {
@@ -187,6 +194,26 @@ fn create_link(
         }
     }
     Ok(())
+}
+
+/// Wraps a path in double quotes for `cmd.exe`, escaping embedded quotes and
+/// neutralizing `%` (which cmd would otherwise expand as a variable) with
+/// `^`. A `"` inside a path is not representable for cmd, so it is escaped as
+/// best as possible rather than silently truncating the argument.
+#[cfg(windows)]
+fn quote_for_cmd(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    let mut escaped = String::with_capacity(value.len() + 2);
+    escaped.push('"');
+    for character in value.chars() {
+        match character {
+            '%' => escaped.push_str("^%"),
+            '"' => escaped.push_str("\\\""),
+            other => escaped.push(other),
+        }
+    }
+    escaped.push('"');
+    escaped
 }
 
 fn remove_owned_link(
@@ -303,6 +330,34 @@ mod tests {
         assert!(!lock.skills[TEST_SKILL_ID].claude_distributed);
         assert!(!lock.skills[TEST_SKILL_ID].workbuddy_distributed);
         fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn creates_a_link_when_the_home_path_contains_cmd_metacharacters() {
+        // `cmd /C` re-parses its command line, so an unquoted `&` in the home
+        // path used to truncate the source path and run the remainder as a
+        // second command, producing a junction to the wrong directory.
+        let root = std::env::temp_dir().join(format!(
+            "skillsage-distribution-metachar-{}&x",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create shared test parent");
+        let layout = RepoLayout::new(root.join("central"), root.join("public"));
+        install_test_skill_at(&layout).expect("fixture should install");
+
+        let linked = set_at(&layout, TEST_SKILL_ID, true, DistributionTarget::ClaudeCode)
+            .expect("link should be created despite the metacharacter");
+        let link_path = layout.claude_skill(&linked.name).expect("link path");
+        assert!(link_path.exists(), "link should resolve to the real skill");
+        // The junction must point at the real skill directory, not a truncated
+        // prefix of it.
+        assert!(link_path.join("SKILL.md").is_file());
+
+        set_at(&layout, TEST_SKILL_ID, false, DistributionTarget::ClaudeCode)
+            .expect("link should be removed");
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

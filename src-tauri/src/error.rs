@@ -89,11 +89,40 @@ impl From<reqwest::Error> for SkillsageError {
 }
 
 impl SkillsageError {
-    pub fn github_status(status: u16, has_token: bool) -> Self {
+    /// Combines a primary failure with an optional recovery failure so a
+    /// partially-applied change is reported as such instead of being silently
+    /// downgraded to the primary error. `wrap` selects the error variant that
+    /// matches the module reporting it.
+    pub fn with_recovery(
+        primary: SkillsageError,
+        recovery: Option<SkillsageError>,
+        wrap: fn(String) -> SkillsageError,
+    ) -> Self {
+        match recovery {
+            Some(recovery) => wrap(format!("{primary}; 恢复失败: {recovery}")),
+            None => primary,
+        }
+    }
+
+    /// The first failure among a primary result and an optional follow-up
+    /// result, used when several rollback steps run in sequence.
+    pub fn first_error(
+        first: Result<(), SkillsageError>,
+        second: Option<Result<(), SkillsageError>>,
+    ) -> Option<SkillsageError> {
+        first.err().or_else(|| second.and_then(Result::err))
+    }
+
+    /// `rate_limit_remaining` is GitHub's `x-ratelimit-remaining` header. A
+    /// `403` means rate limiting only when that header is exhausted; otherwise
+    /// it is a permissions/policy refusal and should not be reported to the
+    /// user as "too many requests, try again later".
+    pub fn github_status(status: u16, has_token: bool, rate_limit_remaining: Option<&str>) -> Self {
         match status {
             401 if !has_token => Self::GithubAuthMissing,
             401 => Self::GithubAuthInvalid,
-            403 | 429 => Self::RateLimited,
+            429 => Self::RateLimited,
+            403 if rate_limit_remaining == Some("0") => Self::RateLimited,
             404 => Self::RepositoryNotFound,
             _ => Self::GithubApi(status),
         }
@@ -123,19 +152,28 @@ mod tests {
     #[test]
     fn classifies_github_auth_rate_limit_and_not_found() {
         assert!(matches!(
-            SkillsageError::github_status(401, false),
+            SkillsageError::github_status(401, false, None),
             SkillsageError::GithubAuthMissing
         ));
         assert!(matches!(
-            SkillsageError::github_status(401, true),
+            SkillsageError::github_status(401, true, None),
             SkillsageError::GithubAuthInvalid
         ));
         assert!(matches!(
-            SkillsageError::github_status(403, true),
+            SkillsageError::github_status(403, true, Some("0")),
             SkillsageError::RateLimited
         ));
         assert!(matches!(
-            SkillsageError::github_status(404, true),
+            SkillsageError::github_status(429, true, None),
+            SkillsageError::RateLimited
+        ));
+        // A 403 with quota remaining is a permissions refusal, not a rate limit.
+        assert!(matches!(
+            SkillsageError::github_status(403, true, Some("4999")),
+            SkillsageError::GithubApi(403)
+        ));
+        assert!(matches!(
+            SkillsageError::github_status(404, true, None),
             SkillsageError::RepositoryNotFound
         ));
     }

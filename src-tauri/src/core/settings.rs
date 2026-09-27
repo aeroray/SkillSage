@@ -259,11 +259,11 @@ fn restore_settings_file(
     previous: Option<Vec<u8>>,
 ) -> Result<(), SkillsageError> {
     match previous {
-        Some(content) => {
-            let temporary_path = layout.settings_path().with_extension("json.restore.tmp");
-            std::fs::write(&temporary_path, content)?;
-            atomic::replace_file(&temporary_path, &layout.settings_path())
-        }
+        // Reuse the shared atomic writer rather than a bare `std::fs::write`:
+        // it validates the parent directory, refuses a pre-existing temporary
+        // path, and rejects a symlinked destination — the checks every other
+        // writer in this module already applies.
+        Some(content) => atomic::write_file(&layout.settings_path(), &content),
         None => remove_settings_file(layout),
     }
 }
@@ -315,10 +315,7 @@ fn set_token(token: Option<&str>) -> Result<(), SkillsageError> {
 }
 
 fn with_recovery(primary: SkillsageError, recovery: Option<SkillsageError>) -> SkillsageError {
-    match recovery {
-        Some(recovery) => SkillsageError::Settings(format!("{primary}; 恢复失败: {recovery}")),
-        None => primary,
-    }
+    SkillsageError::with_recovery(primary, recovery, SkillsageError::Settings)
 }
 
 fn delete_token() -> Result<(), SkillsageError> {

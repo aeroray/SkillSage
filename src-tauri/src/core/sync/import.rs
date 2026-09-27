@@ -41,7 +41,7 @@ pub fn load(path: &str) -> Result<SyncPackage, SkillsageError> {
             path.display()
         )));
     }
-    if metadata.len() > 8 * 1024 * 1024 {
+    if metadata.len() > crate::core::limits::MAX_SYNC_PACKAGE_BYTES {
         return Err(SkillsageError::SyncInvalid(
             "同步数据文件超过 8 MiB，已拒绝读取".into(),
         ));
@@ -121,7 +121,7 @@ fn validate(package: &SyncPackage) -> Result<(), SkillsageError> {
     }
     crate::core::settings::validate_translations(&package.translated_descriptions)
         .map_err(|error| SkillsageError::SyncInvalid(error.to_string()))?;
-    if package.skills.len() > 1000 {
+    if package.skills.len() > crate::core::limits::MAX_SYNC_SKILLS {
         return Err(SkillsageError::SyncInvalid(
             "同步数据中的技能数量过多".into(),
         ));

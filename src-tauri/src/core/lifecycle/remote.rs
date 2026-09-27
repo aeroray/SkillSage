@@ -80,7 +80,22 @@ async fn fetch_at_commit(
     fetch_skill_files(client, &record.owner, &record.repo, commit, skill_path).await
 }
 
+/// True when a record's source points at a supported remote host, so update
+/// checks and updates can reconstruct it. Host-based rather than a prefix list
+/// so every URL shape the installer and the sync importer accept is also
+/// updateable — `raw.githubusercontent.com` installs in particular used to be
+/// recorded but then silently reported as "no update available".
 pub fn is_remote_record(record: &SkillLockRecord) -> bool {
-    record.source.starts_with("https://www.skills.sh/")
-        || record.source.starts_with("https://github.com/")
+    let Ok(url) = url::Url::parse(&record.source) else {
+        return false;
+    };
+    url.scheme() == "https"
+        && matches!(
+            url.host_str(),
+            Some("skills.sh")
+                | Some("www.skills.sh")
+                | Some("github.com")
+                | Some("www.github.com")
+                | Some("raw.githubusercontent.com")
+        )
 }

@@ -31,15 +31,20 @@ pub async fn install_skill(
         "downloading",
         "Fetching skill files from skills.sh",
     )?;
-    let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
+    // Blocking filesystem + keyring work, kept off the async runtime.
+    let runtime = tokio::task::spawn_blocking(|| settings::load_runtime(&RepoLayout::from_user_home()?))
+        .await
+        .map_err(|error| SkillsageError::Task(error.to_string()))??;
     let client = StoreClient::new_with_proxy(runtime.proxy_url.clone())?;
     let mut detail = client.detail(&skill_id).await?;
     let (owner, repo) = detail.source.split_once('/').ok_or_else(|| {
         SkillsageError::InvalidSkill("store skill is not backed by a GitHub repository".into())
     })?;
     let github = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
-    let default_branch = github.get_default_branch(owner, repo).await?;
-    let current_version = github.get_commit_sha(owner, repo, &default_branch).await?;
+    // One request instead of resolving the default branch and then its head
+    // commit separately: the commits list already returns the default branch's
+    // newest commit.
+    let current_version = github.get_latest_commit_sha(owner, repo).await?;
     detail.version = Some(current_version.clone());
     let requested_skill_path = detail
         .skill_path

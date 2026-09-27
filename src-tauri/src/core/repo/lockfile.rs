@@ -105,11 +105,23 @@ pub fn save(layout: &RepoLayout, lockfile: &SkillLockFile) -> Result<(), Skillsa
 pub fn content_hash(root: &Path) -> Result<String, SkillsageError> {
     let mut files = Vec::new();
     collect_files(root, root, &mut files)?;
-    files.sort();
+    // Sort by the same normalized string key `content_hash_files` uses. Sorting
+    // `PathBuf` values instead compares *components*, which disagrees with
+    // string order whenever a directory name shares a prefix with a sibling
+    // file (e.g. `a/b` vs `a-b`). A tree read from disk and the same tree held
+    // in memory must produce one hash, otherwise update checks report a
+    // permanent false "update available".
+    let mut entries = files
+        .into_iter()
+        .map(|relative_path| {
+            let normalized_path = relative_path.to_string_lossy().replace('\\', "/");
+            (normalized_path, relative_path)
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.0.cmp(&right.0));
 
     let mut hasher = blake3::Hasher::new();
-    for relative_path in files {
-        let normalized_path = relative_path.to_string_lossy().replace('\\', "/");
+    for (normalized_path, relative_path) in entries {
         hasher.update(normalized_path.as_bytes());
         hasher.update(&[0]);
         hasher.update(&std::fs::read(root.join(&relative_path))?);
@@ -182,6 +194,29 @@ mod tests {
         let first = content_hash(&root).expect("hash should work");
         let second = content_hash(&root).expect("hash should be stable");
         assert_eq!(first, second);
+        fs::remove_dir_all(root).expect("remove test dir");
+    }
+
+    #[test]
+    fn disk_and_memory_hashes_agree_across_component_sorting() {
+        // PathBuf's Ord compares *components*, while the in-memory variant
+        // sorts normalized path strings. `a-b` vs `a/b` is where those two
+        // orders disagree.
+        let root = std::env::temp_dir().join(format!(
+            "skillsage-hash-ordering-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("a")).expect("create test dir");
+        fs::write(root.join("a/b"), "nested").expect("write nested file");
+        fs::write(root.join("a-b"), "flat").expect("write flat file");
+
+        let disk_hash = content_hash(&root).expect("disk hash should work");
+        let memory_hash = content_hash_files(&[
+            ("a/b".into(), b"nested".to_vec()),
+            ("a-b".into(), b"flat".to_vec()),
+        ]);
+        assert_eq!(memory_hash, disk_hash);
         fs::remove_dir_all(root).expect("remove test dir");
     }
 

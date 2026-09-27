@@ -74,13 +74,8 @@ pub fn install_skill_from_store_at(
             }
         };
         let target = temp_dir.join(relative);
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        if let Err(error) = std::fs::write(target, &file.contents) {
-            let _ = atomic::remove_dir(&temp_dir);
-            return Err(error.into());
-        }
+        atomic::create_dir_in_temp(&temp_dir, &target)?;
+        atomic::write_file_in_temp(&temp_dir, &target, &file.contents)?;
     }
 
     let skill_file = temp_dir.join("SKILL.md");
@@ -148,7 +143,16 @@ pub fn install_skill_from_store_at(
         }
     };
 
-    let replacement = match atomic::replace_dir_transaction(&temp_dir, &destination) {
+    // A fresh install requires the slot to be empty. `conflict::check` plus the
+    // up-front `NameConflict` guard (and, for takeover, the rename that just
+    // vacated it) establish that; asserting it here means a directory created
+    // by another process in the meantime is refused instead of renamed aside
+    // and deleted.
+    let replacement = match atomic::replace_dir_transaction(
+        &temp_dir,
+        &destination,
+        atomic::DestinationState::Empty,
+    ) {
         Ok(replacement) => replacement,
         Err(error) => {
             let mut recovery = atomic::remove_dir(&temp_dir).err();
@@ -215,14 +219,11 @@ fn first_error(
     first: Result<(), SkillsageError>,
     second: Option<Result<(), SkillsageError>>,
 ) -> Option<SkillsageError> {
-    first.err().or_else(|| second.and_then(Result::err))
+    SkillsageError::first_error(first, second)
 }
 
 fn with_recovery(primary: SkillsageError, recovery: Option<SkillsageError>) -> SkillsageError {
-    match recovery {
-        Some(recovery) => SkillsageError::Io(format!("{primary}; 恢复失败: {recovery}")),
-        None => primary,
-    }
+    SkillsageError::with_recovery(primary, recovery, SkillsageError::Io)
 }
 
 #[cfg(test)]
@@ -309,12 +310,25 @@ pub fn uninstall_skill_at(layout: &RepoLayout, skill_id: &str) -> Result<(), Ski
         .ok_or_else(|| SkillsageError::NotInstalled(skill_id.to_string()))?;
 
     let destination = destination_for_record(layout, &record)?;
-    crate::core::claude::remove_link_at(layout, &record)?;
-    crate::core::workbuddy::remove_link_at(layout, &record)?;
-    atomic::remove_dir(&destination)?;
+    // Commit the metadata first. If the lockfile write fails after the content
+    // is already gone, the app would advertise a tracked skill whose directory
+    // no longer exists — and re-installing that name hits the hard
+    // `NameConflict` that is deliberately not takeover-eligible, wedging the
+    // user. Saving first means the worst case is an untracked leftover
+    // directory, which the adopt scan can pick up.
     lock.skills.remove(skill_id);
     lockfile::save(layout, &lock)?;
-    Ok(())
+
+    // Link removal and content deletion are now best-effort cleanup; the skill
+    // is already untracked, so a failure here leaves recoverable leftovers
+    // rather than an inconsistent record.
+    if let Err(error) = crate::core::claude::remove_link_at(layout, &record) {
+        tracing::warn!(error = %error, "卸载时无法移除 Claude Code 链接");
+    }
+    if let Err(error) = crate::core::workbuddy::remove_link_at(layout, &record) {
+        tracing::warn!(error = %error, "卸载时无法移除 Work Buddy 链接");
+    }
+    atomic::remove_dir(&destination)
 }
 
 /// Where a record's content lives on disk. Every skill, regardless of

@@ -16,9 +16,20 @@ pub fn parse_skill_md(content: &str) -> Result<ParsedSkill, SkillsageError> {
     let rest = lines.next().ok_or_else(|| {
         SkillsageError::InvalidSkill("SKILL.md 没有 frontmatter 内容".to_string())
     })?;
-    let end = rest.find("\n---").ok_or_else(|| {
-        SkillsageError::InvalidSkill("缺少 YAML frontmatter 结束标记".to_string())
-    })?;
+    // The closing delimiter must be a whole `---` line, not merely the first
+    // occurrence of `\n---`. A `---` inside a YAML block scalar (`description: |`)
+    // or a `----` rule in the body would otherwise truncate the frontmatter and
+    // surface a confusing YAML error.
+    let end = rest
+        .match_indices("\n---")
+        .find(|(index, _)| {
+            let after = &rest[index + 4..];
+            after.is_empty() || after.starts_with('\n')
+        })
+        .map(|(index, _)| index)
+        .ok_or_else(|| {
+            SkillsageError::InvalidSkill("缺少 YAML frontmatter 结束标记".to_string())
+        })?;
     let frontmatter = &rest[..end];
     let manifest: SkillManifest = serde_yaml::from_str(frontmatter)?;
     validate_manifest(&manifest)?;
@@ -100,5 +111,27 @@ mod tests {
     fn rejects_missing_frontmatter() {
         let result = parse_skill_md("# no frontmatter");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn accepts_a_horizontal_rule_inside_the_body() {
+        // The closing delimiter must be a whole `---` line; a body rule must
+        // not truncate the frontmatter.
+        let parsed = parse_skill_md(
+            "---\nname: web-research\ndescription: Research the web.\n---\n\n# Title\n\n---\n\nMore body.\n",
+        )
+        .expect("body horizontal rule should not break parsing");
+        assert_eq!(parsed.manifest.name, "web-research");
+        assert_eq!(parsed.manifest.description, "Research the web.");
+    }
+
+    #[test]
+    fn accepts_a_dash_rule_longer_than_three_dashes() {
+        let parsed = parse_skill_md(
+            "---\nname: web-research\ndescription: Research the web.\n----\nbody\n",
+        );
+        // `----` is not a valid closing delimiter, so this must be rejected
+        // rather than silently truncating at the first three dashes.
+        assert!(parsed.is_err());
     }
 }

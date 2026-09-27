@@ -65,6 +65,19 @@ pub fn run() {
             let _ = tracing::subscriber::set_global_default(subscriber);
             tracing::info!("SkillSage logging initialized");
 
+            // Clean up temp trees left behind by a previous run. Cleanup on the
+            // error paths is best-effort, so a crash or a failed early return
+            // can leave partial directories under the private tmp root.
+            match core::repo::layout::RepoLayout::from_user_home()
+                .and_then(|layout| core::repo::atomic::sweep_temp_dirs(&layout))
+            {
+                Ok(removed) if removed > 0 => {
+                    tracing::info!(removed, "已清理上次运行遗留的临时目录")
+                }
+                Ok(_) => {}
+                Err(error) => tracing::warn!(error = %error, "清理临时目录失败"),
+            }
+
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
                     .targets([tauri_plugin_log::Target::new(

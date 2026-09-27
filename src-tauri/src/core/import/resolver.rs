@@ -104,9 +104,7 @@ pub fn import_at(
     };
     for file in &files {
         let target = temp_dir.join(&file.relative_path);
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
+        atomic::create_dir_in_temp(&temp_dir, &target)?;
         if let Err(error) = source::copy_regular_file(&file.source_path, &target) {
             let _ = atomic::remove_dir(&temp_dir);
             return Err(error);
@@ -192,7 +190,15 @@ pub fn import_at(
             return Err(with_recovery(error, recovery));
         }
     };
-    let replacement = match atomic::replace_dir_transaction(&temp_dir, &destination) {
+    // Overwriting a tracked local record means its directory is expected here;
+    // otherwise the conflict check (plus any takeover) left the slot empty, so
+    // anything appearing now is someone else's and must not be replaced.
+    let expected = if overwrite_id.is_some() {
+        atomic::DestinationState::Managed
+    } else {
+        atomic::DestinationState::Empty
+    };
+    let replacement = match atomic::replace_dir_transaction(&temp_dir, &destination, expected) {
         Ok(replacement) => replacement,
         Err(error) => {
             let mut recovery = atomic::remove_dir(&temp_dir).err();
@@ -260,14 +266,11 @@ fn first_error(
     first: Result<(), SkillsageError>,
     second: Option<Result<(), SkillsageError>>,
 ) -> Option<SkillsageError> {
-    first.err().or_else(|| second.and_then(Result::err))
+    SkillsageError::first_error(first, second)
 }
 
 fn with_recovery(primary: SkillsageError, recovery: Option<SkillsageError>) -> SkillsageError {
-    match recovery {
-        Some(recovery) => SkillsageError::Io(format!("{primary}; 恢复失败: {recovery}")),
-        None => primary,
-    }
+    SkillsageError::with_recovery(primary, recovery, SkillsageError::Io)
 }
 
 fn validate_rename(rename_to: Option<String>) -> Result<String, SkillsageError> {
@@ -285,28 +288,56 @@ fn validate_rename(rename_to: Option<String>) -> Result<String, SkillsageError> 
 
 fn rewrite_skill_name(path: &Path, name: &str) -> Result<(), SkillsageError> {
     let content = std::fs::read_to_string(path)?;
-    let mut in_frontmatter = false;
+    // Split on '\n' rather than `lines()` so a trailing '\r' is preserved and a
+    // CRLF file is not silently converted to LF.
+    let mut output = String::with_capacity(content.len() + name.len());
     let mut found = false;
-    let mut lines = Vec::new();
-    for line in content.lines() {
-        if line == "---" {
-            in_frontmatter = !in_frontmatter;
-            lines.push(line.to_string());
+    // Line 0 is the opening `---`; the next bare `---` closes the frontmatter.
+    // Scanning only that window stops a body `---` from re-opening the block
+    // and letting a body line starting with `name:` be rewritten.
+    let mut in_frontmatter = false;
+    for (index, raw_line) in content.split('\n').enumerate() {
+        let (line, had_cr) = match raw_line.strip_suffix('\r') {
+            Some(line) => (line, true),
+            None => (raw_line, false),
+        };
+        let push_line = |output: &mut String, text: &str, had_cr: bool| {
+            output.push_str(text);
+            if had_cr {
+                output.push('\r');
+            }
+            output.push('\n');
+        };
+
+        if index == 0 {
+            // The opening delimiter; `parse_skill_md` already validated it.
+            in_frontmatter = true;
+            push_line(&mut output, line, had_cr);
             continue;
         }
-        if in_frontmatter && line.starts_with("name:") {
-            lines.push(format!("name: {name}"));
-            found = true;
-        } else {
-            lines.push(line.to_string());
+        if in_frontmatter && line == "---" {
+            in_frontmatter = false;
+            push_line(&mut output, line, had_cr);
+            continue;
         }
+        if in_frontmatter && line.starts_with("name:") && !found {
+            found = true;
+            push_line(&mut output, &format!("name: {name}"), had_cr);
+            continue;
+        }
+        push_line(&mut output, line, had_cr);
     }
     if !found {
         return Err(SkillsageError::InvalidSkill(
             "SKILL.md frontmatter 缺少 name 字段".into(),
         ));
     }
-    std::fs::write(path, format!("{}\n", lines.join("\n")))?;
+    // `split('\n')` yields a trailing empty element for a file ending in '\n';
+    // the loop already re-added that newline, so drop the extra blank line.
+    if content.ends_with('\n') && output.ends_with("\n\n") {
+        output.pop();
+    }
+    std::fs::write(path, output)?;
     Ok(())
 }
 
@@ -316,6 +347,62 @@ mod tests {
 
     use super::{import_at, preview_at};
     use crate::core::repo::{layout::RepoLayout, lockfile};
+
+    #[test]
+    fn rewrites_only_the_frontmatter_name_field() {
+        let root = std::env::temp_dir().join(format!(
+            "skillsage-rename-skill-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create test root");
+        let skill_md = root.join("SKILL.md");
+        // The body contains a horizontal rule and a body `name:` line; neither
+        // may be touched.
+        fs::write(
+            &skill_md,
+            "---\nname: original\ndescription: Original.\n---\n\n# Title\n\n---\n\nname: body-value\n",
+        )
+        .expect("write skill");
+
+        super::rewrite_skill_name(&skill_md, "renamed").expect("rewrite should succeed");
+        let content = fs::read_to_string(&skill_md).expect("read skill");
+        assert!(content.contains("name: renamed"));
+        assert!(!content.contains("name: original"));
+        // The body line must survive untouched.
+        assert!(content.contains("name: body-value"));
+        // The frontmatter must still parse under the new name.
+        let parsed = crate::core::skill::parser::parse_skill_md(&content)
+            .expect("rewritten skill should parse");
+        assert_eq!(parsed.manifest.name, "renamed");
+
+        fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[test]
+    fn rewrite_preserves_crlf_line_endings() {
+        let root = std::env::temp_dir().join(format!(
+            "skillsage-rename-crlf-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create test root");
+        let skill_md = root.join("SKILL.md");
+        fs::write(
+            &skill_md,
+            "---\r\nname: original\r\ndescription: Original.\r\n---\r\n\r\nBody.\r\n",
+        )
+        .expect("write skill");
+
+        super::rewrite_skill_name(&skill_md, "renamed").expect("rewrite should succeed");
+        let content = fs::read_to_string(&skill_md).expect("read skill");
+        assert!(content.contains("name: renamed\r\n"));
+        assert!(!content.contains("name: original"));
+        // No bare LF should have been introduced.
+        assert!(!content.replace("\r\n", "").contains('\n'));
+
+        fs::remove_dir_all(root).expect("remove test root");
+    }
 
     #[test]
     fn previews_imports_and_supports_rename_conflicts() {

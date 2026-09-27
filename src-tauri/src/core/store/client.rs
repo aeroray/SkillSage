@@ -140,8 +140,12 @@ impl StoreClient {
     }
 }
 
+/// Streams the body and enforces `limit` as it arrives. Checking only
+/// `Content-Length` first is not enough: that header is optional, so a chunked
+/// response would otherwise be buffered in full before the post-hoc length
+/// check could reject it.
 async fn bounded_bytes(
-    response: reqwest::Response,
+    mut response: reqwest::Response,
     limit: usize,
     label: &str,
 ) -> Result<Vec<u8>, SkillsageError> {
@@ -154,14 +158,17 @@ async fn bounded_bytes(
             limit / 1024 / 1024
         )));
     }
-    let bytes = response.bytes().await?;
-    if bytes.len() > limit {
-        return Err(SkillsageError::ResponseTooLarge(format!(
-            "{label}超过 {} MiB",
-            limit / 1024 / 1024
-        )));
+    let mut collected = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if collected.len().saturating_add(chunk.len()) > limit {
+            return Err(SkillsageError::ResponseTooLarge(format!(
+                "{label}超过 {} MiB",
+                limit / 1024 / 1024
+            )));
+        }
+        collected.extend_from_slice(&chunk);
     }
-    Ok(bytes.to_vec())
+    Ok(collected)
 }
 
 fn validate_skill_id(skill_id: &str) -> Result<(), SkillsageError> {

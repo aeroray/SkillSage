@@ -11,3 +11,5 @@ pub const MAX_REMOTE_SKILL_TOTAL_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_REMOTE_SKILL_CANDIDATES: usize = 100;
 pub const MAX_LOCAL_SKILL_FILES: usize = 10_000;
 pub const MAX_LOCAL_SKILL_TOTAL_BYTES: u64 = 64 * 1024 * 1024;
+pub const MAX_SYNC_PACKAGE_BYTES: u64 = 8 * 1024 * 1024;
+pub const MAX_SYNC_SKILLS: usize = 1_000;

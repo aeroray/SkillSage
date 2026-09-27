@@ -347,11 +347,19 @@ pub async fn find(
         })
 }
 
+/// Links a local record to a remote candidate.
+///
+/// `verification` is the candidate's verification result from `search`. A
+/// version is only recorded when the candidate's content was confirmed
+/// byte-identical (`"exact"`); binding a commit to content that was explicitly
+/// found to differ would make the record claim the local directory *is* that
+/// revision, and a later update check would compare against the wrong bytes.
 pub fn link_at(
     layout: &RepoLayout,
     local_skill_id: &str,
     candidate: &SkillSearchResult,
     remote_version: Option<&str>,
+    verification: &str,
 ) -> Result<lockfile::SkillLockRecord, SkillsageError> {
     validate_candidate(candidate)?;
     let (owner, repo) = repository_parts(&candidate.source)?;
@@ -395,6 +403,7 @@ pub fn link_at(
     };
     next.current_version = remote_version
         .filter(|version| !version.is_empty())
+        .filter(|_| verification == "exact")
         .unwrap_or("unverified")
         .to_string();
     next.current_hash = current_hash;
@@ -605,6 +614,7 @@ mod tests {
             TEST_SKILL_ID,
             &candidate(),
             Some("remote-commit-123"),
+            "exact",
         )
         .expect("match should link");
         assert_eq!(linked.id, "owner/repo/skillsage-phase2-test");
@@ -617,6 +627,38 @@ mod tests {
                 .len(),
             1
         );
+
+        fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[test]
+    fn does_not_bind_a_version_to_content_that_was_not_verified_exact() {
+        let root = std::env::temp_dir().join(format!(
+            "skillsage-local-match-unverified-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create shared test parent");
+        let layout = RepoLayout::new(root.join("central"), root.join("public"));
+        install_test_skill_at(&layout).expect("fixture should install");
+        let mut lock = lockfile::load(&layout).expect("lock should load");
+        lock.skills
+            .get_mut(TEST_SKILL_ID)
+            .expect("fixture should be tracked")
+            .source = "local://skillsage-phase2-test".into();
+        lockfile::save(&layout, &lock).expect("local fixture should save");
+
+        // The candidate's content was found to differ, so recording its commit
+        // would claim the local directory is that revision.
+        let linked = link_at(
+            &layout,
+            TEST_SKILL_ID,
+            &candidate(),
+            Some("remote-commit-123"),
+            "different",
+        )
+        .expect("match should still link");
+        assert_eq!(linked.current_version, "unverified");
 
         fs::remove_dir_all(root).expect("remove test root");
     }

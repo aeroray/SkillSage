@@ -18,7 +18,13 @@ pub struct UpdateInfo {
     pub update_available: bool,
 }
 
-pub async fn check(record: &lockfile::SkillLockRecord) -> Result<UpdateInfo, SkillsageError> {
+/// Checks one record against a caller-supplied client. Batch callers share a
+/// single client (and therefore one connection pool, one proxy config, and one
+/// keyring read) instead of rebuilding it per skill.
+pub async fn check_with_client(
+    client: &crate::core::github::client::GitHubClient,
+    record: &lockfile::SkillLockRecord,
+) -> Result<UpdateInfo, SkillsageError> {
     if !remote::is_remote_record(record) {
         return Ok(UpdateInfo {
             id: record.id.clone(),
@@ -29,7 +35,7 @@ pub async fn check(record: &lockfile::SkillLockRecord) -> Result<UpdateInfo, Ski
             update_available: false,
         });
     }
-    let (latest_version, files) = remote::fetch_latest(record).await?;
+    let (latest_version, files) = remote::fetch_latest_with_client(client, record).await?;
     let latest_hash = hash_files(&files)?;
     Ok(UpdateInfo {
         id: record.id.clone(),
@@ -53,13 +59,28 @@ pub fn apply_at(
         .get(skill_id)
         .cloned()
         .ok_or_else(|| SkillsageError::NotInstalled(skill_id.to_string()))?;
-    let next_hash = hash_files(&files)?;
-    if next_hash == current.current_hash {
-        return Ok(current);
-    }
 
     layout.ensure_roots()?;
     let temp_dir = materialize(layout, &files)?;
+
+    // Hash the materialized tree rather than the remote file listing. The
+    // listing can contain names the local filesystem folds together (notably
+    // case-only collisions such as `A.txt`/`a.txt`, which git permits and
+    // Windows/macOS collapse). Hashing the listing would record a value that
+    // never matches a later `content_hash` of the directory on disk, producing
+    // a permanent false "update available". This mirrors the install path.
+    let next_hash = match lockfile::content_hash(&temp_dir) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = atomic::remove_dir(&temp_dir);
+            return Err(error);
+        }
+    };
+    if next_hash == current.current_hash {
+        let _ = atomic::remove_dir(&temp_dir);
+        return Ok(current);
+    }
+
     let parsed = match read_skill_md(&temp_dir.join("SKILL.md")) {
         Ok(value) => value,
         Err(error) => {
@@ -76,7 +97,13 @@ pub fn apply_at(
     }
 
     let destination = layout.skill(&current.name)?;
-    let replacement = match atomic::replace_dir_transaction(&temp_dir, &destination) {
+    // An update replaces the tracked skill's own directory, so a directory is
+    // expected at the destination.
+    let replacement = match atomic::replace_dir_transaction(
+        &temp_dir,
+        &destination,
+        atomic::DestinationState::Managed,
+    ) {
         Ok(replacement) => replacement,
         Err(error) => {
             let recovery = atomic::remove_dir(&temp_dir).err();
@@ -99,10 +126,7 @@ pub fn apply_at(
 }
 
 fn with_recovery(primary: SkillsageError, recovery: Option<SkillsageError>) -> SkillsageError {
-    match recovery {
-        Some(recovery) => SkillsageError::Io(format!("{primary}; 恢复失败: {recovery}")),
-        None => primary,
-    }
+    SkillsageError::with_recovery(primary, recovery, SkillsageError::Io)
 }
 
 fn materialize(
@@ -119,13 +143,8 @@ fn materialize(
             }
         };
         let target = temp_dir.join(relative);
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        if let Err(error) = std::fs::write(target, &file.contents) {
-            let _ = atomic::remove_dir(&temp_dir);
-            return Err(error.into());
-        }
+        atomic::create_dir_in_temp(&temp_dir, &target)?;
+        atomic::write_file_in_temp(&temp_dir, &target, &file.contents)?;
     }
     Ok(temp_dir)
 }

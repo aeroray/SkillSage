@@ -14,6 +14,10 @@ use crate::core::workbuddy;
 use crate::error::SkillsageError;
 use crate::state::AppState;
 
+/// Cap on simultaneous per-skill update checks. Each check issues several
+/// GitHub requests, so the fan-out stays bounded to protect the API quota.
+const MAX_CONCURRENT_UPDATE_CHECKS: usize = 4;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstalledSkillsList {
@@ -121,7 +125,11 @@ pub async fn search_local_skill_matches(
         Vec::new()
     };
 
-    let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
+    let runtime = tokio::task::spawn_blocking(|| {
+        settings::load_runtime(&RepoLayout::from_user_home()?)
+    })
+    .await
+    .map_err(|error| SkillsageError::Task(error.to_string()))??;
     let store_client = StoreClient::new_with_proxy(runtime.proxy_url.clone())?;
     let github_client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
     let (matches, searched_candidates) = match_local::search(
@@ -176,25 +184,47 @@ pub async fn link_local_skill(
         .await
         .map_err(|error| SkillsageError::Task(error.to_string()))??
     };
-    let cached_candidate = {
+    // Carry the candidate's verification result through to the link step. The
+    // cache holds it alongside the candidate; a candidate resolved fresh via
+    // `find` was never content-verified, so it must not be recorded as exact.
+    let cached_match = {
         let cache = state.local_match_cache.lock().await;
         cache
             .values()
             .flat_map(|matches| matches.iter())
             .find(|candidate| candidate.candidate.id == remote_skill_id)
-            .map(|candidate| candidate.candidate.clone())
+            .map(|candidate| {
+                (
+                    candidate.candidate.clone(),
+                    candidate.verification.clone(),
+                )
+            })
     };
-    let candidate = match cached_candidate {
-        Some(candidate) => candidate,
+    let (candidate, verification) = match cached_match {
+        Some((candidate, verification)) => (candidate, verification),
         None => {
-            let runtime = settings::load_runtime(&layout)?;
+            let runtime = tokio::task::spawn_blocking({
+                let layout = layout.clone();
+                move || settings::load_runtime(&layout)
+            })
+            .await
+            .map_err(|error| SkillsageError::Task(error.to_string()))??;
             let client = StoreClient::new_with_proxy(runtime.proxy_url)?;
-            match_local::find(&client, &name, &remote_skill_id).await?
+            (
+                match_local::find(&client, &name, &remote_skill_id).await?,
+                "unverified".to_string(),
+            )
         }
     };
     let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || {
-        match_local::link_at(&layout, &skill_id, &candidate, remote_version.as_deref())
+        match_local::link_at(
+            &layout,
+            &skill_id,
+            &candidate,
+            remote_version.as_deref(),
+            &verification,
+        )
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))?
@@ -236,9 +266,47 @@ pub async fn check_updates(
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))??;
 
-    let mut updates = Vec::with_capacity(records.len());
+    // Load settings (blocking keyring + filesystem reads) once, off the async
+    // runtime, then share a single HTTP client across every check. Previously
+    // each skill rebuilt the client and re-read the OS keyring.
+    let runtime = tokio::task::spawn_blocking(|| {
+        settings::load_runtime(&RepoLayout::from_user_home()?)
+    })
+    .await
+    .map_err(|error| SkillsageError::Task(error.to_string()))??;
+    let github = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
+
+    // Run checks concurrently but bounded, and keep going when one skill fails,
+    // so a single deleted repository or transient network error no longer hides
+    // every other available update. The cap matters because each check issues
+    // several GitHub requests; an unbounded fan-out over a large library would
+    // hit the API rate limit that the serial version avoided.
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_UPDATE_CHECKS));
+    let mut jobs = tokio::task::JoinSet::new();
     for record in records {
-        updates.push(update::check(&record).await?);
+        let github = github.clone();
+        let semaphore = semaphore.clone();
+        jobs.spawn(async move {
+            let id = record.id.clone();
+            let result = match semaphore.acquire_owned().await {
+                Ok(_permit) => update::check_with_client(&github, &record).await,
+                Err(error) => Err(SkillsageError::Task(error.to_string())),
+            };
+            (id, result)
+        });
+    }
+
+    let mut updates = Vec::new();
+    while let Some(joined) = jobs.join_next().await {
+        match joined {
+            Ok((_, Ok(info))) => updates.push(info),
+            Ok((id, Err(error))) => {
+                tracing::warn!(skill_id = %id, error = %error, "更新检查失败，已跳过该技能");
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "更新检查任务异常结束");
+            }
+        }
     }
     Ok(UpdateCheckList { updates })
 }

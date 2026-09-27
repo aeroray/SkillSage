@@ -16,9 +16,17 @@ pub struct GithubUrlInspection {
     pub skills: Vec<url_install::UrlSkillCandidate>,
 }
 
+/// `settings::load_runtime` does blocking filesystem and keyring work; keep it
+/// off the async runtime.
+async fn runtime_settings() -> Result<settings::RuntimeSettings, SkillsageError> {
+    tokio::task::spawn_blocking(|| settings::load_runtime(&RepoLayout::from_user_home()?))
+        .await
+        .map_err(|error| SkillsageError::Task(error.to_string()))?
+}
+
 #[tauri::command]
 pub async fn inspect_github_url(url: String) -> Result<GithubUrlInspection, SkillsageError> {
-    let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
+    let runtime = runtime_settings().await?;
     let client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
     let (parsed, skills) = url_install::resolve_skills(&client, &url).await?;
     Ok(GithubUrlInspection { parsed, skills })
@@ -31,7 +39,7 @@ pub async fn url_install(
     conflict_action: Option<ConflictAction>,
     state: State<'_, AppState>,
 ) -> Result<InstallResult, SkillsageError> {
-    let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
+    let runtime = runtime_settings().await?;
     let client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
     let detail = url_install::resolve_detail(&client, &url, skill_path).await?;
     let _write_guard = state.write_lock.lock().await;

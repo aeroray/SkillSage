@@ -69,7 +69,14 @@ pub async fn import_package(
     state: State<'_, AppState>,
 ) -> Result<SyncImportResult, SkillsageError> {
     let layout = RepoLayout::from_user_home()?;
-    let package = import::load(&path)?;
+    // Reading and validating the package file is synchronous I/O (up to the
+    // 8 MiB package limit); keep it off the async runtime.
+    let package = {
+        let path = path.clone();
+        tokio::task::spawn_blocking(move || import::load(&path))
+            .await
+            .map_err(|error| SkillsageError::Task(error.to_string()))??
+    };
     let options = options.unwrap_or_default();
     let settings = if options.apply_settings {
         package.settings.clone()
@@ -78,10 +85,24 @@ pub async fn import_package(
     };
     let translations_imported = if options.apply_settings {
         let _write_guard = state.write_lock.lock().await;
-        if let Some(sync_settings) = &settings {
-            crate::core::settings::save(&layout, sync_settings.proxy_url.clone(), None, false)?;
-        }
-        crate::core::settings::merge_translations(&layout, &package.translated_descriptions)?
+        // Persisting settings touches the filesystem and the OS keyring, and
+        // merging translations reads and rewrites the settings file.
+        let layout_for_settings = layout.clone();
+        let sync_settings = settings.clone();
+        let translations = package.translated_descriptions.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Some(sync_settings) = &sync_settings {
+                crate::core::settings::save(
+                    &layout_for_settings,
+                    sync_settings.proxy_url.clone(),
+                    None,
+                    false,
+                )?;
+            }
+            crate::core::settings::merge_translations(&layout_for_settings, &translations)
+        })
+        .await
+        .map_err(|error| SkillsageError::Task(error.to_string()))??
     } else {
         0
     };
@@ -95,14 +116,25 @@ pub async fn import_package(
     };
 
     for entry in selected {
+        // Pre-check on the blocking pool: reading the lockfile is synchronous
+        // I/O and would otherwise stall the async runtime once per entry.
         let already_installed = {
             let _write_guard = state.write_lock.lock().await;
-            let existing = lockfile::load(&layout)?;
-            existing.skills.contains_key(&entry.id)
-                || existing
-                    .skills
-                    .values()
-                    .any(|record| record.name == entry.name)
+            let layout_for_check = layout.clone();
+            let entry_id = entry.id.clone();
+            let entry_name = entry.name.clone();
+            tokio::task::spawn_blocking(move || {
+                let existing = lockfile::load(&layout_for_check)?;
+                Ok::<_, SkillsageError>(
+                    existing.skills.contains_key(&entry_id)
+                        || existing
+                            .skills
+                            .values()
+                            .any(|record| record.name == entry_name),
+                )
+            })
+            .await
+            .map_err(|error| SkillsageError::Task(error.to_string()))??
         };
         if already_installed {
             result.skipped.push(entry.id);
@@ -149,19 +181,36 @@ pub async fn import_package(
             files,
         };
         let _write_guard = state.write_lock.lock().await;
-        let latest_lock = lockfile::load(&layout)?;
-        if latest_lock.skills.contains_key(&entry.id)
-            || latest_lock
-                .skills
-                .values()
-                .any(|record| record.name == entry.name)
-        {
-            result.skipped.push(entry.id);
-            continue;
-        }
-        match install::install_skill_from_store_at(&layout, detail, None) {
-            Ok(installed) => result.imported.push(installed),
-            Err(error) => result.failed.push(SyncImportFailure {
+        // Re-check and install on the blocking pool: the lockfile read and the
+        // directory replacement + blake3 hashing are all synchronous work that
+        // would otherwise stall a tokio worker while holding the write lock.
+        let layout_for_install = layout.clone();
+        let entry_id = entry.id.clone();
+        let entry_name = entry.name.clone();
+        let installed = tokio::task::spawn_blocking(move || {
+            let latest_lock = lockfile::load(&layout_for_install)?;
+            if latest_lock.skills.contains_key(&entry_id)
+                || latest_lock
+                    .skills
+                    .values()
+                    .any(|record| record.name == entry_name)
+            {
+                return Ok::<_, SkillsageError>(None);
+            }
+            // An install failure is reported per entry, not as a fatal error
+            // for the whole batch.
+            Ok(Some(install::install_skill_from_store_at(
+                &layout_for_install,
+                detail,
+                None,
+            )))
+        })
+        .await
+        .map_err(|error| SkillsageError::Task(error.to_string()))??;
+        match installed {
+            None => result.skipped.push(entry.id),
+            Some(Ok(installed)) => result.imported.push(installed),
+            Some(Err(error)) => result.failed.push(SyncImportFailure {
                 id: entry.id,
                 reason: error.to_string(),
             }),

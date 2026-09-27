@@ -70,8 +70,17 @@ impl GitHubClient {
             })?;
         if !response.status().is_success() {
             let status = response.status().as_u16();
+            let rate_limit_remaining = response
+                .headers()
+                .get("x-ratelimit-remaining")
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned);
             tracing::warn!(status, "GitHub request returned an error status");
-            return Err(SkillsageError::github_status(status, self.token.is_some()));
+            return Err(SkillsageError::github_status(
+                status,
+                self.token.is_some(),
+                rate_limit_remaining.as_deref(),
+            ));
         }
         bounded_bytes(response, MAX_REMOTE_TEXT_BYTES, "GitHub 文件").await
     }
@@ -129,8 +138,17 @@ impl GitHubClient {
             })?;
         if !response.status().is_success() {
             let status = response.status().as_u16();
+            let rate_limit_remaining = response
+                .headers()
+                .get("x-ratelimit-remaining")
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned);
             tracing::warn!(status, "GitHub request returned an error status");
-            return Err(SkillsageError::github_status(status, self.token.is_some()));
+            return Err(SkillsageError::github_status(
+                status,
+                self.token.is_some(),
+                rate_limit_remaining.as_deref(),
+            ));
         }
         let bytes = bounded_bytes(response, MAX_REMOTE_JSON_BYTES, "GitHub JSON").await?;
         serde_json::from_slice(&bytes).map_err(|error| {
@@ -146,8 +164,12 @@ impl GitHubClient {
     }
 }
 
+/// Streams the body and enforces `limit` as it arrives. Checking only
+/// `Content-Length` first is not enough: that header is optional, so a chunked
+/// response would otherwise be buffered in full before the post-hoc length
+/// check could reject it.
 async fn bounded_bytes(
-    response: reqwest::Response,
+    mut response: reqwest::Response,
     limit: usize,
     label: &str,
 ) -> Result<Vec<u8>, SkillsageError> {
@@ -160,18 +182,26 @@ async fn bounded_bytes(
             limit / 1024 / 1024
         )));
     }
-    let bytes = response.bytes().await?;
-    if bytes.len() > limit {
-        return Err(SkillsageError::ResponseTooLarge(format!(
-            "{label}超过 {} MiB",
-            limit / 1024 / 1024
-        )));
+    let mut collected = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if collected.len().saturating_add(chunk.len()) > limit {
+            return Err(SkillsageError::ResponseTooLarge(format!(
+                "{label}超过 {} MiB",
+                limit / 1024 / 1024
+            )));
+        }
+        collected.extend_from_slice(&chunk);
     }
-    Ok(bytes.to_vec())
+    Ok(collected)
 }
 
 fn validate_component(value: &str, label: &str) -> Result<(), SkillsageError> {
     if value.is_empty()
+        // `.`/`..` pass the character allow-list but would be normalised by the
+        // URL parser into a different API path. `validate_reference` below
+        // already rejects them; keep the two guards consistent.
+        || value == "."
+        || value == ".."
         || !value.chars().all(|character| {
             character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
         })
