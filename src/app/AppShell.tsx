@@ -1,31 +1,14 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import {
-  Check,
-  Copy,
-  Download,
-  FolderInput,
-  FolderOpen,
-  Library,
-  Settings,
-  Store,
-} from "lucide-react";
+import { Download, FolderInput, Library, Settings, Store } from "lucide-react";
 import { Button } from "../components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../components/ui/tooltip";
 import {
   TitleBar,
   TitleBarBrand,
 } from "../components/layout/TitleBar";
 import { TitleBarActionsProvider } from "../components/layout/page-actions";
-import { openSkillsRoot } from "../features/skills/api";
-import { useInstalledSkills } from "../features/skills/hooks";
 import { useThemeStore } from "../features/theme/store";
 import { useAppUpdateStore } from "../features/update/store";
-import { copyText } from "../lib/clipboard";
 import { Skeleton } from "../components/ui/skeleton";
 import { cn } from "../lib/utils";
 
@@ -97,112 +80,6 @@ function PageLoadingState() {
   return <div aria-busy="true" aria-label="正在加载页面" className="flex flex-col gap-6"><Skeleton className="h-9 w-64" /><Skeleton className="h-4 w-96" /><Skeleton className="h-48 w-full" /></div>;
 }
 
-/**
- * The shared directory is the product's central fact: every skill lives here
- * and every AI tool reads it. The sidebar is the natural home for it, which
- * also gives the previously empty rail a job.
- */
-function SidebarWorkspace() {
-  const { detectedTools, loading, skills, skillsRoot, tools } = useInstalledSkills();
-  const [copied, setCopied] = useState(false);
-
-  const copyPath = async () => {
-    if (!skillsRoot) return;
-    try {
-      await copyText(skillsRoot);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      // Clipboard access can be refused; the path stays selectable either way.
-    }
-  };
-
-  // One row per tool that needs a link *and is installed here*. The registry
-  // holds ~19 such tools; listing them all would make this card taller than the
-  // window, so it shows the ones this machine actually has.
-  const stats = [
-    { label: "已安装", value: skills.length },
-    ...tools
-      .filter((tool) => detectedTools.includes(tool.id))
-      .map((tool) => ({
-        label: tool.label,
-        value: skills.filter((skill) => skill.distributedTo.includes(tool.id))
-          .length,
-      })),
-  ];
-
-  return (
-    <section
-      aria-label="共享技能目录"
-      className="mt-5 flex flex-col gap-3 rounded-lg border border-border bg-card/60 p-3"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-medium text-foreground">共享技能目录</h2>
-        <div className="flex items-center gap-0.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label="复制共享目录路径"
-                disabled={!skillsRoot}
-                onClick={() => void copyPath()}
-                size="icon"
-                variant="ghost"
-              >
-                {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent sideOffset={6}>
-              {copied ? "已复制路径" : "复制路径"}
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label="打开共享目录"
-                disabled={!skillsRoot}
-                onClick={() => void openSharedDirectory(skillsRoot)}
-                size="icon"
-                variant="ghost"
-              >
-                <FolderOpen aria-hidden="true" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent sideOffset={6}>在文件管理器中打开</TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
-
-      <p
-        className="truncate font-mono text-xs leading-4 text-muted-foreground"
-        title={skillsRoot ?? undefined}
-      >
-        {skillsRoot ?? "加载中…"}
-      </p>
-
-      <dl className="flex flex-col gap-1.5 border-t border-border pt-3">
-        {stats.map(({ label, value }) => (
-          <div className="flex items-baseline justify-between gap-2" key={label}>
-            <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="text-xs font-medium tabular-nums text-foreground">
-              {loading ? "—" : value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </section>
-  );
-}
-
-/** Opens the shared root through the same Rust command the page toolbar uses. */
-async function openSharedDirectory(path: string | undefined) {
-  if (!path) return;
-  try {
-    await openSkillsRoot(path);
-  } catch {
-    // A failed open is non-fatal here; the skills page surfaces it in full.
-  }
-}
-
 function SidebarUpdateCard() {
   const available = useAppUpdateStore((state) => state.available);
   const error = useAppUpdateStore((state) => state.error);
@@ -271,7 +148,6 @@ export function AppShell() {
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <aside className="flex h-full w-[228px] shrink-0 flex-col border-r border-border bg-sidebar px-4 py-4 text-sidebar-foreground">
             <Navigation ariaLabel="主导航" items={navigation} />
-            <SidebarWorkspace />
             <div className="mt-auto flex flex-col gap-4 pt-5">
               <SidebarUpdateCard />
               <Navigation ariaLabel="应用设置" items={settingsNavigation} />

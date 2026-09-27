@@ -140,7 +140,11 @@ export function TitleBar({ actionsRef, brand, title }: TitleBarProps) {
   );
 }
 
-/** The brand block: mark plus the bilingual product name. */
+/** The brand block: mark plus the bilingual product name.
+ *
+ * Sized to the 44px bar rather than to the text: the mark is the one element
+ * that identifies the window, so it reads as a logo and not as a stray icon.
+ */
 export function TitleBarBrand({
   logoSrc,
   product,
@@ -152,11 +156,11 @@ export function TitleBarBrand({
 }) {
   return (
     <>
-      <img alt="" className="size-4 shrink-0 rounded-sm object-cover" src={logoSrc} />
-      <span className="truncate text-xs font-semibold tracking-tight text-foreground">
+      <img alt="" className="size-6 shrink-0 rounded object-cover" src={logoSrc} />
+      <span className="truncate text-sm font-semibold tracking-tight text-foreground">
         {product}
       </span>
-      <span className="truncate text-xs text-muted-foreground">{productZh}</span>
+      <span className="truncate text-sm text-muted-foreground">{productZh}</span>
     </>
   );
 }

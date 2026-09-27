@@ -10,7 +10,6 @@ import {
   ArrowUpNarrowWide,
   ArrowRight,
   CircleAlert,
-  Circle,
   CheckCircle2,
   ChevronDown,
   Download,
@@ -114,6 +113,7 @@ import {
   type SkillStatusFilter,
 } from "../../features/skills/selectors";
 import { normalizeTauriError } from "../../lib/tauri";
+import { cn } from "../../lib/utils";
 
 function shortRevision(revision: string) {
   return revision.length > 12 ? revision.slice(0, 8) : revision;
@@ -194,7 +194,6 @@ function SkillDetailContent({
   descriptionMode,
   detectedTools,
   skill,
-  skillsRoot,
   tools,
   onDescriptionModeChange,
   onTranslate,
@@ -205,7 +204,6 @@ function SkillDetailContent({
   descriptionMode: DescriptionMode;
   detectedTools: string[];
   skill: InstalledSkill;
-  skillsRoot?: string;
   tools: ToolOption[];
   onDescriptionModeChange: (mode: DescriptionMode) => void;
   onTranslate: () => void;
@@ -220,23 +218,15 @@ function SkillDetailContent({
       : "未记录";
   const installedAt =
     formatInstalledAt(skill.installedAt) || skill.installedAt || "未记录";
+  // Only tools installed on this machine, plus any that already hold a link.
+  const visibleTools = distributionTargetsFor(tools, detectedTools, skill);
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="muted">{skill.source || "本地技能"}</Badge>
-        {/* Only tools installed on this machine (plus any that already hold a
-            link), so the detail view does not list the whole registry. */}
-        {distributionTargetsFor(tools, detectedTools, skill).map((tool) => {
-          const distributed = skill.distributedTo.includes(tool.id);
-          return (
-            <Badge key={tool.id} variant={distributed ? "success" : "muted"}>
-              {tool.label} · {distributed ? "已分发" : "未分发"}
-            </Badge>
-          );
-        })}
-      </div>
-
+      {/* What this skill is and where it came from, in one line. The previous
+          version repeated the source three times (a badge, a "来源" field and
+          again inside "来源路径"), so the list below now carries only facts
+          that are not already visible. */}
       <SkillDescriptionPanel
         description={skill.description}
         descriptionMode={descriptionMode}
@@ -247,28 +237,50 @@ function SkillDetailContent({
         translationLoading={translationLoading}
       />
 
-      <dl className="grid gap-3 sm:grid-cols-2">
-        <SkillDetailField label="技能 ID" value={skill.id || "未记录"} />
-        <SkillDetailField label="作者" value={skill.owner || "未记录"} />
-        <SkillDetailField label="仓库" value={skill.repo || "未记录"} />
-        <SkillDetailField label="来源路径" value={skillPath} />
-        <SkillDetailField
-          label="技能根目录"
-          value={skillsRoot || "未记录"}
-          wide
-        />
-        <SkillDetailField label="来源" value={skill.source || "未记录"} wide />
-        <SkillDetailField
-          label="来源提交"
-          value={skill.currentVersion || "未记录"}
-        />
-        <SkillDetailField label="安装时间" value={installedAt} />
-        <SkillDetailField
-          label="内容指纹"
-          value={skill.currentHash || "未记录"}
-          wide
-        />
-      </dl>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="muted">{sourceLabel(skill.source)}</Badge>
+          <span className="truncate text-xs text-muted-foreground">
+            {skill.source || "本地技能"}
+          </span>
+        </div>
+
+        {/* One line per fact. "技能 ID" and "仓库" were dropped: the id is
+            derived from owner/repo and is not something a user acts on, and the
+            repo is already in the source above. */}
+        <dl className="grid gap-3 sm:grid-cols-2">
+          <SkillDetailField label="作者" value={skill.owner || "未记录"} />
+          <SkillDetailField label="安装时间" value={installedAt} />
+          <SkillDetailField
+            label="来源路径"
+            value={skillPath}
+          />
+          <SkillDetailField
+            label="版本"
+            value={skill.currentVersion || "未记录"}
+          />
+        </dl>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-foreground">分发状态</span>
+          {visibleTools.length === 0 ? (
+            <span className="text-xs text-muted-foreground">
+              所有工具都读取公共目录，无需分发
+            </span>
+          ) : (
+            visibleTools.map((tool) => {
+              const distributed = skill.distributedTo.includes(tool.id);
+              return (
+                <Badge key={tool.id} variant={distributed ? "success" : "muted"}>
+                  {tool.label} · {distributed ? "已分发" : "未分发"}
+                </Badge>
+              );
+            })
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -469,33 +481,6 @@ function LocalMatchContent({
   );
 }
 
-function DistributionStatus({
-  distributed,
-  label,
-}: {
-  distributed: boolean;
-  label: string;
-}) {
-  return (
-    <span
-      className={`flex min-w-0 items-center gap-1.5 ${
-        distributed ? "font-medium text-success-text" : "text-muted-foreground"
-      }`}
-      title={`${label}${distributed ? "已分发" : "未分发"}`}
-    >
-      {distributed ? (
-        <CheckCircle2 aria-hidden="true" className="size-3.5 shrink-0" />
-      ) : (
-        <Circle aria-hidden="true" className="size-3.5 shrink-0" />
-      )}
-      <span className="truncate">{label}</span>
-      {/* A `<span>` has no nameable role, so an aria-label here would be
-          discarded. The state has to be real text to reach a screen reader. */}
-      <span className="sr-only">{distributed ? "已分发" : "未分发"}</span>
-    </span>
-  );
-}
-
 function SkillRow({
   checking,
   checked,
@@ -549,6 +534,9 @@ function SkillRow({
   // this skill. Showing all ~19 registered tools per row would bury the two or
   // three that matter.
   const visibleTools = distributionTargetsFor(tools, detectedTools, skill);
+  const distributedCount = visibleTools.filter((tool) =>
+    skill.distributedTo.includes(tool.id),
+  ).length;
 
   return (
     <div aria-busy={busy} className="relative">
@@ -565,9 +553,18 @@ function SkillRow({
         />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-sm font-medium text-foreground">
+            {/* The name itself opens the detail. It is the obvious target and
+                the row previously required finding the "…" menu instead. A
+                button (not a span with onClick) keeps it keyboard-reachable
+                and announced as an action. */}
+            <button
+              className="-mx-1 max-w-full truncate rounded-sm px-1 text-left text-sm font-medium text-foreground underline-offset-4 transition-colors hover:text-primary-text hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              disabled={controlsDisabled}
+              onClick={() => onDetail(skill)}
+              type="button"
+            >
               {skill.name}
-            </h3>
+            </button>
             <Badge variant="muted">{skill.owner}</Badge>
             {updateAvailable ? <Badge variant="success">有更新</Badge> : null}
           </div>
@@ -579,7 +576,16 @@ function SkillRow({
           <p>{sourceLabel(skill.source)}</p>
           <p>安装于 {formatInstalledAt(skill.installedAt)}</p>
         </div>
-        <div aria-label="分发状态" className="flex min-w-0 flex-col gap-1 text-xs" role="group">
+        {/* Distribution is a fixed single line, not one row per tool. Listing
+            each tool vertically made the row grow with every tool the user
+            installed, so a machine with eight tools produced eight-line rows.
+            Dots plus a count carry the same information in constant height;
+            the tooltip names each dot and the menu is where you change it. */}
+        <div
+          aria-label={`分发状态：${distributedCount} / ${visibleTools.length}`}
+          className="flex min-w-0 items-center gap-2 text-xs"
+          role="group"
+        >
           {distributionPending ? (
             <span className="flex items-center gap-1.5 text-muted-foreground">
               <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
@@ -590,13 +596,33 @@ function SkillRow({
             // distribute. Saying so beats an empty column.
             <span className="text-muted-foreground">无需分发</span>
           ) : (
-            visibleTools.map((tool) => (
-              <DistributionStatus
-                distributed={skill.distributedTo.includes(tool.id)}
-                key={tool.id}
-                label={tool.label}
-              />
-            ))
+            <>
+              <span className="flex shrink-0 items-center gap-1">
+                {visibleTools.map((tool) => {
+                  const distributed = skill.distributedTo.includes(tool.id);
+                  return (
+                    <Tooltip key={tool.id}>
+                      <TooltipTrigger asChild>
+                        <span
+                          className={cn(
+                            "size-2 rounded-full",
+                            distributed
+                              ? "bg-primary"
+                              : "border border-muted-foreground/60",
+                          )}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>
+                        {tool.label} · {distributed ? "已分发" : "未分发"}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </span>
+              <span className="shrink-0 tabular-nums text-muted-foreground">
+                {distributedCount}/{visibleTools.length}
+              </span>
+            </>
           )}
         </div>
         <DropdownMenu>
@@ -1825,7 +1851,6 @@ export function SkillsPage() {
             }
             onTranslate={() => void translateLocalDescription()}
             skill={detailSkill}
-            skillsRoot={skillsRoot}
             tools={tools}
             translatedDescription={
               translations[detailSkill.id]
