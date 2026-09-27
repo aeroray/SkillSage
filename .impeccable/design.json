@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-27T06:25:16.220Z",
+  "generatedAt": "2026-09-27T07:03:59.629Z",
   "title": "Design System: SkillSage · 技匠",
   "extensions": {
     "colorMeta": {
@@ -304,6 +304,20 @@
       "description": "签名组件。侧栏的共享目录卡片：等宽路径（可复制/可打开）+ 已安装与分发计数。把产品核心事实放在每页可见处，同时消灭侧栏空白。",
       "html": "<section class=\"ds-wscard\"><div class=\"ds-wscard-head\"><span class=\"ds-wscard-title\">共享技能目录</span><span class=\"ds-wscard-icons\">⧉</span></div><p class=\"ds-wscard-path\">C:\\Users\\PC\\.agents\\skills</p><dl class=\"ds-wscard-stats\"><div class=\"ds-wscard-stat\"><dt>已安装</dt><dd>4</dd></div><div class=\"ds-wscard-stat\"><dt>Claude Code</dt><dd>0</dd></div><div class=\"ds-wscard-stat\"><dt>Work Buddy</dt><dd>0</dd></div></dl></section>",
       "css": ".ds-wscard { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; padding: 12px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-lg, 14px); background: color-mix(in srgb, var(--app-color-card, #ffffff) 60%, transparent); } .ds-wscard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .ds-wscard-title { color: var(--app-color-foreground, #17202a); font-size: 0.75rem; font-weight: 500; } .ds-wscard-icons { color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; } .ds-wscard-path { margin: 0; overflow: hidden; color: var(--app-color-muted-foreground, #5f6c7e); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; } .ds-wscard-stats { display: flex; flex-direction: column; gap: 6px; margin: 0; padding-top: 12px; border-top: 1px solid var(--app-color-border, #e1e6eb); } .ds-wscard-stat { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; } .ds-wscard-stat dt { color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; } .ds-wscard-stat dd { margin: 0; color: var(--app-color-foreground, #17202a); font-size: 0.75rem; font-weight: 500; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Title Bar",
+      "kind": "nav",
+      "description": "签名组件。自绘标题栏（decorations: false）。三段：品牌（与侧栏对齐）│ 页面名 + portal 进来的操作 │ 窗口控制。macOS 保留原生交通灯。",
+      "html": "<header class=\"ds-tb\" data-tauri-drag-region=\"deep\"><div class=\"ds-tb-brand\"><img class=\"ds-tb-logo\" src=\"/skillsage-logo.png\" alt=\"\" /><span class=\"ds-tb-name\">SkillSage</span><span class=\"ds-tb-zh\">技匠</span></div><div class=\"ds-tb-main\"><h1 class=\"ds-tb-title\">我的技能</h1><div class=\"ds-tb-actions\"><button class=\"ds-tb-action\">重新扫描</button><button class=\"ds-tb-action ds-tb-action-primary\">手动导入</button></div></div><div class=\"ds-tb-controls\" data-tauri-drag-region=\"false\"><button class=\"ds-tb-ctl\" aria-label=\"最小化\">─</button><button class=\"ds-tb-ctl\" aria-label=\"最大化\">□</button><button class=\"ds-tb-ctl ds-tb-ctl-close\" aria-label=\"关闭\">✕</button></div></header>",
+      "css": ".ds-tb { display: flex; align-items: stretch; height: 44px; flex: none; border-bottom: 1px solid var(--app-color-border, #e1e6eb); background: var(--app-color-sidebar, #ffffff); } .ds-tb-brand { display: flex; align-items: center; gap: 10px; width: 228px; flex: none; padding: 0 16px; border-right: 1px solid var(--app-color-border, #e1e6eb); } .ds-tb-logo { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; } .ds-tb-name { color: var(--app-color-foreground, #17202a); font-size: 0.75rem; font-weight: 600; letter-spacing: -0.025em; } .ds-tb-zh { color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; } .ds-tb-main { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 0 16px; } .ds-tb-title { margin: 0; color: var(--app-color-foreground, #17202a); font-size: 0.875rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-tb-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; } .ds-tb-action { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-md, 10px); background: var(--app-color-background, #f5f6f8); color: var(--app-color-foreground, #17202a); font-size: 0.75rem; font-weight: 500; cursor: pointer; } .ds-tb-action:hover { background: var(--app-color-muted, #eef1f4); } .ds-tb-action-primary { border-color: transparent; background: var(--app-color-primary, #0d9488); color: var(--app-color-primary-foreground, #ffffff); } .ds-tb-action-primary:hover { background: color-mix(in srgb, var(--app-color-primary, #0d9488) 85%, transparent); } .ds-tb-controls { display: flex; align-items: center; gap: 2px; flex: none; padding-right: 8px; } .ds-tb-ctl { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: none; border-radius: var(--radius-md, 10px); background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; cursor: pointer; } .ds-tb-ctl:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-tb-ctl-close:hover { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 15%, transparent); color: var(--app-color-destructive-text, #b23b37); }"
+    },
+    {
+      "name": "Page Actions",
+      "kind": "custom",
+      "description": "签名组件。页面把操作 portal 进标题栏，而不是渲染自己的页头。用 portal 而非回调注册表，操作留在页面渲染树里，闭包始终读到最新 state。",
+      "html": "<!-- in the page -->\n<template id=\"page-actions-demo\">\n  <button class=\"ds-tb-action\">重新扫描</button>\n  <button class=\"ds-tb-action ds-tb-action-primary\">手动导入</button>\n</template>\n<!-- portals into .ds-tb-actions -->",
+      "css": "/* PageActions renders its children into the title bar action slot via createPortal. No extra CSS: the children use .ds-tb-action. */"
     }
   ],
   "narrative": {
@@ -315,7 +329,8 @@
       "边框分层而非阴影分层：静态表面用 1px 边框 + 表面色差，阴影只给浮层。",
       "状态必须真实：说不清楚的结论用专门的「无更新源」，绝不谎报「已是最新」。",
       "全部文本 ≥ 4.5:1，含浅色模式的次要文字。",
-      "留白由真实状态填充：侧栏显示共享目录路径与计数，而不是装饰。"
+      "留白由真实状态填充：侧栏显示共享目录路径与计数，而不是装饰。",
+      "页头并入标题栏：页面名与操作都在 44px 标题栏，页面省下的纵向空间全部给内容。"
     ],
     "rules": [
       {
@@ -364,6 +379,21 @@
         "section": "layout"
       },
       {
+        "name": "「页头即标题栏」规则",
+        "body": "页面不画自己的页头。页面名在标题栏，页面操作 portal 到标题栏右侧，页面描述不写。省下的纵向空间留给内容——用户知道自己在哪个页面，重复一遍只占地方。",
+        "section": "layout"
+      },
+      {
+        "name": "「拖拽区用 deep」规则",
+        "body": "标题栏的 data-tauri-drag-region 必须写成 \"deep\"。裸属性只在直接点中该元素本身时才能拖动（Tauri 用 el === composedPath[0] 判定），标题文字、Logo 这类子元素会变成拖不动的死区。\"deep\" 让整条都能拖，而按钮等可点击元素仍然照常拦截。窗口控制那一小段用 \"false\" 明确阻断拖拽。",
+        "section": "layout"
+      },
+      {
+        "name": "「双击归系统」规则",
+        "body": "不要在标题栏上自己写 onDoubleClick 去最大化。Tauri 注入的拖拽脚本已经处理了双击（Windows 走 internal_toggle_maximize，macOS 在 mouseup 上判定以便取消），再写一遍会导致最大化后立刻还原。",
+        "section": "layout"
+      },
+      {
         "name": "「浮层才投影」规则",
         "body": "阴影是「这一层可以关闭、且盖住了下方内容」的信号。静态内容用边框，不用阴影。零偏移的彩色光晕属于装饰，不在这套系统里。",
         "section": "elevation"
@@ -384,7 +414,9 @@
       "Do 保持所有正文与占位符文字 ≥ 4.5:1，图标 ≥ 3:1。",
       "Do 让新页面沿用「工作区卡片」骨架：固定工具条 + 唯一滚动列表区。",
       "Do 用容器查询（@container + @lg:/@4xl:）决定栅格列数。",
-      "Do 让侧栏显示真实状态（共享目录路径、已安装与分发计数），而不是留空。"
+      "Do 让侧栏显示真实状态（共享目录路径、已安装与分发计数），而不是留空。",
+      "Do 把页面操作 portal 到标题栏，页面自己不画页头。",
+      "Do 给标题栏的拖拽区写 data-tauri-drag-region=\"deep\"，否则子元素拖不动。"
     ],
     "donts": [
       "Don't 用 text-muted-foreground 渲染彩色底上的文字（chip、彩色 Badge）——实测只有 3.5:1 左右。",
@@ -396,7 +428,10 @@
       "Don't 让同一个标签指向两个不同的东西（「打开技能目录」曾同时表示「打开此技能文件夹」和「打开共享根目录」）。",
       "Don't 引入移动端断点；这是最小 1200×800 的桌面应用。",
       "Don't 用视口断点（md: / xl:）排内容区栅格；它不知道导航栏占了多少宽度。",
-      "Don't 用装饰性图形或占位文案填充空白区域。"
+      "Don't 用装饰性图形或占位文案填充空白区域。",
+      "Don't 给页面画自己的页头（标题 + 描述）；标题栏已经有页面名。",
+      "Don't 在标题栏上自己实现双击最大化；Tauri 的拖拽脚本已经做了。",
+      "Don't 用裸 data-tauri-drag-region；子元素会变成拖不动的死区。"
     ]
   }
 }
