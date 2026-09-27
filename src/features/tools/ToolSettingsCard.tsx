@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { open as openDirectoryDialog } from "@tauri-apps/plugin-dialog";
 import {
   Check,
-  ExternalLink,
   FolderInput,
   Pencil,
   RotateCcw,
@@ -18,6 +18,7 @@ import {
   CardTitle,
 } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
+import { Dialog } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Skeleton } from "../../components/ui/skeleton";
 import {
@@ -32,74 +33,202 @@ import type { ToolView } from "../../features/tools/api";
 /**
  * The tool registry, as resolved on this machine.
  *
- * The one question this answers is whether a tool reads the shared skills
+ * The card itself stays small — it is a summary with one entry point. The full
+ * list lives in a dialog because ~27 rows inline made the whole Settings page
+ * unreadable, and because the rows are something you configure once rather than
+ * scan while working.
+ *
+ * The one question a row answers is whether a tool reads the shared skills
  * directory. If it does, it needs no per-skill link; if it does not, SkillSage
  * has to link each skill into that tool's own directory. Tools gain shared
- * support over time, so the flag is a user setting rather than a constant.
+ * support over time, so the flag is a setting rather than a constant.
  */
 export function ToolSettingsCard() {
   const { error, loading, refresh, save, saving, tools } = useTools();
+  const [open, setOpen] = useState(false);
+
+  // Only tools that are actually installed. A tool the user does not have is
+  // not something they can act on, and listing ~27 of them buries the two or
+  // three that matter.
+  const detected = useMemo(
+    () => tools.filter((tool) => tool.detected),
+    [tools],
+  );
+  const needsLink = detected.filter((tool) => !tool.readsShared);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start gap-4">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary">
-          <Wrench aria-hidden="true" className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <CardTitle>AI 工具与分发</CardTitle>
-          <CardDescription className="mt-1">
-            技能始终安装在公共目录。已经读取公共目录的工具不需要分发；其余工具需要单独建立链接。
-          </CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3 pb-5">
-        {error ? (
-          <p className="text-xs text-destructive-text" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        {loading ? (
-          <div
-            aria-busy="true"
-            aria-label="正在加载工具列表"
-            className="flex flex-col gap-2"
-          >
-            <Skeleton className="h-12" />
-            <Skeleton className="h-12" />
-            <Skeleton className="h-12" />
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-start gap-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary">
+            <Wrench aria-hidden="true" className="h-5 w-5" />
           </div>
-        ) : (
-          <>
-            <ul className="flex flex-col gap-2">
-              {tools.map((tool) => (
-                <ToolRow
-                  key={tool.id}
-                  onSave={save}
-                  saving={saving === tool.id}
-                  tool={tool}
-                />
-              ))}
-            </ul>
-            <div className="flex items-center justify-between gap-3 pt-1">
+          <div className="min-w-0 flex-1">
+            <CardTitle>AI 工具与分发</CardTitle>
+            <CardDescription className="mt-1">
+              技能始终安装在公共目录。已经读取公共目录的工具不需要分发；其余工具需要单独建立链接。
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 pb-5">
+          {error ? (
+            <p className="text-xs text-destructive-text" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          {loading ? (
+            <Skeleton className="h-12" />
+          ) : (
+            <>
+              <dl className="flex flex-col gap-2">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-xs text-muted-foreground">
+                    检测到的工具
+                  </dt>
+                  <dd className="text-xs font-medium tabular-nums text-foreground">
+                    {detected.length}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-xs text-muted-foreground">
+                    需要分发
+                  </dt>
+                  <dd className="text-xs font-medium tabular-nums text-foreground">
+                    {needsLink.length}
+                  </dd>
+                </div>
+              </dl>
+
+              {detected.length > 0 ? (
+                <ul className="flex flex-wrap gap-1.5">
+                  {detected.map((tool) => (
+                    <li key={tool.id}>
+                      <Badge variant={tool.readsShared ? "muted" : "default"}>
+                        {tool.label}
+                        {tool.readsShared ? " · 读公共目录" : ""}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  尚未检测到任何 AI 工具。
+                </p>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Button onClick={() => setOpen(true)} size="sm" variant="outline">
+                  管理工具与目录
+                </Button>
+                <Button
+                  disabled={loading}
+                  onClick={() => void refresh()}
+                  size="sm"
+                  variant="ghost"
+                >
+                  重新检测
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <ToolDialog
+        loading={loading}
+        onClose={() => setOpen(false)}
+        onSave={save}
+        open={open}
+        saving={saving}
+        tools={tools}
+      />
+    </>
+  );
+}
+
+/**
+ * The full registry. Installed tools come first — that is the order the user
+ * cares about — and the rest are behind a disclosure rather than shown flat.
+ */
+function ToolDialog({
+  loading,
+  onClose,
+  onSave,
+  open,
+  saving,
+  tools,
+}: {
+  loading: boolean;
+  onClose: () => void;
+  onSave: (
+    toolId: string,
+    readsShared: boolean | undefined,
+    skillsDir: string | undefined,
+  ) => Promise<boolean>;
+  open: boolean;
+  saving?: string;
+  tools: ToolView[];
+}) {
+  const [showAll, setShowAll] = useState(false);
+
+  const detected = tools.filter((tool) => tool.detected);
+  const others = tools.filter((tool) => !tool.detected);
+  const visible = showAll ? [...detected, ...others] : detected;
+
+  return (
+    <Dialog
+      contentClassName="px-6 py-5"
+      description="勾选「读取公共技能目录」后，该工具不再需要分发，已有链接会被移除。"
+      onClose={onClose}
+      open={open}
+      title="AI 工具与分发"
+    >
+      {loading ? (
+        <div
+          aria-busy="true"
+          aria-label="正在加载工具列表"
+          className="flex flex-col gap-2"
+        >
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {detected.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              尚未检测到任何 AI 工具。安装工具后回到此处点「重新检测」，或展开完整清单手动指定目录。
+            </p>
+          ) : null}
+
+          <ul className="flex flex-col gap-2">
+            {visible.map((tool) => (
+              <ToolRow
+                key={tool.id}
+                onSave={onSave}
+                saving={saving === tool.id}
+                tool={tool}
+              />
+            ))}
+          </ul>
+
+          {others.length > 0 ? (
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
               <p className="text-xs text-muted-foreground">
-                共 {tools.length} 个工具，其中{" "}
-                {tools.filter((tool) => tool.detected).length} 个已安装。
+                另有 {others.length} 个工具未检测到。
               </p>
               <Button
-                disabled={loading}
-                onClick={() => void refresh()}
+                onClick={() => setShowAll((current) => !current)}
                 size="sm"
-                variant="outline"
+                variant="ghost"
               >
-                重新检测
+                {showAll ? "收起" : "展开完整清单"}
               </Button>
             </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+          ) : null}
+        </div>
+      )}
+    </Dialog>
   );
 }
 
@@ -118,26 +247,52 @@ function ToolRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draftPath, setDraftPath] = useState(tool.skillsDir ?? "");
+  const [browsing, setBrowsing] = useState(false);
+
+  useEffect(() => {
+    setDraftPath(tool.skillsDir ?? "");
+  }, [tool.skillsDir]);
+
+  const persist = async (nextPath: string | undefined) => {
+    // Sending the default back as `undefined` clears the override, so a later
+    // registry correction reaches a user who never meant to pin anything.
+    const readsShared =
+      tool.readsShared === tool.readsSharedDefault ? undefined : tool.readsShared;
+    return onSave(tool.id, readsShared, nextPath);
+  };
 
   const commitPath = async () => {
     const next = draftPath.trim();
-    const unchanged = next === (tool.skillsDir ?? "");
-    if (unchanged) {
+    if (next === (tool.skillsDir ?? "")) {
       setEditing(false);
       return;
     }
-    // An empty value clears the override, restoring the registry path.
-    const ok = await onSave(
-      tool.id,
-      tool.readsShared === tool.readsSharedDefault ? undefined : tool.readsShared,
-      next || undefined,
-    );
-    if (ok) setEditing(false);
+    if (await persist(next || undefined)) setEditing(false);
+  };
+
+  /** Native directory picker. Typing stays available for a path the picker
+   * cannot reach (a network share, or a tool on another drive). */
+  const browse = async () => {
+    setBrowsing(true);
+    try {
+      const selected = await openDirectoryDialog({
+        directory: true,
+        multiple: false,
+        title: `选择 ${tool.label} 的技能目录`,
+      });
+      if (typeof selected === "string") {
+        setDraftPath(selected);
+        await persist(selected);
+        setEditing(false);
+      }
+    } catch {
+      // A cancelled dialog and the browser preview both leave the path as-is.
+    } finally {
+      setBrowsing(false);
+    }
   };
 
   const toggleReadsShared = (checked: boolean) => {
-    // Sending the default back as `undefined` clears the override, so a later
-    // registry correction reaches a user who never meant to pin anything.
     const value = checked === tool.readsSharedDefault ? undefined : checked;
     void onSave(tool.id, value, undefined);
   };
@@ -149,8 +304,8 @@ function ToolRow({
   };
 
   return (
-    <li className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3">
-      <div className="flex items-start justify-between gap-4">
+    <li className="flex flex-col gap-2.5 rounded-lg border border-border bg-muted/30 p-3">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium text-foreground">
@@ -163,7 +318,7 @@ function ToolRow({
             )}
             {tool.customized ? <Badge variant="muted">已自定义</Badge> : null}
             {/* An unverified entry came from a third-party table rather than
-                vendor docs, so its path may be wrong. Saying so is better than
+                vendor docs, so its path may be wrong. Saying so beats
                 presenting a guess as fact. */}
             {!tool.verified ? (
               <Tooltip>
@@ -219,19 +374,30 @@ function ToolRow({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                aria-label={`编辑 ${tool.label} 的技能目录`}
-                disabled={saving}
-                onClick={() => {
-                  setDraftPath(tool.skillsDir ?? "");
-                  setEditing((current) => !current);
-                }}
+                aria-label={`选择 ${tool.label} 的技能目录`}
+                disabled={saving || browsing}
+                onClick={() => void browse()}
                 size="icon-sm"
                 variant="ghost"
               >
                 <FolderInput aria-hidden="true" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent sideOffset={6}>自定义技能目录</TooltipContent>
+            <TooltipContent sideOffset={6}>选择目录</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={`手动输入 ${tool.label} 的技能目录`}
+                disabled={saving}
+                onClick={() => setEditing((current) => !current)}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <Pencil aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent sideOffset={6}>手动输入路径</TooltipContent>
           </Tooltip>
           {tool.customized ? (
             <Tooltip>
@@ -280,17 +446,6 @@ function ToolRow({
           该工具没有独立目录，只能读取公共目录。
         </p>
       )}
-
-      <a
-        className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-        href={tool.source}
-        rel="noreferrer"
-        target="_blank"
-      >
-        <Pencil aria-hidden="true" className="size-3" />
-        查看依据
-        <ExternalLink aria-hidden="true" className="size-3" />
-      </a>
     </li>
   );
 }
