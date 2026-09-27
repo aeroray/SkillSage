@@ -202,8 +202,14 @@
       }
     ],
     "breakpoints": [
-      { "name": "lg", "value": "1024px" },
-      { "name": "xl", "value": "1280px" }
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
     ]
   },
   "components": [
@@ -274,9 +280,16 @@
     {
       "name": "Selection Action Bar",
       "kind": "custom",
-      "description": "签名组件。有选中项时工具栏整体切换为批量操作，每个按钮显示它真正会作用的数量。",
-      "html": "<div class=\"ds-actionbar\"><span class=\"ds-actionbar-count\">已选 4 个</span><button class=\"ds-actionbar-ghost\">取消选择</button><button class=\"ds-actionbar-outline\">批量分发</button><button class=\"ds-actionbar-secondary\">检查更新（3）</button><button class=\"ds-actionbar-danger\">卸载（4）</button></div>",
-      "css": ".ds-actionbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } .ds-actionbar-count { font-size: 0.75rem; color: var(--app-color-foreground, #17202a); opacity: 0.7; } .ds-actionbar button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--radius-md, 10px); font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: background-color 150ms ease; } .ds-actionbar-ghost { background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); } .ds-actionbar-ghost:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-actionbar-outline { border-color: var(--app-color-border, #e1e6eb); background: var(--app-color-background, #f5f6f8); color: var(--app-color-foreground, #17202a); } .ds-actionbar-outline:hover { background: var(--app-color-muted, #eef1f4); } .ds-actionbar-secondary { background: var(--app-color-secondary, #eef1f4); color: var(--app-color-secondary-foreground, #27313c); } .ds-actionbar-danger { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 10%, transparent); color: var(--app-color-destructive-text, #b23b37); } .ds-actionbar-danger:hover { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 20%, transparent); }"
+      "description": "签名组件。有选中项时工具栏整体切换为批量操作，每个按钮显示它真正会作用的数量；不显示只读的「已选 N 个」，也不提供单独的「取消选择」。",
+      "html": "<div class=\"ds-actionbar\"><button class=\"ds-actionbar-outline\">批量分发</button><button class=\"ds-actionbar-secondary\">检查更新（3）</button><button class=\"ds-actionbar-danger\">卸载（4）</button></div>",
+      "css": ".ds-actionbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } .ds-actionbar button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--radius-md, 10px); font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: background-color 150ms ease; } .ds-actionbar-ghost { background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); } .ds-actionbar-ghost:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-actionbar-outline { border-color: var(--app-color-border, #e1e6eb); background: var(--app-color-background, #f5f6f8); color: var(--app-color-foreground, #17202a); } .ds-actionbar-outline:hover { background: var(--app-color-muted, #eef1f4); } .ds-actionbar-secondary { background: var(--app-color-secondary, #eef1f4); color: var(--app-color-secondary-foreground, #27313c); } .ds-actionbar-danger { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 10%, transparent); color: var(--app-color-destructive-text, #b23b37); } .ds-actionbar-danger:hover { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 20%, transparent); }"
+    },
+    {
+      "name": "Segmented Range Control",
+      "kind": "chip",
+      "description": "签名组件。对同一个列表的单选过滤（热门/趋势/爆款）。图标统一中性色，只有激活段取强调色。",
+      "html": "<div class=\"ds-seg\" role=\"radiogroup\" aria-label=\"排行榜范围\"><button class=\"ds-seg-item ds-seg-on\" role=\"radio\" aria-checked=\"true\">热门</button><button class=\"ds-seg-item\" role=\"radio\" aria-checked=\"false\">趋势</button><button class=\"ds-seg-item\" role=\"radio\" aria-checked=\"false\">爆款</button></div>",
+      "css": ".ds-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-md, 10px); background: color-mix(in srgb, var(--app-color-muted, #eef1f4) 60%, transparent); } .ds-seg-item { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: none; border-radius: calc(var(--radius-md, 10px) - 2px); background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; } .ds-seg-item:hover { color: var(--app-color-foreground, #17202a); } .ds-seg-item:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-color-ring, #16a39a) 60%, transparent); } .ds-seg-on { background: var(--app-color-background, #f5f6f8); color: var(--app-color-foreground, #17202a); font-weight: 600; box-shadow: 0 1px 2px rgba(23, 32, 42, 0.045); }"
     }
   ],
   "narrative": {
@@ -321,6 +334,11 @@
         "section": "layout"
       },
       {
+        "name": "「页面不滚动」规则",
+        "body": "滚动永远发生在列表区域，不发生在页面上。页头、搜索、筛选和操作栏必须始终可见。新增页面时，把滚动放在内容列表上，而不是包一层整页滚动容器。",
+        "section": "layout"
+      },
+      {
         "name": "「浮层才投影」规则",
         "body": "阴影是「这一层可以关闭、且盖住了下方内容」的信号。静态内容用边框，不用阴影。零偏移的彩色光晕属于装饰，不在这套系统里。",
         "section": "elevation"
@@ -338,7 +356,9 @@
       "Do 用 1px 边框 + 表面色差表达静态层次，用 shadow-sm / shadow-lg 只表达浮层。",
       "Do 用 sr-only 补充图标按钮的状态文本，而不是给无 role 的 <span> 加 aria-label。",
       "Do 在按钮禁用时用 <span> 包裹再挂 Tooltip，否则禁用按钮会吞掉指针事件，用户看不到原因。",
-      "Do 保持所有正文与占位符文字 ≥ 4.5:1，图标 ≥ 3:1。"
+      "Do 保持所有正文与占位符文字 ≥ 4.5:1，图标 ≥ 3:1。",
+      "Do 让滚动发生在列表区域而不是页面上，页头与工具栏始终可见。",
+      "Do 用 ToggleGroup 表达对同一列表的单选过滤，而不是 Tabs。"
     ],
     "donts": [
       "Don't 用 text-muted-foreground 渲染彩色底上的文字（chip、彩色 Badge）——实测只有 3.5:1 左右。",
@@ -348,7 +368,9 @@
       "Don't 把等宽字体用于非数据内容当作「技术感」装饰。",
       "Don't 谎报状态：无法判断的用「无更新源」，不要归入「已是最新」。",
       "Don't 让同一个标签指向两个不同的东西（「打开技能目录」曾同时表示「打开此技能文件夹」和「打开共享根目录」）。",
-      "Don't 引入移动端断点；这是最小 1200×800 的桌面应用。"
+      "Don't 引入移动端断点；这是最小 1200×800 的桌面应用。",
+      "Don't 在批量操作栏里重复显示只读的选中总数——每个按钮已有自己的数量。",
+      "Don't 给分段控件的每个选项配不同颜色；只有激活段取强调色。"
     ]
   }
 }
