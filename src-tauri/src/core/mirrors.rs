@@ -52,6 +52,28 @@ pub const MIRRORS: &[&str] = &[
 /// nothing as long as one node is fast, so this only bounds the worst case.
 const PER_RACER_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// A unique token appended to every manifest request.
+///
+/// Mirrors sit behind CDNs that cache `latest.json`, and a cache hit is *faster*
+/// than a fresh fetch — so racing on speed alone systematically prefers stale
+/// data. Observed in practice: minutes after v1.0.3 was published, the fastest
+/// node (`gh.catmak.name`) served the v1.0.2 manifest in 4 of 4 attempts, which
+/// would tell an up-to-date-looking user there is nothing to install, forever.
+/// A unique query string makes each request a cache miss; verified to return the
+/// current release from every configured node.
+///
+/// The token is also carried on the winning [`ManifestHit`], because the updater
+/// plugin re-fetches the manifest itself — if that second request were allowed
+/// to hit the same stale cache, the race would find the new version and the
+/// plugin would still report no update.
+fn cache_buster() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or_default();
+    format!("skillsage={nanos}")
+}
+
 /// The winning response: which node answered and how long it took.
 ///
 /// The body is deliberately not kept. The updater plugin re-fetches and parses
@@ -62,12 +84,25 @@ pub struct ManifestHit {
     /// Node base URL, or `None` when direct GitHub won.
     pub mirror: Option<String>,
     pub elapsed: Duration,
+    /// The cache-busting token used for this race, reused for the plugin's own
+    /// fetch so it cannot be answered from the stale cache the race bypassed.
+    pub token: String,
 }
 
 impl ManifestHit {
     /// The base to prefix asset URLs with, if a mirror won.
     pub fn mirror_base(&self) -> Option<&str> {
         self.mirror.as_deref()
+    }
+
+    /// The manifest URL to hand the updater plugin: the winning source, still
+    /// carrying the token that bypasses the stale cache.
+    pub fn endpoint(&self) -> Result<Url, SkillsageError> {
+        let base = match self.mirror_base() {
+            Some(base) => format!("{base}/{MANIFEST_URL}"),
+            None => MANIFEST_URL.to_string(),
+        };
+        Ok(Url::parse(&format!("{base}?{}", self.token))?)
     }
 }
 
@@ -121,18 +156,19 @@ async fn fetch_manifest(
 /// manifest a moment later.
 pub async fn race_manifest(proxy: Option<String>) -> Result<ManifestHit, SkillsageError> {
     let client = build_client(proxy.as_deref())?;
+    let token = cache_buster();
     let mut racers: Vec<(Option<String>, String)> = MIRRORS
         .iter()
         .map(|base| {
             (
                 Some((*base).to_string()),
-                format!("{base}/{MANIFEST_URL}"),
+                format!("{base}/{MANIFEST_URL}?{token}"),
             )
         })
         .collect();
     // Direct GitHub last in the list, but all racers start together, so its
     // position only decides ties.
-    racers.push((None, MANIFEST_URL.to_string()));
+    racers.push((None, format!("{MANIFEST_URL}?{token}")));
 
     let mut set: JoinSet<(Option<String>, Result<String, SkillsageError>, Duration)> =
         JoinSet::new();
@@ -151,7 +187,11 @@ pub async fn race_manifest(proxy: Option<String>) -> Result<ManifestHit, Skillsa
             Ok((mirror, Ok(_body), elapsed)) => {
                 // Stop the losers instead of letting them run to completion.
                 set.abort_all();
-                return Ok(ManifestHit { mirror, elapsed });
+                return Ok(ManifestHit {
+                    mirror,
+                    elapsed,
+                    token,
+                });
             }
             Ok((mirror, Err(error), _)) => {
                 failures.push(format!("{}: {error}", mirror.as_deref().unwrap_or("direct")));
@@ -222,8 +262,13 @@ pub async fn proxied_asset_url(
         return Ok(None);
     };
     let (owner, repo) = repository()?;
+    // Cache-busted for the same reason as the manifest: the release metadata is
+    // cached too, and a stale copy would not contain the asset id the fresh
+    // manifest just announced, silently dropping the download back to a direct
+    // connection that cannot work in mainland China.
     let metadata_url = format!(
-        "{mirror_base}/https://api.github.com/repos/{owner}/{repo}/releases/latest"
+        "{mirror_base}/https://api.github.com/repos/{owner}/{repo}/releases/latest?{}",
+        cache_buster()
     );
 
     let client = build_client(proxy)?;
@@ -303,5 +348,43 @@ mod tests {
             assert_eq!(url.path(), "/", "{mirror} must be a bare origin");
             assert!(url.query().is_none(), "{mirror} must not carry a query");
         }
+    }
+
+    #[test]
+    fn the_cache_buster_changes_between_calls() {
+        // Mirrors cache latest.json, and a cache hit is faster than a fresh
+        // fetch, so a constant token would let the race prefer stale data.
+        let first = cache_buster();
+        let second = cache_buster();
+        assert_ne!(first, second, "the token must differ per call");
+        assert!(first.starts_with("skillsage="));
+    }
+
+    #[test]
+    fn the_plugin_endpoint_keeps_the_cache_buster() {
+        // The plugin re-fetches the manifest itself. If that request dropped the
+        // token it could be served from the stale cache the race just bypassed,
+        // and the check would find a new version only to report none.
+        let hit = ManifestHit {
+            mirror: Some("https://gh.catmak.name".to_string()),
+            elapsed: Duration::from_millis(200),
+            token: "skillsage=123".to_string(),
+        };
+        let endpoint = hit.endpoint().expect("endpoint");
+        assert_eq!(
+            endpoint.as_str(),
+            format!("https://gh.catmak.name/{MANIFEST_URL}?skillsage=123")
+        );
+
+        // Direct GitHub must keep the token too.
+        let direct = ManifestHit {
+            mirror: None,
+            elapsed: Duration::ZERO,
+            token: "skillsage=456".to_string(),
+        };
+        assert_eq!(
+            direct.endpoint().expect("endpoint").as_str(),
+            format!("{MANIFEST_URL}?skillsage=456")
+        );
     }
 }

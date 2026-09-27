@@ -32,6 +32,49 @@ async fn racing_returns_a_valid_manifest_from_some_source() {
 
 #[tokio::test]
 #[ignore = "requires network access to third-party mirrors"]
+async fn no_mirror_serves_a_stale_manifest() {
+    // The regression that matters most. Mirrors cache latest.json, and a cache
+    // hit is faster than a fresh fetch, so racing on speed alone prefers stale
+    // data. Observed live: minutes after a release, the fastest node served the
+    // *previous* version's manifest on every attempt — an up-to-date-looking
+    // user would never be offered the update.
+    //
+    // The race's own token is what fixes it, so it is exercised here rather than
+    // a hand-written query string.
+    let hit = mirrors::race_manifest(None).await.expect("a source");
+    let raced: serde_json::Value = reqwest::get(hit.endpoint().expect("endpoint").as_str())
+        .await
+        .expect("raced manifest")
+        .json()
+        .await
+        .expect("json");
+    let raced_version = raced["version"].as_str().expect("version").to_string();
+
+    // What GitHub itself reports as the latest tag, independent of any CDN.
+    let latest: serde_json::Value = reqwest::Client::new()
+        .get("https://api.github.com/repos/aeroray/SkillSage/releases/latest")
+        .header("user-agent", "SkillSage-live-test")
+        .send()
+        .await
+        .expect("github api")
+        .json()
+        .await
+        .expect("json");
+    let latest_tag = latest["tag_name"]
+        .as_str()
+        .expect("tag_name")
+        .trim_start_matches('v')
+        .to_string();
+
+    println!("raced manifest: {raced_version} | GitHub latest: {latest_tag}");
+    assert_eq!(
+        raced_version, latest_tag,
+        "the raced manifest is stale; the cache buster is not working"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires network access to third-party mirrors"]
 async fn every_configured_mirror_serves_the_manifest() {
     // A dead node in the list is not fatal (it just loses the race) but it
     // should be noticed, since it means the list has gone stale.

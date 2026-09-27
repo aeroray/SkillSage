@@ -17,7 +17,7 @@ use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::UpdaterExt;
 use url::Url;
 
-use crate::core::mirrors::{self, MANIFEST_URL};
+use crate::core::mirrors;
 use crate::error::SkillsageError;
 
 #[derive(Debug, Clone, Serialize)]
@@ -44,15 +44,6 @@ fn source_label(mirror: Option<&str>) -> String {
     mirror.unwrap_or("direct").to_string()
 }
 
-/// The manifest URL to hand the plugin: through the winning mirror when one
-/// won, otherwise the canonical GitHub URL.
-fn endpoint_for(mirror: Option<&str>) -> Result<Url, SkillsageError> {
-    match mirror {
-        Some(base) => Ok(Url::parse(&format!("{base}/{MANIFEST_URL}"))?),
-        None => Ok(Url::parse(MANIFEST_URL)?),
-    }
-}
-
 /// Races every mirror plus direct GitHub and returns the first valid manifest.
 ///
 /// Exposed separately so the UI can report *which* source answered; the check
@@ -62,14 +53,17 @@ pub async fn race(proxy: Option<String>) -> Result<mirrors::ManifestHit, Skillsa
 }
 
 /// Builds an updater pointed at one already-chosen endpoint.
+///
+/// The endpoint comes from the hit rather than being rebuilt here so it keeps
+/// the race's cache-busting token: without it the plugin's own fetch could be
+/// answered from the same stale cache the race just bypassed, and the check
+/// would find the new version only to report no update.
 fn updater_for(
     app: &AppHandle,
-    mirror: Option<&str>,
+    hit: &mirrors::ManifestHit,
     proxy: Option<&str>,
 ) -> Result<tauri_plugin_updater::Updater, SkillsageError> {
-    let mut builder = app
-        .updater_builder()
-        .endpoints(vec![endpoint_for(mirror)?])?;
+    let mut builder = app.updater_builder().endpoints(vec![hit.endpoint()?])?;
     if let Some(proxy_url) = proxy {
         builder = builder.proxy(Url::parse(proxy_url)?);
     }
@@ -91,7 +85,7 @@ pub async fn check_app_update_with(
     proxy: Option<String>,
 ) -> Result<Option<AppUpdateInfo>, SkillsageError> {
     let hit = race(proxy.clone()).await?;
-    let updater = updater_for(app, hit.mirror_base(), proxy.as_deref())?;
+    let updater = updater_for(app, &hit, proxy.as_deref())?;
     let update = updater.check().await?;
     Ok(update.map(|update| AppUpdateInfo {
         version: update.version.clone(),
@@ -110,7 +104,7 @@ pub async fn install_app_update(
     proxy: Option<String>,
 ) -> Result<(), SkillsageError> {
     let hit = race(proxy.clone()).await?;
-    let updater = updater_for(&app, hit.mirror_base(), proxy.as_deref())?;
+    let updater = updater_for(&app, &hit, proxy.as_deref())?;
     let Some(mut update) = updater.check().await? else {
         return Err(SkillsageError::Network("没有可用的更新".into()));
     };
