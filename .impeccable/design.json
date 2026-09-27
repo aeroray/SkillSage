@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-27T09:01:29.242Z",
+  "generatedAt": "2026-09-27T09:53:14.285Z",
   "title": "Design System: SkillSage · 技匠",
   "extensions": {
     "colorMeta": {
@@ -299,13 +299,6 @@
       "css": ".ds-workspace { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-lg, 14px); background: var(--app-color-card, #ffffff); box-shadow: 0 1px 2px rgba(23, 32, 42, 0.045); } .ds-workspace-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; flex: none; padding: 16px; background: color-mix(in srgb, var(--app-color-muted, #eef1f4) 20%, transparent); } .ds-workspace-input { flex: 1; min-width: 220px; height: 36px; padding: 0 12px; border: 1px solid var(--app-color-input, #dce2e8); border-radius: var(--radius-md, 10px); background: transparent; color: var(--app-color-foreground, #17202a); font-size: 0.875rem; } .ds-workspace-input:focus-visible { outline: none; border-color: var(--app-color-ring, #16a39a); box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-color-ring, #16a39a) 60%, transparent); } .ds-workspace-action { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: none; border-radius: var(--radius-md, 10px); background: var(--app-color-secondary, #eef1f4); color: var(--app-color-secondary-foreground, #27313c); font-size: 0.75rem; font-weight: 500; cursor: pointer; } .ds-workspace-action:hover { background: color-mix(in srgb, var(--app-color-secondary, #eef1f4) 80%, transparent); } .ds-workspace-rule { flex: none; height: 1px; background: color-mix(in srgb, var(--app-color-foreground, #17202a) 20%, transparent); } .ds-workspace-body { min-height: 0; flex: 1; overflow-y: auto; padding: 16px; } .ds-workspace-row { padding: 12px 0; border-bottom: 1px solid var(--app-color-border, #e1e6eb); color: var(--app-color-foreground, #17202a); font-size: 0.875rem; } .ds-workspace-row:last-child { border-bottom: none; }"
     },
     {
-      "name": "Sidebar Workspace Card",
-      "kind": "custom",
-      "description": "签名组件。侧栏的共享目录卡片：等宽路径（可复制/可打开）+ 已安装与分发计数。把产品核心事实放在每页可见处，同时消灭侧栏空白。",
-      "html": "<section class=\"ds-wscard\"><div class=\"ds-wscard-head\"><span class=\"ds-wscard-title\">共享技能目录</span><span class=\"ds-wscard-icons\">⧉</span></div><p class=\"ds-wscard-path\">C:\\Users\\PC\\.agents\\skills</p><dl class=\"ds-wscard-stats\"><div class=\"ds-wscard-stat\"><dt>已安装</dt><dd>4</dd></div><div class=\"ds-wscard-stat\"><dt>Claude Code</dt><dd>0</dd></div><div class=\"ds-wscard-stat\"><dt>Work Buddy</dt><dd>0</dd></div></dl></section>",
-      "css": ".ds-wscard { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; padding: 12px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-lg, 14px); background: color-mix(in srgb, var(--app-color-card, #ffffff) 60%, transparent); } .ds-wscard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .ds-wscard-title { color: var(--app-color-foreground, #17202a); font-size: 0.75rem; font-weight: 500; } .ds-wscard-icons { color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; } .ds-wscard-path { margin: 0; overflow: hidden; color: var(--app-color-muted-foreground, #5f6c7e); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; } .ds-wscard-stats { display: flex; flex-direction: column; gap: 6px; margin: 0; padding-top: 12px; border-top: 1px solid var(--app-color-border, #e1e6eb); } .ds-wscard-stat { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; } .ds-wscard-stat dt { color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; } .ds-wscard-stat dd { margin: 0; color: var(--app-color-foreground, #17202a); font-size: 0.75rem; font-weight: 500; font-variant-numeric: tabular-nums; }"
-    },
-    {
       "name": "Title Bar",
       "kind": "nav",
       "description": "签名组件。自绘标题栏（decorations: false）。三段：品牌（与侧栏对齐）│ 页面名 + portal 进来的操作 │ 窗口控制。macOS 保留原生交通灯。",
@@ -353,6 +346,13 @@
       "description": "签名组件。设置页的左侧分区导航（176px）+ 右侧单一分区内容。复用主导航的样式语言，因为两者都是「选一个地方去」。一次只渲染一个分区，只有右侧滚动。",
       "html": "<div class=\"ds-set\"><nav class=\"ds-set-nav\"><button class=\"ds-set-item ds-set-item-on\">外观</button><button class=\"ds-set-item\">安全与连接</button><button class=\"ds-set-item\">AI 工具与分发</button><button class=\"ds-set-item\">设备同步</button><button class=\"ds-set-item\">关于与更新</button></nav><div class=\"ds-set-pane\"><p class=\"ds-set-title\">外观</p><p class=\"ds-set-desc\">调整显示模式和主题色，设置会立即生效。</p></div></div>",
       "css": ".ds-set { display: flex; gap: 24px; } .ds-set-nav { display: flex; flex-direction: column; gap: 4px; width: 176px; flex: none; } .ds-set-item { display: flex; align-items: center; height: 36px; padding: 0 12px; border: none; border-radius: var(--radius-md, 10px); background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.875rem; font-weight: 500; text-align: left; cursor: pointer; } .ds-set-item:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-set-item-on { background: var(--app-color-primary-soft, #e6f4f1); color: var(--app-color-primary-text, #0a7d70); } .ds-set-pane { flex: 1; min-width: 0; } .ds-set-title { margin: 0; color: var(--app-color-foreground, #17202a); font-size: 1rem; font-weight: 600; } .ds-set-desc { margin: 4px 0 0; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.875rem; line-height: 1.5rem; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "custom",
+      "description": "签名组件。技能分发状态的两种表达：列表里用圆点 + 计数（●○○ 1/3，可扫视、行高恒定），详情里用文字徽章（Claude Code · 已分发，可确认）。两者都不是纯图标。",
+      "html": "<span class=\"ds-dist\" aria-label=\"分发状态：1 / 3\"><span class=\"ds-dot ds-dot-on\"></span><span class=\"ds-dot\"></span><span class=\"ds-dot\"></span><span class=\"ds-dist-count\">1/3</span></span>\n<span class=\"ds-dist-badge\">Claude Code · 已分发</span>",
+      "css": ".ds-dist { display: inline-flex; align-items: center; gap: 8px; font-size: 0.75rem; } .ds-dist > span:not(.ds-dist-count) { width: 8px; height: 8px; border-radius: 999px; } .ds-dot { border: 1px solid color-mix(in srgb, var(--app-color-muted-foreground, #5f6c7e) 60%, transparent); } .ds-dot-on { background: var(--app-color-primary, #0d9488); } .ds-dist-count { color: var(--app-color-muted-foreground, #5f6c7e); font-variant-numeric: tabular-nums; } .ds-dist-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--app-color-success, #0d9488) 10%, transparent); color: var(--app-color-success-text, #0b7a6f); font-size: 0.75rem; font-weight: 500; }"
     }
   ],
   "narrative": {
@@ -363,15 +363,17 @@
       "一个页面一个青色：主色只标记「当前」和「唯一主操作」，其余用中性色。",
       "边框分层而非阴影分层：静态表面用 1px 边框 + 表面色差，阴影只给浮层。",
       "状态必须真实：说不清楚的结论用专门的「无更新源」，绝不谎报「已是最新」。",
-      "全部文本 ≥ 4.5:1，含浅色模式的次要文字。",
-      "留白由真实状态填充：侧栏显示共享目录路径与计数，而不是装饰。",
+      "全部文本 ≥ 4.5:1，含浅色模式的次要文字与每个主题色的 10% 浅底。",
+      "侧栏只做导航：状态信息放在它所属的页面里，不放在每个页面都看得见的地方。",
       "页头并入标题栏：页面名与操作都在 44px 标题栏，页面省下的纵向空间全部给内容。",
       "控件永远小于容器：chrome 用 28px，内容区用 32–36px。",
       "配置列全集、执行列相关项：设置页给完整清单，技能页只给本机检测到的工具。",
       "不确定必须可见：未核实来源的条目带「路径未核实」标记与依据链接。",
       "对齐不靠内容：同排对齐元素固定行高，删掉可选元素后位置不变。",
+      "行高不随数据增长：同类状态用符号 + 计数，装多少工具都不改变行高。",
       "一个外壳两种语义：所有浮层共用 dialog-shell 的外观，行为差异由 Radix 原语承担。",
-      "设置用分区导航：一次只渲染一个分区，导航固定、内容滚动。"
+      "设置用分区导航：一次只渲染一个分区，导航固定、内容滚动。",
+      "主题色是一个整体：填充、填充上的文字、浅底、边框、焦点环、文字色一起换。"
     ],
     "rules": [
       {
@@ -416,7 +418,12 @@
       },
       {
         "name": "「留白要有内容」规则",
-        "body": "侧栏和页面的空白区域必须由真实状态填充（路径、计数、统计），不用装饰性图形或占位文案填。填不出内容说明布局该收缩，而不是该装饰。",
+        "body": "侧栏和页面的空白区域必须由真实状态填充（路径、计数、统计），不用装饰性图形或占位文案填。但「有内容」不等于「什么内容都往这里塞」——见「侧栏只做导航」：填充必须放在它所属的页面里，不是放在每个页面都看得见的地方。",
+        "section": "layout"
+      },
+      {
+        "name": "「侧栏只做导航」规则",
+        "body": "侧栏是「去哪」，不是「有什么」。曾经在导航下方放了一张「共享技能目录」卡片（路径 + 计数），但它让侧栏变成第二个信息面板：每个页面都要看它一眼，而它承载的内容在技能页里本来就是主要内容。状态信息放在它所属的页面里。",
         "section": "layout"
       },
       {
@@ -480,6 +487,16 @@
         "section": "layout"
       },
       {
+        "name": "「列表行高不随数据增长」规则",
+        "body": "列表里表示「多个同类状态」时，用固定尺寸的符号 + 计数，不要每个状态占一行。技能行的分发状态曾经是每个工具一行，装了八个工具就是八行；改成圆点 + 1/3 后行高恒定 72px，信息量不变。判断方法：把这个字段的取值数量从 1 增加到 10，行高是否变化。",
+        "section": "layout"
+      },
+      {
+        "name": "「改主题色要换掉整套 primary」规则",
+        "body": "主题色不能只覆盖填充色。--app-color-primary（填充）、-foreground（填充上的文字）、-soft（浅底）、-border、-ring、-text（作为文字时）是一个整体，任何一个漏掉都会让主题看起来「只换了一半」。曾经三个非默认主题都漏了 -text，于是蓝色按钮上的文字仍是青色——这正是「按钮背景是主题色但字还是绿的」的原因。新增主题时逐个核对这六个 token，并用对比度检查（≥ 4.5:1，含各自的 10% 浅底）。",
+        "section": "colors"
+      },
+      {
         "name": "「浮层才投影」规则",
         "body": "阴影是「这一层可以关闭、且盖住了下方内容」的信号。静态内容用边框，不用阴影。零偏移的彩色光晕属于装饰，不在这套系统里。",
         "section": "elevation"
@@ -500,7 +517,7 @@
       "Do 保持所有正文与占位符文字 ≥ 4.5:1，图标 ≥ 3:1。",
       "Do 让新页面沿用「工作区卡片」骨架：固定工具条 + 唯一滚动列表区。",
       "Do 用容器查询（@container + @lg:/@4xl:）决定栅格列数。",
-      "Do 让侧栏显示真实状态（共享目录路径、已安装与分发计数），而不是留空。",
+      "Do 让侧栏只做导航；状态信息放在它所属的页面里。",
       "Do 把页面操作 portal 到标题栏，页面自己不画页头。",
       "Do 给标题栏的拖拽区写 data-tauri-drag-region=\"deep\"，否则子元素拖不动。",
       "Do 按容器选按钮尺寸：标题栏用 xs，卡片用 sm，页面主操作用 default。",
@@ -510,7 +527,9 @@
       "Do 给同排需要对齐的行加显式 min-h-*；判断方法是删掉可选元素后位置不变。",
       "Do 用原生文件/目录选择器代替让用户手打路径。",
       "Do 让所有浮层的外观来自 dialog-shell.ts，页脚是组件的一部分。",
-      "Do 设置类页面用分区导航，一次只渲染一个分区。"
+      "Do 设置类页面用分区导航，一次只渲染一个分区。",
+      "Do 让列表行高恒定：同类状态用符号 + 计数，不要每个占一行。",
+      "Do 新增主题时补齐 primary 的六个 token（含 -text 与 -foreground）并做对比度检查。"
     ],
     "donts": [
       "Don't 用 text-muted-foreground 渲染彩色底上的文字（chip、彩色 Badge）——实测只有 3.5:1 左右。",
@@ -523,6 +542,7 @@
       "Don't 引入移动端断点；这是最小 1200×800 的桌面应用。",
       "Don't 用视口断点（md: / xl:）排内容区栅格；它不知道导航栏占了多少宽度。",
       "Don't 用装饰性图形或占位文案填充空白区域。",
+      "Don't 把状态信息塞进每个页面都看得见的侧栏；它属于具体页面。",
       "Don't 给页面画自己的页头（标题 + 描述）；标题栏已经有页面名。",
       "Don't 在标题栏上自己实现双击最大化；Tauri 的拖拽脚本已经做了。",
       "Don't 用裸 data-tauri-drag-region；子元素会变成拖不动的死区。",
@@ -533,7 +553,9 @@
       "Don't 要求用户手动输入文件或目录路径作为唯一方式。",
       "Don't 让两个语义不同的浮层长成两个样子；外观必须来自同一处。",
       "Don't 在对话框里各写一套按钮行；用 footer。",
-      "Don't 用多列卡片瀑布排设置项；那没有阅读顺序。"
+      "Don't 用多列卡片瀑布排设置项；那没有阅读顺序。",
+      "Don't 让列表行高随取值数量增长。",
+      "Don't 只覆盖主题的填充色而不覆盖它的文字色。"
     ]
   }
 }
