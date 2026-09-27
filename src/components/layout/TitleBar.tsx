@@ -56,13 +56,19 @@ function WindowControls() {
     // `false` blocks dragging for this subtree and its ancestors' walk, so the
     // gaps between the controls never start a window drag.
     <div className="flex items-center gap-px" data-tauri-drag-region="false">
+      {/* Lucide glyphs are inset differently inside the 24-unit viewBox, so an
+          identical box size does NOT give identical optical weight: at 14px the
+          square draws 10.5px of ink while the X draws only 7px (12 vs 18
+          units). Each icon therefore gets the box that matches its neighbours'
+          ink — a horizontal dash and an X both need a larger box than a
+          square to read as the same size. */}
       <Button
         aria-label="最小化"
         onClick={() => void win.minimize()}
         size="icon-xs"
         variant="ghost"
       >
-        <Minus aria-hidden="true" />
+        <Minus aria-hidden="true" className="size-4" />
       </Button>
       <Button
         aria-label={maximized ? "向下还原" : "最大化"}
@@ -79,7 +85,7 @@ function WindowControls() {
         size="icon-xs"
         variant="ghost"
       >
-        <X aria-hidden="true" />
+        <X aria-hidden="true" className="size-5" />
       </Button>
     </div>
   );

@@ -134,36 +134,26 @@ function LoadingCards() {
 }
 
 function SkillCard({
-  description,
-  installedSkillIds,
   group,
+  installedSkillIds,
   onOpen,
   onQuickInstall,
   quickInstallDisabled,
   quickInstallingSkillId,
-  translatedDescription,
-  descriptionMode,
 }: {
-  description?: string;
   group: SkillGroup;
   installedSkillIds: ReadonlySet<string>;
   onOpen: (skillId: string) => void;
   onQuickInstall: (skill: SkillSearchResult) => void;
   quickInstallDisabled: boolean;
   quickInstallingSkillId?: string;
-  translatedDescription?: string;
-  descriptionMode: DescriptionMode;
 }) {
   const { primary, additional, source } = group;
   const installed = installedSkillIds.has(primary.id);
   const quickInstalling = quickInstallingSkillId === primary.id;
-  const displayedDescription =
-    descriptionMode === "translated"
-      ? translatedDescription ?? description
-      : description;
   return (
     <Card
-      className="cursor-pointer gap-0 py-0 shadow-sm transition-[background-color,border-color] duration-150 hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="h-full cursor-pointer gap-0 py-0 shadow-sm transition-[background-color,border-color] duration-150 hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       onClick={() => onOpen(primary.id)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -175,6 +165,10 @@ function SkillCard({
       role="group"
       tabIndex={0}
     >
+      {/* No description here: it is long, variable, and the reason cards used to
+          differ in height. It stays available in the detail dialog one click
+          away. Without it every card has the same two-line head and one-line
+          foot, so the grid rows come out even with nothing padded out. */}
       <CardHeader className="flex flex-row items-start justify-between gap-3 p-4 pb-3">
         <div className="min-w-0">
           <CardTitle className="truncate text-sm font-medium">
@@ -183,15 +177,6 @@ function SkillCard({
           <CardDescription className="mt-0.5 truncate font-mono text-xs">
             {source}
           </CardDescription>
-          {/* The description is capped at two lines and the card grows only as
-              far as it needs. No reserved empty block: an installed card has
-              nothing to say here, so it stays short rather than carrying a
-              blank the height of a description it will never show. */}
-          {!installed && displayedDescription ? (
-            <CardDescription className="mt-2 line-clamp-2 text-xs leading-5">
-              {displayedDescription}
-            </CardDescription>
-          ) : null}
         </div>
         {installed ? (
           <Button
@@ -721,18 +706,14 @@ export function StorePage() {
                     reached ~1508px. Keyed to the container, the columns track
                     the space the grid actually has. */}
                 <div className="@container p-4">
-                  {/* `items-start` keeps every card at its own content height.
-                      Stretching them to the tallest card in the row is what
-                      created the hollow middle on installed skills, which have
-                      no description to fill it. */}
-                  <div className="grid items-start gap-3 @lg:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
+                  {/* Equal-height cards: `items-stretch` (the grid default)
+                      plus `h-full` on the card, with the footer pinned by
+                      `mt-auto`. Every card has the same two-line head and
+                      one-line foot now that the variable description is gone,
+                      so the rows come out even without padding anything out. */}
+                  <div className="grid gap-3 @lg:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
                 {groups.map((group) => (
                   <SkillCard
-                    description={group.primary.description}
-                    descriptionMode={
-                      descriptionModes[group.primary.id] ??
-                      (translations[group.primary.id] ? "translated" : "original")
-                    }
                     group={group}
                     installedSkillIds={installedSkillIds}
                     key={group.source}
@@ -744,7 +725,6 @@ export function StorePage() {
                       conflictCheck.checking
                     }
                     quickInstallingSkillId={quickInstallingSkillId}
-                    translatedDescription={translations[group.primary.id]}
                   />
                 ))}
               </div>
