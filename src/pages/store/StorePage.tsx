@@ -208,7 +208,13 @@ function SkillCard({
         )}
       </CardHeader>
       <CardContent className="mt-auto p-4 pt-0">
-        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        {/* The footer row keeps a fixed height. Without it the row is as tall
+            as its own content, so a card with the "same repository" button
+            (32px) sat its installs text 9px higher than a card without one —
+            the two cards in a row visibly disagreed on where the baseline was.
+            `min-h-8` matches the button height, so the text lands in the same
+            place either way. */}
+        <div className="flex min-h-8 items-center justify-between gap-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <Download aria-hidden="true" className="size-3.5" />
             {formatCount(primary.installs)} 次安装
