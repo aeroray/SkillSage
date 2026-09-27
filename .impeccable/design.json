@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-27T07:35:21.589Z",
+  "generatedAt": "2026-09-27T08:17:11.771Z",
   "title": "Design System: SkillSage · 技匠",
   "extensions": {
     "colorMeta": {
@@ -332,6 +332,13 @@
       "description": "签名组件。自绘的最小化 / 最大化 / 关闭。图标按视觉墨迹配平，而不是按盒子：X 用 20px、Square 用 14px、Minus 用 16px，使三者墨迹落在 9.3–10.5px。",
       "html": "<div class=\"ds-wctl\" data-tauri-drag-region=\"false\"><button class=\"ds-wctl-btn\" aria-label=\"最小化\">─</button><button class=\"ds-wctl-btn\" aria-label=\"最大化\">□</button><button class=\"ds-wctl-btn ds-wctl-close\" aria-label=\"关闭\">✕</button></div>",
       "css": ".ds-wctl { display: flex; align-items: center; gap: 1px; } .ds-wctl-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: none; border-radius: var(--radius-md, 10px); background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.875rem; cursor: pointer; } .ds-wctl-btn:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-wctl-close:hover { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 15%, transparent); color: var(--app-color-destructive-text, #b23b37); }"
+    },
+    {
+      "name": "Tool Row",
+      "kind": "custom",
+      "description": "签名组件。设置页「AI 工具与分发」里的一行。名称 + 安装/未检测到徽章 + 解析后的技能目录，未核实来源额外标注「路径未核实」。唯一设置是「读取公共技能目录」勾选框，说明当前后果而非机制。",
+      "html": "<li class=\"ds-tool\"><div class=\"ds-tool-top\"><div class=\"ds-tool-id\"><div class=\"ds-tool-name\">Claude Code <span class=\"ds-tool-badge ds-tool-badge-ok\">已安装</span></div><p class=\"ds-tool-path\">C:\\Users\\PC\\.claude\\skills</p></div><button class=\"ds-tool-act\" aria-label=\"自定义技能目录\">📁</button></div><label class=\"ds-tool-toggle\"><input type=\"checkbox\" /><span><span class=\"ds-tool-toggle-title\">读取公共技能目录</span><span class=\"ds-tool-toggle-help\">需要为每个技能单独建立链接。</span></span></label><a class=\"ds-tool-src\" href=\"#\">查看依据 ↗</a></li>",
+      "css": ".ds-tool { display: flex; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-lg, 14px); background: color-mix(in srgb, var(--app-color-muted, #eef1f4) 30%, transparent); list-style: none; } .ds-tool-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; } .ds-tool-name { display: flex; align-items: center; gap: 8px; color: var(--app-color-foreground, #17202a); font-size: 0.875rem; font-weight: 500; } .ds-tool-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 500; } .ds-tool-badge-ok { background: color-mix(in srgb, var(--app-color-success, #0d9488) 10%, transparent); color: var(--app-color-success-text, #0b7a6f); } .ds-tool-path { margin: 4px 0 0; color: var(--app-color-muted-foreground, #5f6c7e); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-tool-act { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; border-radius: var(--radius-md, 10px); background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); cursor: pointer; } .ds-tool-act:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-tool-toggle { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: var(--radius-md, 10px); background: color-mix(in srgb, var(--app-color-background, #f5f6f8) 60%, transparent); cursor: pointer; } .ds-tool-toggle-title { display: block; color: var(--app-color-foreground, #17202a); font-size: 0.75rem; font-weight: 500; } .ds-tool-toggle-help { display: block; margin-top: 2px; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; line-height: 1.25rem; } .ds-tool-src { width: fit-content; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; text-decoration: none; } .ds-tool-src:hover { color: var(--app-color-foreground, #17202a); text-decoration: underline; text-underline-offset: 4px; }"
     }
   ],
   "narrative": {
@@ -345,7 +352,9 @@
       "全部文本 ≥ 4.5:1，含浅色模式的次要文字。",
       "留白由真实状态填充：侧栏显示共享目录路径与计数，而不是装饰。",
       "页头并入标题栏：页面名与操作都在 36px 标题栏，页面省下的纵向空间全部给内容。",
-      "控件永远小于容器：chrome 用 28px，内容区用 32–36px。"
+      "控件永远小于容器：chrome 用 28px，内容区用 32–36px。",
+      "配置列全集、执行列相关项：设置页给完整清单，技能页只给本机检测到的工具。",
+      "不确定必须可见：未核实来源的条目带「路径未核实」标记与依据链接。"
     ],
     "rules": [
       {
@@ -424,6 +433,16 @@
         "section": "layout"
       },
       {
+        "name": "「配置列全集，执行列相关项」规则",
+        "body": "设置页列出完整清单（约 27 个工具），技能页只列出本机已检测到的工具。配置需要全集才能改到任何一项；执行只需要相关项，把 19 个用不上的工具铺进每一行会淹没真正要操作的两三个。判断标准是「这一屏是配置还是执行」，不是「哪个列表更全」。",
+        "section": "layout"
+      },
+      {
+        "name": "「不把猜测当事实」规则",
+        "body": "数据来源的可靠程度必须在界面上可见。工具注册表里每条记录都带 source 文档地址和 verified 标记；来自第三方清单而非官方文档的路径必须显示「路径未核实」，而不是和已确认的条目长得一样。宁可让用户知道某条信息可能不对，也不要让不确定看起来确定。",
+        "section": "layout"
+      },
+      {
         "name": "「浮层才投影」规则",
         "body": "阴影是「这一层可以关闭、且盖住了下方内容」的信号。静态内容用边框，不用阴影。零偏移的彩色光晕属于装饰，不在这套系统里。",
         "section": "elevation"
@@ -448,7 +467,9 @@
       "Do 把页面操作 portal 到标题栏，页面自己不画页头。",
       "Do 给标题栏的拖拽区写 data-tauri-drag-region=\"deep\"，否则子元素拖不动。",
       "Do 按容器选按钮尺寸：标题栏用 xs，卡片用 sm，页面主操作用 default。",
-      "Do 要等高就让各项结构一致（字段数、行数相同），而不是预留空块。"
+      "Do 要等高就让各项结构一致（字段数、行数相同），而不是预留空块。",
+      "Do 让配置界面列出全集，让执行界面只列出本机相关的项。",
+      "Do 把数据来源的可靠程度显示出来（「路径未核实」+ 依据链接）。"
     ],
     "donts": [
       "Don't 用 text-muted-foreground 渲染彩色底上的文字（chip、彩色 Badge）——实测只有 3.5:1 左右。",
@@ -464,7 +485,9 @@
       "Don't 给页面画自己的页头（标题 + 描述）；标题栏已经有页面名。",
       "Don't 在标题栏上自己实现双击最大化；Tauri 的拖拽脚本已经做了。",
       "Don't 用裸 data-tauri-drag-region；子元素会变成拖不动的死区。",
-      "Don't 为对齐预留空白块；让各项结构一致，而不是塞等高占位。"
+      "Don't 为对齐预留空白块；让各项结构一致，而不是塞等高占位。",
+      "Don't 把全部注册项铺进执行界面；用户只关心本机相关的那几项。",
+      "Don't 让未核实的数据和已确认的数据长得一样。"
     ]
   }
 }

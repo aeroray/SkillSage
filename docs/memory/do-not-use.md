@@ -22,11 +22,25 @@ guarantee that doesn't actually hold was pure complexity with no real benefit. S
 entry for the replacement design (direct install into `~/.agents/skills/`, no tool
 concept at all).
 
-The current product has two deliberate compatibility exceptions: an installed skill may
-create a managed link in Claude Code's `~/.claude/skills/<name>` directory or Work Buddy's
-`~/.workbuddy-ai/skills/<name>` directory. This does not restore the old registry or
-multi-tool distribution model; do not generalize these explicit adapters into tool
-detection, batch distribution, or per-tool isolation.
+## What is still forbidden from that model
+
+The 2026-09-24 registry (see `decisions.md`) restores a *declarative* tool list and per-tool
+links, but it does **not** restore the parts that made the old model wrong. Still do not
+reintroduce:
+
+- A private central repository, or any model where the shared directory is not the one
+  real copy of a skill.
+- Link-based isolation, or any claim that a tool cannot see a skill.
+- A per-tool conflict/takeover transaction. Path conflicts stay single-path
+  (skip/takeover/cancel) against the shared directory only.
+- Copying skill content into a tool directory. Links only.
+- Hardcoding a tool list in more than one place. `core/tools.rs` is the only registry; the
+  frontend receives it from the backend and must not name a tool itself.
+- A tool path that no vendor documentation supports. Every entry carries a `source` URL and
+  a `verified` flag; an unverified entry must say so in the UI rather than present a guess
+  as fact.
+- Restoring the two-boolean `claudeDistributed` / `workbuddyDistributed` representation.
+  Distribution is a `distributedTo` list of registry ids.
 
 ## Historical specification files retired
 

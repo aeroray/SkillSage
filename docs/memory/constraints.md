@@ -1,7 +1,11 @@
 # Constraints
 
 - Do not call `npx skills`; download, parse, install, update, and uninstall are Rust-owned.
-- All skills install as real content directly into the single shared public directory (`~/.agents/skills/`, flat, no per-owner subfolder). Claude Code and Work Buddy compatibility distribution are the supported link adapters: they create managed directory links at `~/.claude/skills/<name>` and `~/.workbuddy-ai/skills/<name>` and never copy content; there is no general tool detection or registry.
+- All skills install as real content directly into the single shared public directory (`~/.agents/skills/`, flat, no per-owner subfolder). Per-tool distribution is a managed directory link at the tool's own skills directory and never copies content. The tool list lives only in `core/tools.rs`; each entry carries its path, whether it reads the shared directory, the documentation URL, and a `verified` flag. The frontend must not name a tool itself.
+- Whether a tool reads the shared directory is user-overridable in Settings (`StoredSettings.toolOverrides`). A tool marked as reading the shared directory must not be linked, and turning the flag on removes that tool's existing links.
+- Only tools detected on the machine (plus any already holding a link for that skill) appear in per-skill distribution UI. Settings lists the full registry. Never render all ~19 distributable tools against every skill row.
+- The lock file is version 3 and stores `distributedTo: Vec<String>` of tool ids, recomputed from the filesystem on read. Version 2 files are migrated in place by folding their `claudeDistributed` / `workbuddyDistributed` booleans into the list; version 1 files are still treated as absent.
+- `~/.workbuddy-ai/skills` is not a real directory and must never be written to again. The correct CodeBuddy/WorkBuddy path is `~/.codebuddy/skills` (see `docs/research/workbuddy-skill-path.md`). Legacy links there are removed at startup only when they resolve inside the shared directory.
 - The application is desktop-only: the main window must open at 1200×800, never resize below 1200×800, and may be maximized; do not add mobile-specific layout requirements.
 - The old Phase 1 shell is historical; the shipped application includes the completed store, lifecycle, adopt, sync, and settings flows. There is no app-level cleanup/stop-management flow.
 - UI uses Slate Blue primary colors, system fonts, CSS radius variables (`--radius`, `--radius-lg`), 4px spacing increments, `shadow-sm`/`shadow-lg` only, Lucide icons, and shadcn-style primitives.

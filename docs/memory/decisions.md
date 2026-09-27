@@ -269,6 +269,26 @@ Reason: Claude currently does not read the shared directory, while a link preser
 Decision: A skill can optionally link from `~/.workbuddy-ai/skills/<name>` to its real `~/.agents/skills/<name>` directory, with an independent per-skill UI toggle alongside Claude Code.
 Reason: Work Buddy uses a separate local skill root, while explicit adapters preserve one shared copy without reintroducing a general tool registry.
 
+## 2026-09-24 - Declarative tool registry replaces the two hardcoded adapters
+
+Decision: A skill installs once into the shared directory, and is then linked into the directory of each **detected** tool that does not read that shared directory. The set of tools is a built-in registry (`core/tools.rs`) of ~27 entries, each carrying its skills directory, whether it reads the shared directory, the documentation URL the entry came from, and whether that source is vendor documentation or a third-party table.
+Reason: The previous two hardcoded adapters (Claude Code, Work Buddy) could not answer "which tools does this machine actually have", and shipped a Work Buddy path (`~/.workbuddy-ai/skills`) that does not exist — so an uninstalled tool kept appearing as a valid distribution target. A registry with a per-tool source URL makes a wrong entry checkable instead of guessed.
+
+Decision: Whether a tool reads the shared directory is a **user-overridable setting**, not a compile-time constant.
+Reason: Tools gain shared-directory support over time. Claude Code currently does not read `~/.agents/skills/` while Cursor, Copilot, OpenCode, Amp, Gemini CLI, Windsurf/Devin, Droid, Roo Code and Zed do — and that list changes. A user who finds their tool now reads the shared directory can turn distribution off without waiting for a release.
+
+Decision: Turning on "reads the shared directory" for a tool removes the now-redundant links for that tool, and the tool drops out of the per-skill distribution list. The backend refuses to create a link for a tool marked as reading the shared directory.
+Reason: The two states are mutually exclusive; keeping a link would duplicate the skill and contradict the setting the user just changed.
+
+Decision: The per-skill distribution list is stored as `distributedTo: Vec<String>` of tool ids, replacing the `claudeDistributed` / `workbuddyDistributed` booleans, and is recomputed from the filesystem on every read rather than trusted from the lock file.
+Reason: The directory is the source of truth — a link removed outside the app must stop being reported — and a list can express any registry size where two booleans could not. The lock format version is now 3; a version 2 file is migrated in place by folding its flags into the list, and a version 1 file is still treated as absent.
+
+Decision: The distribution UI shows only tools detected on this machine, plus any that already hold a link for that skill. Settings lists the whole registry.
+Reason: The registry has ~19 tools that need a link. Showing all of them per skill row would bury the two or three that matter; showing them all in the sidebar would make the card taller than the window.
+
+Decision: Links left in `LEGACY_SKILLS_DIRS` (the old `.workbuddy-ai/skills`) are removed at startup, but only when they point back into the shared directory, and the emptied folder is deleted.
+Reason: Those links pointed at a directory no tool reads, which is precisely why an uninstalled tool still looked available. Restricting removal to links that resolve inside the shared directory means an unrelated entry in a leftover folder is never deleted.
+
 ## 2026-08-20 - Historical specifications retired
 
 Decision: Keep current product context in source, tests, README, QA guidance, and active memory; retire the historical `docs/specs/` and design-system master documents.

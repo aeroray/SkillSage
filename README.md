@@ -23,8 +23,8 @@
 - **技能商店**：搜索 skills.sh，查看技能详情，并从商店或 GitHub 安装技能。
 - **本地导入**：导入 `SKILL.md` 文件、技能目录，或包含单个技能目录的父目录。
 - **本地技能在线匹配**：对 `local://` 技能主动搜索 skills.sh 的名称匹配候选，并用本地目录指纹核对远端当前内容；完全一致的候选会优先推荐。确认后只链接远端来源记录，不替换现有本地文件，并启用后续更新。
-- **共享目录管理**：Cursor、GitHub Copilot、OpenAI Codex CLI 和 OpenCode 可直接读取 `~/.agents/skills/` 中的技能内容。
-- **工具兼容分发**：Claude Code 和 Work Buddy 可在每个技能菜单中分别分发或取消分发，使用目录链接读取同一份共享内容。
+- **共享目录管理**：技能只安装一份，放在 `~/.agents/skills/`；Zed、Cursor、GitHub Copilot、OpenCode、Amp、Gemini CLI 等工具可直接读取。
+- **工具分发**：不读取共享目录的工具（Claude Code、CodeBuddy/WorkBuddy、Codex、Cline 等）按需在各自技能目录建立链接。工具清单内置约 27 项并自动检测本机安装情况；每个工具的「读取公共技能目录」开关可在设置页修改，勾选后即不再对其分发。
 - **采纳技能**：扫描 `~/.agents/skills/` 中未登记的真实技能目录，按 `SKILL.md` 名称安全采纳，并处理名称不一致或无效目录。
 - **设置与同步**：配置代理、保存 GitHub Token 到系统密钥环，并导入或导出远程技能记录和非敏感应用设置。
 - **可诊断性**：统一的加载/错误状态，以及写入平台应用日志目录的普通日志和 tracing 日志。
@@ -91,15 +91,29 @@ SkillSage 将技能内容与管理数据分开保存：
 | 数据               | 位置                                                |
 | ------------------ | --------------------------------------------------- |
 | 共享技能目录       | `~/.agents/skills/`                                 |
-| Claude 技能链接    | `~/.claude/skills/<name>`                           |
-| Work Buddy 技能链接 | `~/.workbuddy-ai/skills/<name>`                    |
+| 工具技能链接       | 各工具自己的技能目录，见下表                        |
 | 技能锁定记录       | `~/.skillsage/lock/skill-lock.json`                 |
 | 更新临时文件       | `~/.skillsage/tmp/`                                  |
 | 同步数据文件       | 用户在导出时选择的位置                              |
 | 代理配置           | `~/.skillsage/settings.json`                        |
 
-- 技能内容直接写入共享目录；只有用户明确选择工具分发时，才会在对应工具目录创建指向共享目录的目录链接，不复制技能内容。
-- Claude Code 和 Work Buddy 分发在 Windows 使用 directory junction，在 macOS 使用 symlink；取消分发或卸载时只删除 SkillSage 确认归属的链接。
+技能内容直接写入共享目录。已经读取共享目录的工具不需要任何额外操作；其余工具会在其自身技能目录中创建一个指向共享目录的目录链接，不复制技能内容。
+
+| 工具                | 技能目录                    | 读取共享目录 |
+| ------------------- | --------------------------- | ------------ |
+| Claude Code         | `~/.claude/skills`          | 否           |
+| CodeBuddy / WorkBuddy | `~/.codebuddy/skills`     | 否           |
+| OpenAI Codex CLI    | `~/.codex/skills`           | 否           |
+| Cline               | `~/.cline/skills`           | 否           |
+| Cursor              | `~/.cursor/skills`          | 是           |
+| GitHub Copilot      | `~/.copilot/skills`         | 是           |
+| OpenCode            | `~/.config/opencode/skills` | 是           |
+| Zed                 | 无独立目录                  | 是           |
+
+完整清单（约 27 个工具）位于 `src-tauri/src/core/tools.rs`，每个条目都带有技能目录、是否读取共享目录、依据的文档地址以及该依据是否来自官方文档。**「读取共享目录」可以在设置页逐个工具修改**：某个工具将来开始支持共享目录时，勾选后即不再对它分发，已有的链接会被移除。
+
+- 工具分发在 Windows 使用 directory junction，在 macOS 使用 symlink；取消分发或卸载时只删除 SkillSage 确认归属的链接。
+- 只有**本机已检测到**的工具会出现在技能行的分发列表中；设置页则列出完整清单，未安装的工具也可手动指定目录。
 - 同步数据包含远程技能记录和非敏感应用设置；GitHub Token 使用 Windows 凭据管理器或 macOS Keychain 保存，不写入同步文件、设置文件或日志。
 - 远程技能保留当前 Git 提交和内容指纹，用于检查更新以及在同步导入时恢复对应内容；不维护版本历史或本地快照。
 - 移除应用不会修改共享技能目录；如需删除技能，请在“我的技能”中单独卸载。
