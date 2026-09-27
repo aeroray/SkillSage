@@ -289,6 +289,26 @@ Reason: The registry has ~19 tools that need a link. Showing all of them per ski
 Decision: Links left in `LEGACY_SKILLS_DIRS` (the old `.workbuddy-ai/skills`) are removed at startup, but only when they point back into the shared directory, and the emptied folder is deleted.
 Reason: Those links pointed at a directory no tool reads, which is precisely why an uninstalled tool still looked available. Restricting removal to links that resolve inside the shared directory means an unrelated entry in a leftover folder is never deleted.
 
+## 2026-09-27 - Mirror racing for the in-app updater
+
+Decision: The update check and download race every configured GitHub mirror plus direct GitHub concurrently, and use whichever returns a valid manifest first. The list is `core/mirrors.rs`'s `MIRRORS`: `gh.catmak.name`, `cdn.akaere.online`, `fastgit.cc`, `githubdog.com`, `github.geekery.cn`, measured against the real manifest with a warm connection.
+Reason: GitHub release downloads are frequently unreachable or very slow from mainland China, which made the update check fail outright rather than merely run slowly. These nodes are volunteer-run and disappear without notice, so pinning one would eventually break for every user at once; racing means a dead node costs nothing. Direct GitHub is raced alongside them so users outside China are never penalised.
+
+Decision: The updater plugin supplies signature verification and the platform installer, but not endpoint selection. `core/mirrors.rs` picks the endpoint; `commands/update.rs` hands the plugin a single one.
+Reason: The plugin walks its endpoint list *sequentially*, so on a network where the first endpoint hangs the user waits out the full timeout before the next is tried — the opposite of what a China-facing fallback chain needs.
+
+Decision: Only the transport is ours. The plugin still verifies the minisign signature over the downloaded bytes against the configured public key.
+Reason: Fetching the binary from a community mirror must not be able to substitute different content. A tampered mirror produces a signature failure, not an install.
+
+Decision: A winning mirror's manifest is re-fetched by the plugin, but the asset URL inside it is rewritten from `api.github.com/.../releases/assets/<id>` onto the node's `releases/download/<tag>/<file>` form, resolved from the release metadata fetched through the same node. If the rewrite cannot be resolved, the original URL is kept.
+Reason: Every node was verified to proxy the manifest but to leave the asset URL pointing at `api.github.com`, which most nodes then reject with 403/404 — so without this the check would succeed through a mirror and the download would fail. Falling back rather than erroring keeps direct downloads working, since a rewrite failure must not turn a working update into a broken one.
+
+Decision: `MANIFEST_URL` must equal `plugins.updater.endpoints` in `tauri.conf.json`, enforced by the `manifest_url_matches_tauri_config` test.
+Reason: If the two drifted, a mirror could serve a manifest for a different release than the plugin would have fetched directly.
+
+Decision: The live node checks (`tests/mirrors_live.rs`) are `#[ignore]`d and run explicitly with `--ignored`.
+Reason: They need network access and depend on third-party hosts that come and go, so they must not make the normal test run flaky — but the racing and the asset rewrite genuinely cannot be verified with a mock, because the whole question is what the real nodes do.
+
 ## 2026-08-20 - Historical specifications retired
 
 Decision: Keep current product context in source, tests, README, QA guidance, and active memory; retire the historical `docs/specs/` and design-system master documents.
