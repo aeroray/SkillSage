@@ -265,12 +265,9 @@ function DetailContent({
   descriptionMode,
   detail,
   installError,
-  installing,
   onDescriptionModeChange,
   onOpenSettings,
-  onInstall,
   onTranslate,
-  stage,
   translation,
   translationError,
   translationLoading,
@@ -278,12 +275,9 @@ function DetailContent({
   descriptionMode: DescriptionMode;
   detail: SkillDetail;
   installError?: string;
-  installing: boolean;
   onDescriptionModeChange: (mode: DescriptionMode) => void;
-  onInstall: () => void;
   onOpenSettings: () => void;
   onTranslate: () => void;
-  stage: string;
   translation?: string;
   translationError?: string;
   translationLoading: boolean;
@@ -417,16 +411,6 @@ function DetailContent({
           error={installError}
           onOpenSettings={onOpenSettings}
         />
-        <div className="mt-5 flex justify-end">
-          <Button aria-busy={installing} disabled={installing} onClick={onInstall}>
-            {installing ? (
-              <LoaderCircle aria-hidden="true" className="animate-spin" data-icon="inline-start" />
-            ) : (
-              <Download data-icon="inline-start" />
-            )}
-            {installing ? `${stageLabels[stage] ?? "处理中"}…` : "开始安装"}
-          </Button>
-        </div>
       </section>
     </div>
   );
@@ -755,6 +739,28 @@ export function StorePage() {
 
       <Dialog
         description={detail?.source ?? "加载技能详情"}
+        footer={
+          detail ? (
+            <Button
+              aria-busy={installState.installing || conflictCheck.checking}
+              disabled={installState.installing || conflictCheck.checking}
+              onClick={() => void startStoreInstall()}
+            >
+              {installState.installing ? (
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="animate-spin"
+                  data-icon="inline-start"
+                />
+              ) : (
+                <Download data-icon="inline-start" />
+              )}
+              {installState.installing
+                ? `${stageLabels[installState.stage] ?? "处理中"}…`
+                : "开始安装"}
+            </Button>
+          ) : undefined
+        }
         headerActions={
           detail ? (
             <Button
@@ -791,17 +797,14 @@ export function StorePage() {
             descriptionMode={detailDescriptionMode}
             detail={detail}
             installError={installState.error ?? conflictCheck.error}
-            installing={installState.installing || conflictCheck.checking}
             onDescriptionModeChange={(mode) => {
               setDescriptionModes((current) => ({
                 ...current,
                 [detail.id]: mode,
               }));
             }}
-            onInstall={() => void startStoreInstall()}
             onOpenSettings={() => navigate("/settings")}
             onTranslate={() => void translateDescription()}
-            stage={installState.stage}
             translation={detailTranslation}
             translationError={detail ? translationErrors[detail.id] : undefined}
             translationLoading={detailTranslationLoading}

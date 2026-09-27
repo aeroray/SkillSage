@@ -1,15 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../../components/ui/alert-dialog";
-import {
   Accordion,
   AccordionContent,
   AccordionItem,
@@ -56,6 +46,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
+import { ConfirmDialog } from "../../components/ui/confirm-dialog";
 import { Dialog } from "../../components/ui/dialog";
 import {
   DropdownMenu,
@@ -1846,66 +1837,37 @@ export function SkillsPage() {
           />
         ) : null}
       </Dialog>
-      <AlertDialog
+      <ConfirmDialog
+        confirmDisabled={Boolean(management.pending)}
+        confirmLabel={management.pending ? "卸载中" : "卸载"}
+        confirmVariant="destructive"
+        description={`会删除“${uninstallTarget?.name}”在共享目录中的文件夹和记录，所有读取该目录的 AI 工具会立即失去这个技能，不影响其他技能。`}
+        onConfirm={() => void confirmUninstall()}
         onOpenChange={(open) => !open && setUninstallTarget(undefined)}
         open={Boolean(uninstallTarget)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认卸载</AlertDialogTitle>
-            <AlertDialogDescription>
-              会删除这个技能在共享目录中的文件夹和记录，所有读取该目录的 AI
-              工具会立即失去这个技能，不影响其他技能。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <p className="text-sm leading-6 text-muted-foreground">
-            确定卸载“{uninstallTarget?.name}”？
-          </p>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={Boolean(management.pending)}
-              onClick={() => void confirmUninstall()}
-              variant="destructive"
-            >
-              {management.pending ? "卸载中" : "卸载"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog
+        title="确认卸载"
+      />
+      <ConfirmDialog
+        confirmDisabled={bulkWorking}
+        confirmLabel={
+          bulkAction?.kind === "uninstall"
+            ? `卸载中 ${bulkAction.completed}/${bulkAction.total}`
+            : `卸载 ${selectedSkills.length} 个`
+        }
+        confirmVariant="destructive"
+        description="会删除这些技能在共享目录中的文件夹和记录，所有读取该目录的 AI 工具会立即失去它们，不影响未选中的技能。"
+        onConfirm={() => void confirmBulkUninstall()}
         onOpenChange={(open) => !open && setBulkUninstallOpen(false)}
         open={bulkUninstallOpen}
+        size="default"
+        title={`确认卸载 ${selectedSkills.length} 个技能`}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              确认卸载 {selectedSkills.length} 个技能
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              会删除这些技能在共享目录中的文件夹和记录，所有读取该目录的 AI
-              工具会立即失去它们，不影响未选中的技能。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="max-h-40 overflow-hidden rounded-md border border-border bg-muted/40 p-3">
-            <p className="font-mono text-xs leading-5 text-muted-foreground">
-              {selectedSkills.map((skill) => skill.name).join("、")}
-            </p>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={bulkWorking}
-              onClick={() => void confirmBulkUninstall()}
-              variant="destructive"
-            >
-              {bulkAction?.kind === "uninstall"
-                ? `卸载中 ${bulkAction.completed}/${bulkAction.total}`
-                : `卸载 ${selectedSkills.length} 个`}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <div className="max-h-40 overflow-hidden rounded-md border border-border bg-muted/40 p-3">
+          <p className="font-mono text-xs leading-5 text-muted-foreground">
+            {selectedSkills.map((skill) => skill.name).join("、")}
+          </p>
+        </div>
+      </ConfirmDialog>
       <GithubUrlInstallDialog
         onClose={() => setGithubUrlOpen(false)}
         onCompleted={refreshPage}

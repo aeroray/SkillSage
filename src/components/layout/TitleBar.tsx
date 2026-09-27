@@ -61,7 +61,9 @@ function WindowControls() {
           square draws 10.5px of ink while the X draws only 7px (12 vs 18
           units). Each icon therefore gets the box that matches its neighbours'
           ink — a horizontal dash and an X both need a larger box than a
-          square to read as the same size. */}
+          square to read as the same size. The X sits one step down from that
+          match because a full-bleed diagonal reads heavier than a square of
+          the same ink, so equal ink still looked larger. */}
       <Button
         aria-label="最小化"
         onClick={() => void win.minimize()}
@@ -85,7 +87,7 @@ function WindowControls() {
         size="icon-xs"
         variant="ghost"
       >
-        <X aria-hidden="true" className="size-5" />
+        <X aria-hidden="true" className="size-[18px]" />
       </Button>
     </div>
   );
@@ -109,7 +111,7 @@ export function TitleBar({ actionsRef, brand, title }: TitleBarProps) {
   // That handler also owns double-click-to-maximize, so no onDoubleClick here.
   return (
     <header
-      className="relative z-30 flex h-9 shrink-0 items-stretch border-b border-border bg-sidebar"
+      className="relative z-30 flex h-11 shrink-0 items-stretch border-b border-border bg-sidebar"
       data-tauri-drag-region="deep"
     >
       <div

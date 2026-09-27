@@ -72,6 +72,12 @@ export function openSkillDirectory(skillId: string) {
   return invokeCommand<void>("open_skill_directory", { skillId });
 }
 
-export function openSkillsRoot(path: string) {
+/** Opens any directory in the OS file manager. Despite the original name it was
+ * never skills-root specific — it just forwards to the backend's `open_path`,
+ * which is what the shared root button and the tool rows both need. */
+export function openPath(path: string) {
   return invokeCommand<void>("open_path", { path });
 }
+
+/** Kept as an alias so existing call sites read naturally. */
+export const openSkillsRoot = openPath;

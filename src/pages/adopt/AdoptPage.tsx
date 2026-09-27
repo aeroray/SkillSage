@@ -8,22 +8,12 @@ import {
   FolderOpen,
   ScanSearch,
   Trash2,
-  X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../../components/ui/alert-dialog";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { ConfirmDialog } from "../../components/ui/confirm-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { ScrollArea } from "../../components/ui/scroll-area";
@@ -360,65 +350,30 @@ export function AdoptPage() {
         </ScrollArea>
       </Card>
 
-      <AlertDialog
+      <ConfirmDialog
+        confirmDisabled={actionBusy}
+        confirmLabel={actionBusy ? "删除中…" : "确认删除"}
+        confirmVariant="destructive"
+        description={`将删除共享技能目录中的“${removeTarget?.name}”文件夹。这个目录没有有效的 SKILL.md，删除后无法恢复。`}
+        onConfirm={() => void removeCandidate()}
         onOpenChange={(open) => {
           if (!open && !actionBusy) setRemoveTarget(undefined);
         }}
         open={Boolean(removeTarget)}
-      >
-        <AlertDialogContent size="sm">
-          <AlertDialogCancel
-            aria-label="关闭确认窗口"
-            className="absolute right-3 top-3"
-            size="icon"
-            variant="ghost"
-          >
-            <X />
-          </AlertDialogCancel>
-          <AlertDialogHeader>
-            <AlertDialogTitle>删除无效条目？</AlertDialogTitle>
-            <AlertDialogDescription>
-              将删除共享技能目录中的“{removeTarget?.name}”文件夹。这个目录没有有效的 SKILL.md，删除后无法恢复。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={actionBusy}>取消</AlertDialogCancel>
-            <AlertDialogAction disabled={actionBusy} onClick={() => void removeCandidate()} variant="destructive">
-              {actionBusy ? "删除中…" : "确认删除"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="删除无效条目？"
+      />
 
-      <AlertDialog
+      <ConfirmDialog
+        confirmDisabled={actionBusy}
+        confirmLabel={actionBusy ? "整理中…" : "确认整理"}
+        description={`将文件夹“${renameTarget?.name}”改为“${renameTarget?.declaredName}”。之后采纳时会使用 SKILL.md 中的名称；如果目标名称已存在，操作会中止。`}
+        onConfirm={() => void renameCandidate()}
         onOpenChange={(open) => {
           if (!open && !actionBusy) setRenameTarget(undefined);
         }}
         open={Boolean(renameTarget)}
-      >
-        <AlertDialogContent size="sm">
-          <AlertDialogCancel
-            aria-label="关闭确认窗口"
-            className="absolute right-3 top-3"
-            size="icon"
-            variant="ghost"
-          >
-            <X />
-          </AlertDialogCancel>
-          <AlertDialogHeader>
-            <AlertDialogTitle>按 SKILL.md 名称整理？</AlertDialogTitle>
-            <AlertDialogDescription>
-              将文件夹“{renameTarget?.name}”改为“{renameTarget?.declaredName}”。之后采纳时会使用 SKILL.md 中的名称；如果目标名称已存在，操作会中止。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={actionBusy}>取消</AlertDialogCancel>
-            <AlertDialogAction disabled={actionBusy} onClick={() => void renameCandidate()}>
-              {actionBusy ? "整理中…" : "确认整理"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="按 SKILL.md 名称整理？"
+      />
     </div>
   );
 }

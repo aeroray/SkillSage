@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { open as openDirectoryDialog } from "@tauri-apps/plugin-dialog";
 import {
   Check,
+  Copy,
   FolderInput,
+  FolderOpen,
   Pencil,
   RotateCcw,
   ShieldAlert,
@@ -27,6 +29,8 @@ import {
   TooltipTrigger,
 } from "../../components/ui/tooltip";
 import { displayPath } from "../../lib/paths";
+import { copyText } from "../../lib/clipboard";
+import { openPath } from "../../features/skills/api";
 import { useTools } from "../../features/tools/hooks";
 import type { ToolView } from "../../features/tools/api";
 
@@ -248,10 +252,22 @@ function ToolRow({
   const [editing, setEditing] = useState(false);
   const [draftPath, setDraftPath] = useState(tool.skillsDir ?? "");
   const [browsing, setBrowsing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setDraftPath(tool.skillsDir ?? "");
   }, [tool.skillsDir]);
+
+  const copyPath = async () => {
+    if (!tool.skillsDir) return;
+    try {
+      await copyText(tool.skillsDir);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard access can be refused; the path stays selectable either way.
+    }
+  };
 
   const persist = async (nextPath: string | undefined) => {
     // Sending the default back as `undefined` clears the override, so a later
@@ -371,6 +387,42 @@ function ToolRow({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={`复制 ${tool.label} 的技能目录路径`}
+                disabled={!tool.skillsDir}
+                onClick={() => void copyPath()}
+                size="icon-sm"
+                variant="ghost"
+              >
+                {copied ? (
+                  <Check aria-hidden="true" />
+                ) : (
+                  <Copy aria-hidden="true" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent sideOffset={6}>
+              {copied ? "已复制路径" : "复制路径"}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={`打开 ${tool.label} 的技能目录`}
+                disabled={!tool.skillsDir}
+                onClick={() => {
+                  if (tool.skillsDir) void openPath(tool.skillsDir);
+                }}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <FolderOpen aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent sideOffset={6}>打开目录</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
