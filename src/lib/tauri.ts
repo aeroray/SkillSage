@@ -461,8 +461,11 @@ async function previewInvoke<T>(
     return { adopted: ["legacy-research"], skipped: [], failed: [] } as T;
   if (command === "remove_adopt_candidate") return undefined as T;
   if (command === "rename_adopt_candidate") return "notes-helper" as T;
-  if (command === "open_path" || command === "open_skill_directory")
-    return undefined as T;
+  if (command === "open_skill_directory") return undefined as T;
+  // The preview stands in for a tool whose own directory does not exist yet, so
+  // the fallback notice is exercised rather than only the happy path.
+  if (command === "open_path")
+    return { opened: "C:\\Users\\PC\\.cline", exact: false } as T;
   if (command === "check_install_conflict") return undefined as T;
   if (command === "check_updates") return { updates: [] } as T;
   return {} as T;

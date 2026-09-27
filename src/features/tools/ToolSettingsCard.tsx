@@ -30,6 +30,7 @@ import {
 } from "../../components/ui/tooltip";
 import { displayPath } from "../../lib/paths";
 import { copyText } from "../../lib/clipboard";
+import { normalizeTauriError } from "../../lib/tauri";
 import { openPath } from "../../features/skills/api";
 import { useTools } from "../../features/tools/hooks";
 import type { ToolView } from "../../features/tools/api";
@@ -253,6 +254,9 @@ function ToolRow({
   const [draftPath, setDraftPath] = useState(tool.skillsDir ?? "");
   const [browsing, setBrowsing] = useState(false);
   const [copied, setCopied] = useState(false);
+  /** Set when the tool's own directory does not exist yet and its parent was
+   * opened instead, so the row can say which folder it actually showed. */
+  const [openNote, setOpenNote] = useState<string>();
 
   useEffect(() => {
     setDraftPath(tool.skillsDir ?? "");
@@ -266,6 +270,29 @@ function ToolRow({
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
       // Clipboard access can be refused; the path stays selectable either way.
+    }
+  };
+
+  /**
+   * Opens the tool's directory.
+   *
+   * A tool that has never been used has no `skills/` folder, and refusing to
+   * open anything made the button look broken. The backend opens the nearest
+   * existing ancestor instead and reports it, so this says which folder was
+   * shown rather than silently opening a different one.
+   */
+  const openToolDirectory = async () => {
+    if (!tool.skillsDir) return;
+    setOpenNote(undefined);
+    try {
+      const result = await openPath(tool.skillsDir);
+      if (!result.exact) {
+        setOpenNote(`该目录尚未创建，已打开上级目录：${displayPath(result.opened)}`);
+        window.setTimeout(() => setOpenNote(undefined), 6000);
+      }
+    } catch (error) {
+      setOpenNote(normalizeTauriError(error));
+      window.setTimeout(() => setOpenNote(undefined), 6000);
     }
   };
 
@@ -384,6 +411,14 @@ function ToolRow({
               {tool.skillsDir ? displayPath(tool.skillsDir) : "无独立目录"}
             </p>
           )}
+
+          {/* Only shown after a fallback or a failure, so the row stays quiet
+              in the normal case. */}
+          {openNote ? (
+            <p className="mt-1 text-xs leading-5 text-muted-foreground" role="status">
+              {openNote}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -412,16 +447,16 @@ function ToolRow({
               <Button
                 aria-label={`打开 ${tool.label} 的技能目录`}
                 disabled={!tool.skillsDir}
-                onClick={() => {
-                  if (tool.skillsDir) void openPath(tool.skillsDir);
-                }}
+                onClick={() => void openToolDirectory()}
                 size="icon-sm"
                 variant="ghost"
               >
                 <FolderOpen aria-hidden="true" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent sideOffset={6}>打开目录</TooltipContent>
+            <TooltipContent className="max-w-xs leading-5" sideOffset={6}>
+              打开目录；目录尚未创建时会打开上级目录
+            </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>

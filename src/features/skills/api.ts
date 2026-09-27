@@ -4,6 +4,7 @@ import type {
   InstalledSkill,
   InstalledSkillsList,
   LocalSkillMatch,
+  OpenPathResult,
   PathConflict,
   UpdateCheckList,
 } from "./types";
@@ -74,9 +75,13 @@ export function openSkillDirectory(skillId: string) {
 
 /** Opens any directory in the OS file manager. Despite the original name it was
  * never skills-root specific — it just forwards to the backend's `open_path`,
- * which is what the shared root button and the tool rows both need. */
+ * which is what the shared root button and the tool rows both need.
+ *
+ * A directory that does not exist yet is not an error: the backend opens the
+ * nearest existing ancestor and reports which path it used, so the caller can
+ * say so instead of leaving the click looking like it did nothing. */
 export function openPath(path: string) {
-  return invokeCommand<void>("open_path", { path });
+  return invokeCommand<OpenPathResult>("open_path", { path });
 }
 
 /** Kept as an alias so existing call sites read naturally. */

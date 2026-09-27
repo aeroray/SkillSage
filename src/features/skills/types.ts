@@ -53,6 +53,15 @@ export type InstalledSkillsList = {
   detectedTools: string[];
 };
 
+/** What `open_path` actually opened. A directory that does not exist yet is not
+ * an error — the backend opens the nearest existing ancestor and reports which
+ * path it used, so the UI can name it instead of the click looking inert. */
+export type OpenPathResult = {
+  opened: string;
+  /** False when the requested directory was missing and an ancestor was opened. */
+  exact: boolean;
+};
+
 export type InstallResult = {
   id: string;
   name: string;

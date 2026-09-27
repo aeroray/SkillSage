@@ -1,4 +1,5 @@
 import { invokeCommand } from "../../lib/tauri";
+import type { OpenPathResult } from "../skills/types";
 import type { AdoptResult, AdoptScanResult, AdoptSelection } from "./types";
 
 // The backend keeps its original Rust module/command names (`scan_migrate`/
@@ -14,7 +15,7 @@ export function adoptSkills(items: AdoptSelection[]) {
 }
 
 export function openAdoptPath(path: string) {
-  return invokeCommand<void>("open_path", { path });
+  return invokeCommand<OpenPathResult>("open_path", { path });
 }
 
 export function removeAdoptCandidate(name: string) {
