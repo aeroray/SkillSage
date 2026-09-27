@@ -19,7 +19,12 @@ const buttonVariants = cva(
       size: {
         default: "h-9 gap-2 px-4",
         sm: "h-8 gap-1.5 px-3 text-xs",
+        // The two compact steps exist for chrome and toolbars, where the
+        // default control height would dominate the bar it sits in.
+        xs: "h-7 gap-1.5 px-2.5 text-xs [&_svg:not([class*='size-'])]:size-3.5",
         icon: "size-9",
+        "icon-sm": "size-8",
+        "icon-xs": "size-7 [&_svg:not([class*='size-'])]:size-3.5",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

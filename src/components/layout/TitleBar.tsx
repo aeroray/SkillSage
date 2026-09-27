@@ -55,11 +55,11 @@ function WindowControls() {
   return (
     // `false` blocks dragging for this subtree and its ancestors' walk, so the
     // gaps between the controls never start a window drag.
-    <div className="flex items-center gap-0.5" data-tauri-drag-region="false">
+    <div className="flex items-center gap-px" data-tauri-drag-region="false">
       <Button
         aria-label="最小化"
         onClick={() => void win.minimize()}
-        size="icon"
+        size="icon-xs"
         variant="ghost"
       >
         <Minus aria-hidden="true" />
@@ -67,7 +67,7 @@ function WindowControls() {
       <Button
         aria-label={maximized ? "向下还原" : "最大化"}
         onClick={() => void win.toggleMaximize()}
-        size="icon"
+        size="icon-xs"
         variant="ghost"
       >
         {maximized ? <Copy aria-hidden="true" /> : <Square aria-hidden="true" />}
@@ -76,7 +76,7 @@ function WindowControls() {
         aria-label="关闭"
         className="hover:bg-destructive/15 hover:text-destructive-text"
         onClick={() => void win.close()}
-        size="icon"
+        size="icon-xs"
         variant="ghost"
       >
         <X aria-hidden="true" />
@@ -103,29 +103,29 @@ export function TitleBar({ actionsRef, brand, title }: TitleBarProps) {
   // That handler also owns double-click-to-maximize, so no onDoubleClick here.
   return (
     <header
-      className="relative z-30 flex h-11 shrink-0 items-stretch border-b border-border bg-sidebar"
+      className="relative z-30 flex h-9 shrink-0 items-stretch border-b border-border bg-sidebar"
       data-tauri-drag-region="deep"
     >
       <div
         className={cn(
-          "flex shrink-0 items-center gap-2.5 border-r border-border px-4",
+          "flex shrink-0 items-center gap-2 border-r border-border px-3",
           // macOS traffic lights sit over this area; keep clear of them.
-          mac && "pl-[78px]",
+          mac && "pl-[76px]",
         )}
         style={{ width: TITLE_BAR_BRAND_WIDTH }}
       >
         {brand}
       </div>
 
-      <div className="flex min-w-0 flex-1 items-center gap-3 px-4">
+      <div className="flex min-w-0 flex-1 items-center gap-3 px-3">
         <h1 className="truncate text-sm font-medium text-foreground">
           {title}
         </h1>
         {/* Pages portal their buttons into this slot. */}
-        <div className="ml-auto flex min-w-0 items-center gap-2" ref={actionsRef} />
+        <div className="ml-auto flex min-w-0 items-center gap-1.5" ref={actionsRef} />
       </div>
 
-      <div className="flex shrink-0 items-center pr-2">
+      <div className="flex shrink-0 items-center pr-1.5">
         <WindowControls />
       </div>
     </header>
@@ -144,7 +144,7 @@ export function TitleBarBrand({
 }) {
   return (
     <>
-      <img alt="" className="size-5 shrink-0 rounded object-cover" src={logoSrc} />
+      <img alt="" className="size-4 shrink-0 rounded-sm object-cover" src={logoSrc} />
       <span className="truncate text-xs font-semibold tracking-tight text-foreground">
         {product}
       </span>

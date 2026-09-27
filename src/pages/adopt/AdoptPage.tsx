@@ -258,7 +258,7 @@ export function AdoptPage() {
         <Button
           disabled={working}
           onClick={refreshPage}
-          size="sm"
+          size="xs"
           variant="outline"
         >
           <ScanSearch data-icon="inline-start" />

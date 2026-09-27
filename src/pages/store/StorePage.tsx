@@ -124,9 +124,9 @@ function LoadingCards() {
       // same columns and the layout does not jump when results arrive.
       className="@container"
     >
-      <div className="grid gap-4 @lg:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
+      <div className="grid items-start gap-3 @lg:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
         {Array.from({ length: 8 }, (_, index) => (
-          <Skeleton className="h-36 rounded-lg" key={index} />
+          <Skeleton className="h-28 rounded-lg" key={index} />
         ))}
       </div>
     </div>
@@ -163,7 +163,7 @@ function SkillCard({
       : description;
   return (
     <Card
-      className="h-full cursor-pointer gap-0 py-0 shadow-sm transition-[background-color,border-color] duration-150 hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="cursor-pointer gap-0 py-0 shadow-sm transition-[background-color,border-color] duration-150 hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       onClick={() => onOpen(primary.id)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -175,19 +175,23 @@ function SkillCard({
       role="group"
       tabIndex={0}
     >
-      <CardHeader className="flex flex-row items-start justify-between gap-3 py-4 pb-3">
+      <CardHeader className="flex flex-row items-start justify-between gap-3 p-4 pb-3">
         <div className="min-w-0">
-          <CardTitle className="truncate text-base">{primary.name}</CardTitle>
-          <CardDescription className="mt-1 truncate font-mono text-xs">
+          <CardTitle className="truncate text-sm font-medium">
+            {primary.name}
+          </CardTitle>
+          <CardDescription className="mt-0.5 truncate font-mono text-xs">
             {source}
           </CardDescription>
-          {/* The description slot is reserved at a fixed two lines whether or
-              not this card shows one. Installed cards hide it by design, and
-              without the reservation they would render short and leave a
-              hollow void once the grid stretches them to the row height. */}
-          <CardDescription className="mt-3 line-clamp-2 min-h-10 text-xs leading-5">
-            {installed ? "" : displayedDescription ?? ""}
-          </CardDescription>
+          {/* The description is capped at two lines and the card grows only as
+              far as it needs. No reserved empty block: an installed card has
+              nothing to say here, so it stays short rather than carrying a
+              blank the height of a description it will never show. */}
+          {!installed && displayedDescription ? (
+            <CardDescription className="mt-2 line-clamp-2 text-xs leading-5">
+              {displayedDescription}
+            </CardDescription>
+          ) : null}
         </div>
         {installed ? (
           <Button
@@ -218,10 +222,8 @@ function SkillCard({
           </Button>
         )}
       </CardHeader>
-      {/* Pushed to the card's bottom edge so every card in a row aligns its
-          metadata line regardless of description length. */}
-      <CardContent className="mt-auto pb-4 pt-0">
-        <div className="flex min-h-8 items-center justify-between gap-3 text-xs text-muted-foreground">
+      <CardContent className="mt-auto p-4 pt-0">
+        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <Download aria-hidden="true" className="size-3.5" />
             {formatCount(primary.installs)} 次安装
@@ -719,7 +721,11 @@ export function StorePage() {
                     reached ~1508px. Keyed to the container, the columns track
                     the space the grid actually has. */}
                 <div className="@container p-4">
-                  <div className="grid gap-4 @lg:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
+                  {/* `items-start` keeps every card at its own content height.
+                      Stretching them to the tallest card in the row is what
+                      created the hollow middle on installed skills, which have
+                      no description to fill it. */}
+                  <div className="grid items-start gap-3 @lg:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
                 {groups.map((group) => (
                   <SkillCard
                     description={group.primary.description}

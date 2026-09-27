@@ -1258,7 +1258,7 @@ export function SkillsPage() {
             Boolean(management.pending)
           }
           onClick={rescanSkills}
-          size="sm"
+          size="xs"
           variant="outline"
         >
           <ScanSearch data-icon="inline-start" />
@@ -1266,7 +1266,7 @@ export function SkillsPage() {
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm">
+            <Button size="xs">
               <SquareArrowRightEnter data-icon="inline-start" />
               手动导入
               <ChevronDown data-icon="inline-end" />
