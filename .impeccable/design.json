@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-27T07:03:59.629Z",
+  "generatedAt": "2026-09-27T07:21:20.834Z",
   "title": "Design System: SkillSage · 技匠",
   "extensions": {
     "colorMeta": {
@@ -318,6 +318,13 @@
       "description": "签名组件。页面把操作 portal 进标题栏，而不是渲染自己的页头。用 portal 而非回调注册表，操作留在页面渲染树里，闭包始终读到最新 state。",
       "html": "<!-- in the page -->\n<template id=\"page-actions-demo\">\n  <button class=\"ds-tb-action\">重新扫描</button>\n  <button class=\"ds-tb-action ds-tb-action-primary\">手动导入</button>\n</template>\n<!-- portals into .ds-tb-actions -->",
       "css": "/* PageActions renders its children into the title bar action slot via createPortal. No extra CSS: the children use .ds-tb-action. */"
+    },
+    {
+      "name": "Store Card",
+      "kind": "card",
+      "description": "签名组件。商店的技能卡片。只占自己内容的高度（网格 items-start），不预留空的描述位——已安装卡片没有描述可显示，就让它矮一点。",
+      "html": "<div class=\"ds-scard\"><div class=\"ds-scard-top\"><div><p class=\"ds-scard-name\">frontend-design</p><p class=\"ds-scard-src\">vercel-labs/agent-skills</p></div><span class=\"ds-scard-state\">已安装</span></div><div class=\"ds-scard-foot\"><span>128.4K 次安装</span><span>同仓库还有 1 个</span></div></div>\n<div class=\"ds-scard ds-scard-tall\"><div class=\"ds-scard-top\"><div><p class=\"ds-scard-name\">spreadsheets</p><p class=\"ds-scard-src\">openai/skills</p><p class=\"ds-scard-desc\">Tools for creating, editing, and analyzing spreadsheets.</p></div><span class=\"ds-scard-state ds-scard-state-cta\">快速安装</span></div><div class=\"ds-scard-foot\"><span>48.6K 次安装</span><span>同仓库还有 1 个</span></div></div>",
+      "css": ".ds-scard { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-lg, 14px); background: var(--app-color-card, #ffffff); box-shadow: 0 1px 2px rgba(23, 32, 42, 0.045); } .ds-scard-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; } .ds-scard-name { margin: 0; color: var(--app-color-foreground, #17202a); font-size: 0.875rem; font-weight: 500; } .ds-scard-src { margin: 2px 0 0; color: var(--app-color-muted-foreground, #5f6c7e); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.75rem; } .ds-scard-desc { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 8px 0 0; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; line-height: 1.25rem; } .ds-scard-state { flex: none; display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-md, 10px); background: var(--app-color-secondary, #eef1f4); color: var(--app-color-secondary-foreground, #27313c); font-size: 0.75rem; font-weight: 500; } .ds-scard-state-cta { border-color: transparent; background: transparent; } .ds-scard-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; }"
     }
   ],
   "narrative": {
@@ -330,7 +337,8 @@
       "状态必须真实：说不清楚的结论用专门的「无更新源」，绝不谎报「已是最新」。",
       "全部文本 ≥ 4.5:1，含浅色模式的次要文字。",
       "留白由真实状态填充：侧栏显示共享目录路径与计数，而不是装饰。",
-      "页头并入标题栏：页面名与操作都在 44px 标题栏，页面省下的纵向空间全部给内容。"
+      "页头并入标题栏：页面名与操作都在 36px 标题栏，页面省下的纵向空间全部给内容。",
+      "控件永远小于容器：chrome 用 28px，内容区用 32–36px。"
     ],
     "rules": [
       {
@@ -394,6 +402,16 @@
         "section": "layout"
       },
       {
+        "name": "「控件小于容器」规则",
+        "body": "按钮尺寸按所在容器选：标题栏和 chip 行用 xs（28px），卡片与工具条用 sm（32px），页面主操作用 default（36px）。控件撑满容器就失去了层次，chrome 里的控件必须明显小于内容区的控件。",
+        "section": "layout"
+      },
+      {
+        "name": "「不留空占位」规则",
+        "body": "不要为了对齐而预留空白块。卡片、列表项只占自己内容的高度（网格用 items-start）。用等高占位去\"对齐\"会造出一块与缺失内容等高的空白——那正是要消除的东西。少内容就矮一点，这是正确的，不是缺陷。",
+        "section": "layout"
+      },
+      {
         "name": "「浮层才投影」规则",
         "body": "阴影是「这一层可以关闭、且盖住了下方内容」的信号。静态内容用边框，不用阴影。零偏移的彩色光晕属于装饰，不在这套系统里。",
         "section": "elevation"
@@ -416,7 +434,9 @@
       "Do 用容器查询（@container + @lg:/@4xl:）决定栅格列数。",
       "Do 让侧栏显示真实状态（共享目录路径、已安装与分发计数），而不是留空。",
       "Do 把页面操作 portal 到标题栏，页面自己不画页头。",
-      "Do 给标题栏的拖拽区写 data-tauri-drag-region=\"deep\"，否则子元素拖不动。"
+      "Do 给标题栏的拖拽区写 data-tauri-drag-region=\"deep\"，否则子元素拖不动。",
+      "Do 按容器选按钮尺寸：标题栏用 xs，卡片用 sm，页面主操作用 default。",
+      "Do 让卡片和列表项只占自己内容的高度，网格用 items-start。"
     ],
     "donts": [
       "Don't 用 text-muted-foreground 渲染彩色底上的文字（chip、彩色 Badge）——实测只有 3.5:1 左右。",
@@ -431,7 +451,8 @@
       "Don't 用装饰性图形或占位文案填充空白区域。",
       "Don't 给页面画自己的页头（标题 + 描述）；标题栏已经有页面名。",
       "Don't 在标题栏上自己实现双击最大化；Tauri 的拖拽脚本已经做了。",
-      "Don't 用裸 data-tauri-drag-region；子元素会变成拖不动的死区。"
+      "Don't 用裸 data-tauri-drag-region；子元素会变成拖不动的死区。",
+      "Don't 为对齐预留空白块；内容少就让元素矮一点。"
     ]
   }
 }
