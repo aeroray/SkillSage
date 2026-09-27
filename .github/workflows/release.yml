@@ -68,6 +68,14 @@ jobs:
       - name: Configure updater endpoint
         run: node scripts/prepare-release-config.mjs
 
+      # The release notes live in docs/releases/<tag>.md rather than inline in
+      # this workflow, where they previously had to be hand-edited for every
+      # release and were silently carried over verbatim if forgotten — which
+      # would publish the previous version's notes under the new tag.
+      - name: Load release notes
+        id: notes
+        run: node scripts/load-release-notes.mjs "${{ inputs.tag || github.ref_name }}"
+
       - name: Build and publish release
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
@@ -77,55 +85,13 @@ jobs:
         with:
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: "SkillSage · 技匠 ${{ inputs.tag || github.ref_name }}"
-          generateReleaseNotes: true
-          releaseBody: |
-            ## What's New · 本次更新
-
-            ### 🧰 技能来源与安装 · Skill Sources & Installation
-
-            - 修复技能名称与 GitHub 仓库目录名称不一致时的安装问题，安装流程会根据 `SKILL.md` 中声明的名称解析真实技能目录。
-              Fixed installation for skills whose names differ from their GitHub directory names by resolving the actual skill directory from the `SKILL.md` manifest.
-
-            - 支持包含 PNG 等二进制资源的远程技能，并在安装、更新和内容校验时保留原始文件内容。
-              Added support for remote skills containing binary assets such as PNG files, preserving their original contents during installation, updates, and verification.
-
-            - 支持批量检查和更新已选中的技能，并保留安全的冲突处理流程。
-              Added batch checking and updating for selected skills while keeping the existing safe conflict-handling flow.
-
-            ### 🔎 本地技能匹配 · Local Skill Matching
-
-            - 优化本地技能的远端来源匹配，优先验证高可信来源，并按需搜索更多候选。
-              Improved remote-source matching for local skills by checking high-confidence sources first and expanding candidate searches on demand.
-
-            - 匹配结果会显示远端提交信息和验证状态，帮助用户确认来源是否可靠。
-              Matching results now show the remote commit and verification status so users can assess source reliability.
-
-            ### 🧩 Claude Code 兼容 · Claude Code Compatibility
-
-            - 支持将共享技能目录中的技能链接到 Claude Code 的技能目录，保持单份真实文件内容。
-              Skills in the shared directory can now be linked into the Claude Code skills directory while keeping one real copy of the content.
-
-            - 支持在已安装技能列表中管理 Claude Code 的兼容链接状态。
-              Added compatibility-link status management to the installed skills list.
-
-            ### 🎨 桌面体验 · Desktop Experience
-
-            - 精简在线匹配弹窗的信息层级，将详细说明收纳到 tooltip，减少视觉占用。
-              Reduced visual noise in the online matching dialog by moving detailed explanations into tooltips.
-
-            - 改善候选卡片、状态标签和加载反馈，让匹配结果更容易扫描和操作。
-              Improved candidate cards, status labels, and loading feedback for faster scanning and clearer actions.
-
-            ## Download · 下载
-
-            - **Windows**：NSIS 安装包，支持简体中文和 English。
-              **Windows**: NSIS installer with Simplified Chinese and English support.
-
-            - **macOS（Apple Silicon）**：DMG 安装包。
-              **macOS (Apple Silicon)**: DMG installer.
-
-            - 已安装用户可在应用内检查更新并自动安装。
-              Existing users can check for updates and install them automatically in the app.
+          # Notes come from docs/releases/<tag>.md; the previous inline copy
+          # had to be hand-edited per release and was silently reused if
+          # forgotten, publishing the old version's notes under the new tag.
+          releaseBody: ${{ steps.notes.outputs.body }}
+          # Off because the notes are authored in docs/releases/<tag>.md. Leaving
+          # it on risks GitHub prepending an auto-generated commit list to them.
+          generateReleaseNotes: false
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true
