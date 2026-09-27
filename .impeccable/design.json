@@ -1,0 +1,354 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-27T14:00:00Z",
+  "title": "Design System: SkillSage · 技匠",
+  "extensions": {
+    "colorMeta": {
+      "deep-teal": {
+        "role": "primary",
+        "displayName": "深青 (Deep Teal)",
+        "canonical": "#0d9488",
+        "tonalRamp": [
+          "#062e2a",
+          "#0a4a44",
+          "#0c665e",
+          "#0d8378",
+          "#0d9488",
+          "#3fb3a8",
+          "#8ad4cc",
+          "#d3f2ee"
+        ]
+      },
+      "deep-teal-text": {
+        "role": "primary",
+        "displayName": "深青·文字 (Deep Teal Text)",
+        "canonical": "#0a7d70",
+        "tonalRamp": [
+          "#052722",
+          "#084139",
+          "#0a5b51",
+          "#0a7d70",
+          "#129488",
+          "#42b3a7",
+          "#8ad4cc",
+          "#d3f2ee"
+        ]
+      },
+      "bright-teal": {
+        "role": "primary",
+        "displayName": "明亮青 (Bright Teal)",
+        "canonical": "#75e6d7",
+        "tonalRamp": [
+          "#0a2f2c",
+          "#124a45",
+          "#1b665f",
+          "#24837a",
+          "#31a196",
+          "#4cc4b7",
+          "#75e6d7",
+          "#c9f7f0"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "墨 (Ink)",
+        "canonical": "#17202a",
+        "tonalRamp": [
+          "#17202a",
+          "#2a3644",
+          "#3f4d5e",
+          "#5a6a7d",
+          "#7b8a9c",
+          "#a3afbe",
+          "#cbd3dc",
+          "#eef1f4"
+        ]
+      },
+      "slate-blue-gray": {
+        "role": "neutral",
+        "displayName": "石板蓝灰 (Slate Blue Gray)",
+        "canonical": "#5f6c7e",
+        "tonalRamp": [
+          "#1d232b",
+          "#2f3944",
+          "#424e5c",
+          "#5f6c7e",
+          "#7c8898",
+          "#9ba5b3",
+          "#c3cad3",
+          "#eef1f4"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "纸 (Paper)",
+        "canonical": "#f5f6f8",
+        "tonalRamp": [
+          "#3a3f47",
+          "#575d66",
+          "#757c86",
+          "#939ba5",
+          "#b2b9c2",
+          "#ced3d9",
+          "#e3e6ea",
+          "#f5f6f8"
+        ]
+      },
+      "oled-black": {
+        "role": "neutral",
+        "displayName": "OLED 黑 (OLED Black)",
+        "canonical": "#0b0d11",
+        "tonalRamp": [
+          "#0b0d11",
+          "#11161d",
+          "#171d25",
+          "#232b36",
+          "#333d4a",
+          "#4d5866",
+          "#7c8794",
+          "#c3cad3"
+        ]
+      },
+      "success-light": {
+        "role": "secondary",
+        "displayName": "成功 (Success)",
+        "canonical": "#0f9f94",
+        "tonalRamp": [
+          "#062e2a",
+          "#0a4a44",
+          "#0c665e",
+          "#0d8378",
+          "#0f9f94",
+          "#3fb3a8",
+          "#8ad4cc",
+          "#d3f2ee"
+        ]
+      },
+      "warning-light": {
+        "role": "tertiary",
+        "displayName": "警告 (Warning)",
+        "canonical": "#b7791f",
+        "tonalRamp": [
+          "#2e1e05",
+          "#4a310a",
+          "#664410",
+          "#8f5d11",
+          "#b7791f",
+          "#d19a45",
+          "#e6c48a",
+          "#f7ecd3"
+        ]
+      },
+      "destructive-light": {
+        "role": "tertiary",
+        "displayName": "危险 (Destructive)",
+        "canonical": "#c2413d",
+        "tonalRamp": [
+          "#2e0f0e",
+          "#4a1a18",
+          "#662523",
+          "#b23b37",
+          "#c2413d",
+          "#d97a76",
+          "#ecb3b0",
+          "#f9e4e3"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "页面标题（PageHeader），每屏最多一个。"
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "卡片标题、分组标题、技能名。"
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "正文、描述、按钮文字；桌面端基础字号。"
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "元信息、时间戳、计数、辅助说明。"
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "路径、版本号、提交哈希——仅需逐字符辨认的数据，不作装饰。"
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-sm",
+        "value": "0 1px 2px rgba(23, 32, 42, 0.045)",
+        "purpose": "卡片贴地的极轻投影。深色模式 rgba(0,0,0,0.24)。"
+      },
+      {
+        "name": "shadow-lg",
+        "value": "0 18px 50px rgba(23, 32, 42, 0.14)",
+        "purpose": "浮层（弹窗、下拉、Toast、Tooltip）。深色模式 rgba(0,0,0,0.42)。"
+      }
+    ],
+    "motion": [
+      {
+        "name": "transition-colors",
+        "value": "color, background-color, border-color 150ms ease",
+        "purpose": "所有 hover / focus 状态变化的默认过渡。"
+      },
+      {
+        "name": "toast-in",
+        "value": "opacity 0→1 + translateY(-8px)→0 + scale(0.98)→1, 180ms ease-out",
+        "purpose": "Toast 入场。系统内唯一的编排动效。"
+      }
+    ],
+    "breakpoints": [
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "唯一主操作。深色模式反转为中性高对比，避免 OLED 上的高饱和色块。",
+      "html": "<button class=\"ds-btn-primary\">开始安装</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-md, 10px); background: var(--app-color-primary, #0d9488); color: var(--app-color-primary-foreground, #ffffff); font-size: 0.875rem; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background-color 150ms ease; } .ds-btn-primary:hover { background: color-mix(in srgb, var(--app-color-primary, #0d9488) 85%, transparent); } .ds-btn-primary:focus-visible { outline: none; border-color: var(--app-color-ring, #16a39a); box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-color-ring, #16a39a) 60%, transparent); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "次级操作，如「重新扫描」「手动导入」。",
+      "html": "<button class=\"ds-btn-outline\">重新扫描</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-md, 10px); background: var(--app-color-background, #f5f6f8); color: var(--app-color-foreground, #17202a); font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background-color 150ms ease; } .ds-btn-outline:hover { background: var(--app-color-muted, #eef1f4); } .ds-btn-outline:focus-visible { outline: none; border-color: var(--app-color-ring, #16a39a); box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-color-ring, #16a39a) 60%, transparent); }"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "卸载等不可逆操作。10% 底色而非实心红——重要但不该被误触。",
+      "html": "<button class=\"ds-btn-destructive\">卸载（4）</button>",
+      "css": ".ds-btn-destructive { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-md, 10px); background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 10%, transparent); color: var(--app-color-destructive-text, #b23b37); font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background-color 150ms ease; } .ds-btn-destructive:hover { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 20%, transparent); } .ds-btn-destructive:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-color-destructive, #c2413d) 60%, transparent); }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "badge-default",
+      "description": "筛选 ToggleGroup 项。计数继承前景色 + opacity-80，而非 muted-foreground（后者仅 3.54:1）。",
+      "html": "<div class=\"ds-chip-row\"><button class=\"ds-chip ds-chip-on\">全部<span class=\"ds-chip-count\">4</span></button><button class=\"ds-chip\">远端<span class=\"ds-chip-count\">3</span></button><button class=\"ds-chip ds-chip-off\" disabled>内置<span class=\"ds-chip-count\">0</span></button></div>",
+      "css": ".ds-chip-row { display: flex; align-items: center; gap: 8px; } .ds-chip { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 28px; min-width: 28px; padding: 0 10px; border: none; border-radius: var(--radius-md, 10px); background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.8rem; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; } .ds-chip:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-color-ring, #16a39a) 50%, transparent); } .ds-chip-on { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-chip-off { opacity: 0.5; pointer-events: none; } .ds-chip-count { opacity: 0.8; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Badge",
+      "kind": "chip",
+      "refersTo": "badge-default",
+      "description": "胶囊形状态标签。全站唯一的完全圆角元素，避免与方形按钮混淆。",
+      "html": "<div class=\"ds-badge-row\"><span class=\"ds-badge ds-badge-default\">vercel-labs</span><span class=\"ds-badge ds-badge-success\">有更新</span><span class=\"ds-badge ds-badge-muted\">1 个技能</span></div>",
+      "css": ".ds-badge-row { display: flex; align-items: center; gap: 8px; } .ds-badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 20px; padding: 0 8px; border: 1px solid transparent; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; white-space: nowrap; } .ds-badge-default { background: var(--app-color-primary-soft, #e5f8f5); color: var(--app-color-primary-text, #0a7d70); } .ds-badge-success { background: color-mix(in srgb, var(--app-color-success, #0f9f94) 10%, transparent); color: var(--app-color-success-text, #0b7a6f); } .ds-badge-muted { background: var(--app-color-muted, #eef1f4); color: var(--app-color-muted-foreground, #5f6c7e); }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "搜索框。透明底 + 1px 边框，焦点转主色环。",
+      "html": "<input class=\"ds-input\" placeholder=\"搜索技能、作者或描述\" />",
+      "css": ".ds-input { width: 100%; height: 36px; padding: 0 12px; border: 1px solid var(--app-color-input, #dce2e8); border-radius: var(--radius-md, 10px); background: transparent; color: var(--app-color-foreground, #17202a); font-size: 0.875rem; transition: border-color 150ms ease, box-shadow 150ms ease; } .ds-input::placeholder { color: var(--app-color-muted-foreground, #5f6c7e); } .ds-input:focus-visible { outline: none; border-color: var(--app-color-ring, #16a39a); box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-color-ring, #16a39a) 60%, transparent); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "静态容器。靠 1px 边框 + 表面色差分层，只用 shadow-sm。",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">vercel-labs</div><div class=\"ds-card-desc\">2 个技能</div></div>",
+      "css": ".ds-card { display: flex; flex-direction: column; gap: 4px; padding: 16px 20px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-lg, 14px); background: var(--app-color-card, #ffffff); color: var(--app-color-card-foreground, #17202a); box-shadow: 0 1px 2px rgba(23, 32, 42, 0.045); } .ds-card-title { font-size: 1rem; font-weight: 500; line-height: 1.375; } .ds-card-desc { font-size: 0.875rem; color: var(--app-color-muted-foreground, #5f6c7e); }"
+    },
+    {
+      "name": "Sidebar Navigation Item",
+      "kind": "nav",
+      "refersTo": "button-ghost",
+      "description": "左侧导航项。激活态为浅青底 + 深青文字——「一个青色」规则最稳定的落点。",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-nav-active\" href=\"#\">我的技能</a><a class=\"ds-nav-item\" href=\"#\">技能商店</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; gap: 4px; } .ds-nav-item { display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border-radius: var(--radius-md, 10px); color: var(--app-color-sidebar-foreground, #5f6d7c); font-size: 0.875rem; font-weight: 500; text-decoration: none; transition: background-color 150ms ease, color 150ms ease; } .ds-nav-item:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-nav-item:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-color-ring, #16a39a) 60%, transparent); } .ds-nav-active { background: var(--app-color-primary-soft, #e5f8f5); color: var(--app-color-primary-text, #0a7d70); }"
+    },
+    {
+      "name": "Selection Action Bar",
+      "kind": "custom",
+      "description": "签名组件。有选中项时工具栏整体切换为批量操作，每个按钮显示它真正会作用的数量。",
+      "html": "<div class=\"ds-actionbar\"><span class=\"ds-actionbar-count\">已选 4 个</span><button class=\"ds-actionbar-ghost\">取消选择</button><button class=\"ds-actionbar-outline\">批量分发</button><button class=\"ds-actionbar-secondary\">检查更新（3）</button><button class=\"ds-actionbar-danger\">卸载（4）</button></div>",
+      "css": ".ds-actionbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } .ds-actionbar-count { font-size: 0.75rem; color: var(--app-color-foreground, #17202a); opacity: 0.7; } .ds-actionbar button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--radius-md, 10px); font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: background-color 150ms ease; } .ds-actionbar-ghost { background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); } .ds-actionbar-ghost:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-actionbar-outline { border-color: var(--app-color-border, #e1e6eb); background: var(--app-color-background, #f5f6f8); color: var(--app-color-foreground, #17202a); } .ds-actionbar-outline:hover { background: var(--app-color-muted, #eef1f4); } .ds-actionbar-secondary { background: var(--app-color-secondary, #eef1f4); color: var(--app-color-secondary-foreground, #27313c); } .ds-actionbar-danger { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 10%, transparent); color: var(--app-color-destructive-text, #b23b37); } .ds-actionbar-danger:hover { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 20%, transparent); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "「安静的技匠工作台」(The Quiet Workshop)",
+    "overview": "SkillSage 管理的是用户机器上一个真实存在、所有 AI 工具都会读取的共享目录。这个事实决定了整套界面的性格：这里的每一次点击都可能让某个技能在所有工具里消失。所以界面不追求吸引注意力，而是追求让后果在动作发生之前就被看清。\n\n视觉上它是一件称手的工具，不是一个仪表盘。密度偏高但不拥挤：信息按「一屏能扫完」来组织，而不是按「一屏能塞下」来组织。颜色极度克制——整页通常只有一个青色出现，用于当前选中项或唯一的主操作；其余全部交给中性灰阶和留白。这里没有渐变、没有玻璃拟态、没有装饰性阴影；层次由边框和表面色差承担，阴影只用于真正浮起的层（弹窗、下拉、Toast）。\n\n深浅两套主题不是同一套配色的反相，而是两个使用场景：浅色是白天办公室里的安静工具，深色是 OLED 屏上的工作台。两者共用同一套语义 token，因此组件代码从不感知主题。",
+    "keyCharacteristics": [
+      "后果优先：破坏性操作必须显示具体影响范围（哪些技能、多少个），而不是抽象警告。",
+      "一个页面一个青色：主色只标记「当前」和「唯一主操作」，其余用中性色。",
+      "边框分层而非阴影分层：静态表面用 1px 边框 + 表面色差，阴影只给浮层。",
+      "状态必须真实：说不清楚的结论用专门的「无更新源」，绝不谎报「已是最新」。",
+      "全部文本 ≥ 4.5:1，含浅色模式的次要文字。"
+    ],
+    "rules": [
+      {
+        "name": "「一个青色」规则",
+        "body": "任意一屏内，主色只出现在「当前选中项」和「唯一主操作」上，不超过 10% 的面积。它的稀有就是它的意义——当青色出现时，用户不需要思考该看哪里。",
+        "section": "colors"
+      },
+      {
+        "name": "「文字色分离」规则",
+        "body": "状态色有填充值和文字值两个 token。凡是渲染为文字（含 Badge、Toast、错误提示），一律用 -text 后缀的 token；--color-success 这类填充值在浅色模式下当文字只有 2.95:1。图标可以继续用填充值，因为图标是非文本内容，适用 3:1 门槛。",
+        "section": "colors"
+      },
+      {
+        "name": "「等宽即数据」规则",
+        "body": "等宽字体只用于需要逐字符辨认的值（路径、哈希、版本）。不用它来营造技术气质。",
+        "section": "typography"
+      },
+      {
+        "name": "「字重不超三档」规则",
+        "body": "只使用 400 / 500 / 600。层级由字号与颜色建立；再加字重会让密集列表变吵。",
+        "section": "typography"
+      },
+      {
+        "name": "「4 的倍数」规则",
+        "body": "所有间距必须是 4px 的倍数。出现 6px、10px、14px 这类值说明间距是随手写的，不是决定的。",
+        "section": "layout"
+      },
+      {
+        "name": "「标题上方更宽」规则",
+        "body": "任何标题与其上方元素的距离，必须大于它与下方内容正文的距离。",
+        "section": "layout"
+      },
+      {
+        "name": "「浮层才投影」规则",
+        "body": "阴影是「这一层可以关闭、且盖住了下方内容」的信号。静态内容用边框，不用阴影。零偏移的彩色光晕属于装饰，不在这套系统里。",
+        "section": "elevation"
+      },
+      {
+        "name": "「深浅不是反相」规则",
+        "body": "深色模式不是浅色模式取反：它降低表面亮度差（#0b0d11 → #11161d → #171d25），同时提高文字对比度（正文 17.72:1）。深色下的主色换成明亮青，因为深青在 OLED 黑上不够亮。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do 让每个批量操作按钮显示它真正会作用的数量（卸载（4）、检查更新（3）），即使与选中数不一致。",
+      "Do 破坏性操作展示具体影响范围：批量卸载对话框列出所有受影响的技能名。",
+      "Do 把状态色当文字用时改用 -text token（text-destructive-text，而非 text-destructive）。",
+      "Do 用 1px 边框 + 表面色差表达静态层次，用 shadow-sm / shadow-lg 只表达浮层。",
+      "Do 用 sr-only 补充图标按钮的状态文本，而不是给无 role 的 <span> 加 aria-label。",
+      "Do 在按钮禁用时用 <span> 包裹再挂 Tooltip，否则禁用按钮会吞掉指针事件，用户看不到原因。",
+      "Do 保持所有正文与占位符文字 ≥ 4.5:1，图标 ≥ 3:1。"
+    ],
+    "donts": [
+      "Don't 用 text-muted-foreground 渲染彩色底上的文字（chip、彩色 Badge）——实测只有 3.5:1 左右。",
+      "Don't 给静态卡片加阴影；一屏多个阴影会让界面立刻变脏。",
+      "Don't 用渐变文字、玻璃拟态、2px+ 边框、或彩色左边条。",
+      "Don't 用实心红表达破坏性操作；用危险色 10% 底 + 危险色文字。",
+      "Don't 把等宽字体用于非数据内容当作「技术感」装饰。",
+      "Don't 谎报状态：无法判断的用「无更新源」，不要归入「已是最新」。",
+      "Don't 让同一个标签指向两个不同的东西（「打开技能目录」曾同时表示「打开此技能文件夹」和「打开共享根目录」）。",
+      "Don't 引入移动端断点；这是最小 1200×800 的桌面应用。"
+    ]
+  }
+}
