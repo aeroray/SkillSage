@@ -169,7 +169,10 @@ async function previewInvoke<T>(
           name: skill.name,
           owner: skill.source.split("/")[0],
           repo: skill.source.split("/")[1],
-          source: "skills.sh",
+          // A real remote record stores the full skills.sh URL, not a bare
+          // host. Mirroring that keeps the dev preview's update-source
+          // classification identical to production.
+          source: skill.url,
           description: "用于界面设计和组件规范。",
           currentVersion: index === 0 ? "a1b2c3d" : "d4e5f6a",
           currentHash: "9c8b7a6d5e4f3210",
@@ -422,7 +425,11 @@ export async function invokeCommand<T>(
   command: string,
   args?: Record<string, unknown>,
 ) {
-  if (isBrowserPreview()) {
+  // `import.meta.env.DEV` is inlined by Vite as a literal, so in a production
+  // build this branch folds away and `previewInvoke` — with its large fixture
+  // set — is tree-shaken out of the bundle. Checking `isBrowserPreview()`
+  // alone hid the flag inside a function body, which the bundler cannot fold.
+  if (import.meta.env.DEV && isBrowserPreview()) {
     return previewInvoke<T>(command, args);
   }
   return invoke<T>(command, args);

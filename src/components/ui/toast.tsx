@@ -26,7 +26,7 @@ type ToastItem = ToastOptions & {
 let nextToastId = 0;
 
 const variantStyles: Record<ToastVariant, string> = {
-  error: "border-destructive/30 bg-card text-destructive",
+  error: "border-destructive/30 bg-card text-destructive-text",
   info: "border-border bg-card text-foreground",
   success: "border-success/30 bg-card text-foreground",
   warning: "border-warning/30 bg-card text-foreground",
@@ -69,8 +69,8 @@ function ToastCard({
         aria-hidden="true"
         className={cn(
           "size-4 shrink-0",
-          item.variant === "success" && "text-success",
-          item.variant === "warning" && "text-warning",
+          item.variant === "success" && "text-success-text",
+          item.variant === "warning" && "text-warning-text",
         )}
       />
       <div className="min-w-0 flex-1">

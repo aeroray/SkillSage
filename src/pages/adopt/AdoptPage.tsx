@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   Check,
@@ -63,13 +63,19 @@ function AdoptCandidateRow({
   working: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<number | undefined>(undefined);
   const path = displayPath(item.path);
+
+  // Clear a pending "copied" reset if the row unmounts first, so the timer
+  // cannot call setState on an unmounted component.
+  useEffect(() => () => window.clearTimeout(copiedTimer.current), []);
 
   const copyPath = async () => {
     try {
       await copyText(path);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
+      window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 1600);
     } catch (error) {
       onCopyError(normalizeTauriError(error));
     }
@@ -90,7 +96,7 @@ function AdoptCandidateRow({
           <div className="flex min-w-0 items-start justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <p className="min-w-0 truncate text-sm font-medium text-foreground">{item.name}</p>
-              {item.declaredName ? <Badge className="bg-warning/10 text-warning" variant="muted">名称需整理</Badge> : null}
+              {item.declaredName ? <Badge className="bg-warning/10 text-warning-text" variant="muted">名称需整理</Badge> : null}
               {!item.valid ? <Badge variant="muted">无法采纳</Badge> : null}
             </div>
             {item.declaredName ? (
@@ -147,7 +153,7 @@ function AdoptCandidateRow({
             </Button>
           </div>
           {item.warning ? (
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-warning">
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-warning-text">
               <AlertCircle aria-hidden="true" className="size-3.5 shrink-0" />
               {item.warning}
             </p>

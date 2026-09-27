@@ -22,20 +22,30 @@ import { normalizeTauriError } from "../../lib/tauri";
 
 let cachedInstalledSkills: InstalledSkillsList | undefined;
 let installedSkillsPromise: Promise<InstalledSkillsList> | undefined;
+/** Bumped for every forced refresh, so a response from an older refresh can be
+ * recognized as superseded and kept out of the cache. */
+let installedSkillsGeneration = 0;
 
 function loadInstalledSkills(force = false) {
-  if (!force && cachedInstalledSkills)
-    return Promise.resolve(cachedInstalledSkills);
-  if (installedSkillsPromise) return installedSkillsPromise;
-  installedSkillsPromise = refreshInstalled()
+  if (!force) {
+    if (cachedInstalledSkills) return Promise.resolve(cachedInstalledSkills);
+    // Coalesce concurrent non-forced callers onto the request already running.
+    if (installedSkillsPromise) return installedSkillsPromise;
+  }
+  const generation = ++installedSkillsGeneration;
+  const request = refreshInstalled()
     .then((result) => {
-      cachedInstalledSkills = result;
+      // A newer refresh may have started while this one was in flight; caching
+      // then would overwrite fresher data with stale data.
+      if (generation === installedSkillsGeneration)
+        cachedInstalledSkills = result;
       return result;
     })
     .finally(() => {
-      installedSkillsPromise = undefined;
+      if (installedSkillsPromise === request) installedSkillsPromise = undefined;
     });
-  return installedSkillsPromise;
+  installedSkillsPromise = request;
+  return request;
 }
 
 /** Refresh the shared installed-skill cache after another flow changes the
@@ -98,7 +108,6 @@ export function useInstalledSkills() {
     error,
     loading,
     refresh,
-    setSkills,
     skills,
     skillsRoot,
     updateSkill,
@@ -147,7 +156,9 @@ export function useSkillInstall(onCompleted: () => void) {
     [onCompleted],
   );
 
-  return { error, install, installing, message, stage };
+  const clearError = useCallback(() => setError(undefined), []);
+
+  return { clearError, error, install, installing, message, stage };
 }
 
 export function useSkillUpdates() {

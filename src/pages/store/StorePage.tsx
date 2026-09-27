@@ -228,6 +228,11 @@ function SkillCard({
                   aria-label={`查看同一仓库中的另外 ${additional.length} 个技能`}
                   className="px-2"
                   onClick={(event) => event.stopPropagation()}
+                  // The mouse path is guarded above, but Radix's trigger only
+                  // preventDefaults Enter/Space without stopping propagation,
+                  // so the Card's keydown handler would also open the primary
+                  // skill on top of the menu.
+                  onKeyDown={(event) => event.stopPropagation()}
                   size="sm"
                   variant="ghost"
                 >
@@ -502,6 +507,9 @@ export function StorePage() {
     [installedSkills],
   );
   const openDetail = (skillId: string) => {
+    // Clear a previous quick-install failure so it cannot surface in the
+    // detail dialog of an unrelated skill.
+    installState.clearError();
     navigate(`/store/${skillId.split("/").map(encodeURIComponent).join("/")}`);
   };
   const startStoreInstall = async () => {
@@ -560,7 +568,11 @@ export function StorePage() {
         [detail.id]: normalizeTauriError(reason),
       }));
     } finally {
-      setTranslationLoadingSkillId(undefined);
+      // Only clear the spinner if this skill is still the one translating;
+      // otherwise a late completion would hide another skill's progress.
+      setTranslationLoadingSkillId((current) =>
+        current === detail.id ? undefined : current,
+      );
     }
   };
   const detailTranslation = detail
@@ -576,6 +588,17 @@ export function StorePage() {
   return (
     <div>
       <PageHeader description="浏览并安装 AI Agent 技能。" title="技能商店" />
+
+      {/* Quick install happens on the grid, where the detail dialog (the only
+          other place install errors render) is not open. Surface failures here
+          so a failed quick install is never silent. */}
+      {!selectedSkillId && (installState.error ?? conflictCheck.error) ? (
+        <ErrorBanner
+          className="mt-5"
+          error={installState.error ?? conflictCheck.error}
+          onOpenSettings={() => navigate("/settings")}
+        />
+      ) : null}
 
       <section aria-labelledby="leaderboard-title" className="mt-8">
         <div className="flex items-center gap-4">

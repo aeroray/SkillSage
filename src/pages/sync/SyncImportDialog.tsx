@@ -66,6 +66,9 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open }
   const hasSyncPreferences = Boolean(preview?.settings) || translatedDescriptionsCount > 0;
   const canImport = Boolean(preview && path.trim() && (selectedCount > 0 || (hasSyncPreferences && applySettings)) && !importing);
   const selectedOptions = useMemo<SyncImportOptions>(() => ({ applySettings: hasSyncPreferences && applySettings, selectedIds }), [applySettings, hasSyncPreferences, selectedIds]);
+  // Membership set instead of `selectedIds.includes(...)` per rendered row, so
+  // selection stays O(n) rather than O(n^2) for large sync packages.
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   const submit = async () => {
     if (!canImport) return;
@@ -105,7 +108,7 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open }
                 <div><Label className="font-medium" htmlFor="sync-apply-settings">同步应用设置和译文缓存</Label><p className="mt-1 text-xs leading-5 text-muted-foreground">恢复显示模式、主题色、代理设置和 {translatedDescriptionsCount} 条技能说明译文；GitHub Token 不会导入。</p></div>
               </div> : null}
               {preview.skills.map((skill) => {
-                const selected = selectedIds.includes(skill.id);
+                const selected = selectedIdSet.has(skill.id);
                 return <div className="flex items-start gap-3 rounded-md border border-border p-3" key={skill.id}>
                   <Checkbox aria-label={`选择 ${skill.name}`} checked={selected} disabled={skill.installed} onCheckedChange={(checked) => setSelectedIds((current) => checked === true ? [...new Set([...current, skill.id])] : current.filter((id) => id !== skill.id))} />
                   <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium text-foreground">{skill.name}</p><Badge variant="muted">{skill.currentVersion.slice(0, 10)}</Badge>{skill.installed ? <Badge variant="secondary">已安装</Badge> : null}</div><p className="mt-1 text-xs leading-5 text-muted-foreground">{skill.description || "暂无描述"}</p><p className="mt-1 truncate text-xs text-muted-foreground">{skill.source}</p></div>

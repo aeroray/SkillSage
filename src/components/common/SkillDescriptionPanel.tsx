@@ -93,7 +93,7 @@ export function SkillDescriptionPanel({
         {displayedDescription || "暂无描述"}
       </p>
       {translationError ? (
-        <p className="mt-3 text-xs text-destructive" role="alert">
+        <p className="mt-3 text-xs text-destructive-text" role="alert">
           {translationError}
         </p>
       ) : null}

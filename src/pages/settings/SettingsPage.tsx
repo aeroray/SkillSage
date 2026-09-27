@@ -55,8 +55,13 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (settings) setProxyUrl(settings.proxyUrl ?? "");
-    if (!isBrowserPreview()) void getVersion().then(setAppVersion).catch(() => undefined);
   }, [settings]);
+
+  // The app version is fixed for the process lifetime, so read it once rather
+  // than on every settings change.
+  useEffect(() => {
+    if (!isBrowserPreview()) void getVersion().then(setAppVersion).catch(() => undefined);
+  }, []);
 
   const saveSettings = async () => {
     setSaved(false);
@@ -124,7 +129,7 @@ export function SettingsPage() {
               </FieldGroup>}
             </CardContent>
             <CardFooter className="justify-between gap-3 pt-5">
-              <div className="flex min-h-9 items-center gap-2">{settings?.githubTokenConfigured ? <Badge variant="success">已配置</Badge> : <Badge variant="muted">未配置</Badge>}{saved ? <span className="text-xs text-success" role="status">已保存</span> : null}</div>
+              <div className="flex min-h-9 items-center gap-2">{settings?.githubTokenConfigured ? <Badge variant="success">已配置</Badge> : <Badge variant="muted">未配置</Badge>}{saved ? <span className="text-xs text-success-text" role="status">已保存</span> : null}</div>
               <div className="flex items-center gap-2"><Button disabled={saving || loading || !settings?.githubTokenConfigured} onClick={() => void clearToken()} variant="outline">清除 Token</Button><Button disabled={saving || loading} onClick={() => void saveSettings()}>{saving ? "保存中…" : "保存"}</Button></div>
             </CardFooter>
           </Card>
@@ -154,9 +159,9 @@ export function SettingsPage() {
                   {appUpdate ? <Badge variant="success">可更新</Badge> : null}
                 </div>
                 <p className="mt-2 min-h-4 text-xs text-muted-foreground">{lastCheckedLabel ? `上次检查：${lastCheckedLabel}` : "启动后会自动检查一次"}</p>
-                {appUpdateError ? <p className="mt-1 line-clamp-2 text-xs text-destructive">检查失败：{appUpdateError}</p> : null}
+                {appUpdateError ? <p className="mt-1 line-clamp-2 text-xs text-destructive-text">检查失败：{appUpdateError}</p> : null}
                 <div className="mt-4 flex items-center justify-end gap-2">
-                  <Button disabled={appUpdateChecking || appUpdateBusy || isBrowserPreview()} onClick={() => void checkAppUpdate()} size="sm" variant="outline">{appUpdateChecking ? "检查中…" : "检查更新"}</Button>
+                  <Button disabled={appUpdateChecking || appUpdateBusy || isBrowserPreview()} onClick={() => { void checkAppUpdate().catch(() => undefined); }} size="sm" variant="outline">{appUpdateChecking ? "检查中…" : "检查更新"}</Button>
                   {appUpdate ? <Button disabled={appUpdateBusy || isBrowserPreview()} onClick={() => void appUpdateInstall()} size="sm">{appUpdatePhase === "downloading" ? `下载中${appUpdateProgress === null ? "…" : ` ${appUpdateProgress}%`}` : appUpdatePhase === "installing" ? "安装中…" : appUpdatePhase === "error" ? "重试安装" : "立即安装"}</Button> : null}
                 </div>
               </div>

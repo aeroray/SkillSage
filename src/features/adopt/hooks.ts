@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { adoptSkills, scanAdoptCandidates } from "./api";
 import type { AdoptResult, AdoptScanResult, AdoptSelection } from "./types";
@@ -6,38 +6,52 @@ import { normalizeTauriError } from "../../lib/tauri";
 
 let cachedScan: AdoptScanResult | undefined;
 let scanPromise: Promise<AdoptScanResult> | undefined;
+/** Bumped for every forced rescan, so a response from an older scan can be
+ * recognized as superseded and kept out of the cache. */
+let scanGeneration = 0;
 
 function loadScan(force = false) {
-  if (!force && cachedScan) return Promise.resolve(cachedScan);
-  if (scanPromise) return scanPromise;
-  scanPromise = scanAdoptCandidates()
+  if (!force) {
+    if (cachedScan) return Promise.resolve(cachedScan);
+    // Coalesce concurrent non-forced callers onto the request already running.
+    if (scanPromise) return scanPromise;
+  }
+  const generation = ++scanGeneration;
+  const request = scanAdoptCandidates()
     .then((result) => {
-      cachedScan = result;
+      // A newer scan may have started while this one was in flight; caching
+      // then would overwrite fresher data with stale data.
+      if (generation === scanGeneration) cachedScan = result;
       return result;
     })
     .finally(() => {
-      scanPromise = undefined;
+      if (scanPromise === request) scanPromise = undefined;
     });
-  return scanPromise;
+  scanPromise = request;
+  return request;
 }
 
 export function useAdoptScan() {
   const [scan, setScan] = useState<AdoptScanResult | undefined>(() => cachedScan);
   const [error, setError] = useState<string>();
   const [scanning, setScanning] = useState(false);
+  const requestId = useRef(0);
 
   const runScan = useCallback(async (force = true) => {
+    const currentRequest = ++requestId.current;
     setScanning(true);
     setError(undefined);
     try {
       const result = await loadScan(force);
-      setScan(result);
+      // Ignore an out-of-order response from an earlier scan.
+      if (currentRequest === requestId.current) setScan(result);
       return result;
     } catch (reason) {
-      setError(normalizeTauriError(reason));
+      if (currentRequest === requestId.current)
+        setError(normalizeTauriError(reason));
       return undefined;
     } finally {
-      setScanning(false);
+      if (currentRequest === requestId.current) setScanning(false);
     }
   }, []);
 

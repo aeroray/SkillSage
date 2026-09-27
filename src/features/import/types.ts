@@ -1,6 +1,8 @@
 export type ImportPreview = {
   sourcePath: string;
-  sourceKind: "file" | "directory" | string;
+  /** Mirrors `core::import::source::ResolvedSource::kind`. Closed on purpose:
+   * `| string` would collapse the union and defeat the `=== "file"` check. */
+  sourceKind: "file" | "directory";
   skillRoot: string;
   name: string;
   description: string;

@@ -155,14 +155,37 @@ export function useSkillDetail(skillId: string | null) {
   };
 }
 
+let cachedTranslations: SkillTranslationCache | undefined;
+let translationsPromise: Promise<SkillTranslationCache> | undefined;
+
+function loadTranslations() {
+  if (cachedTranslations) return Promise.resolve(cachedTranslations);
+  if (translationsPromise) return translationsPromise;
+  const request = getSkillTranslations()
+    .then((result) => {
+      cachedTranslations = result;
+      return result;
+    })
+    .finally(() => {
+      if (translationsPromise === request) translationsPromise = undefined;
+    });
+  translationsPromise = request;
+  return request;
+}
+
 export function useSkillDescriptionTranslations() {
-  const [translations, setTranslations] = useState<SkillTranslationCache>({});
-  const [loading, setLoading] = useState(true);
+  const [translations, setTranslations] = useState<SkillTranslationCache>(
+    () => cachedTranslations ?? {},
+  );
+  const [loading, setLoading] = useState(() => !cachedTranslations);
   const [error, setError] = useState<string>();
 
+  // The cache is module-level so navigating between /store and /skills does not
+  // re-read the whole translation file on every mount.
   useEffect(() => {
+    if (cachedTranslations) return;
     let active = true;
-    void getSkillTranslations()
+    void loadTranslations()
       .then((result) => {
         if (active) setTranslations(result);
       })
@@ -179,10 +202,12 @@ export function useSkillDescriptionTranslations() {
 
   const save = useCallback(async (skillId: string, translatedDescription: string) => {
     await saveSkillTranslation(skillId, translatedDescription);
-    setTranslations((current) => ({
-      ...current,
+    const next = {
+      ...(cachedTranslations ?? {}),
       [skillId]: translatedDescription,
-    }));
+    };
+    cachedTranslations = next;
+    setTranslations(next);
   }, []);
 
   return { error, loading, save, translations };

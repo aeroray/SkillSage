@@ -15,6 +15,11 @@ export type InstalledSkill = {
   workbuddyDistributed: boolean;
 };
 
+/** Mirrors the closed set the backend produces in
+ * `core::lifecycle::match_local::verification_for_error` and its callers. The
+ * union is intentionally closed: `| string` would collapse it to `string` and
+ * silently discard every literal, removing the narrowing the label/help
+ * branches rely on. Both of those branches already have a default case. */
 export type LocalSkillMatch = SkillSearchResult & {
   verification:
     | "exact"
@@ -25,12 +30,11 @@ export type LocalSkillMatch = SkillSearchResult & {
     | "path-not-found"
     | "network-error"
     | "too-large"
-    | "unavailable"
-    | string;
+    | "unavailable";
   remoteVersion?: string;
   remoteHash?: string;
   descriptionMatch: boolean;
-  matchBasis: "npx-lock" | "store-search" | string;
+  matchBasis: "npx-lock" | "store-search";
 };
 
 export type InstalledSkillsList = {
@@ -73,7 +77,5 @@ export type UpdateCheckList = {
 export type PathConflict = {
   name: string;
   path: string;
-  kind: "directory" | "link" | string;
+  kind: "directory" | "link";
 };
-
-export type ConflictDecision = "skip" | "takeover" | "cancel";
