@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-27T08:33:54.443Z",
+  "generatedAt": "2026-09-27T09:01:29.242Z",
   "title": "Design System: SkillSage · 技匠",
   "extensions": {
     "colorMeta": {
@@ -339,6 +339,20 @@
       "description": "签名组件。设置页「AI 工具与分发」里的一行，位于模态框中。名称 + 安装/未检测到徽章 + 解析后的技能目录，未核实来源额外标注「路径未核实」。目录用原生选择器，手动输入为次选。唯一设置是「读取公共技能目录」勾选框，说明当前后果而非机制。",
       "html": "<li class=\"ds-tool\"><div class=\"ds-tool-top\"><div class=\"ds-tool-id\"><div class=\"ds-tool-name\">Claude Code <span class=\"ds-tool-badge ds-tool-badge-ok\">已安装</span></div><p class=\"ds-tool-path\">C:\\Users\\PC\\.claude\\skills</p></div><div class=\"ds-tool-acts\"><button class=\"ds-tool-act\" aria-label=\"选择目录\">📁</button><button class=\"ds-tool-act\" aria-label=\"手动输入路径\">✎</button></div></div><label class=\"ds-tool-toggle\"><input type=\"checkbox\" /><span><span class=\"ds-tool-toggle-title\">读取公共技能目录</span><span class=\"ds-tool-toggle-help\">需要为每个技能单独建立链接。</span></span></label></li>",
       "css": ".ds-tool { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-lg, 14px); background: color-mix(in srgb, var(--app-color-muted, #eef1f4) 30%, transparent); list-style: none; } .ds-tool-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; } .ds-tool-name { display: flex; align-items: center; gap: 8px; color: var(--app-color-foreground, #17202a); font-size: 0.875rem; font-weight: 500; } .ds-tool-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 500; } .ds-tool-badge-ok { background: color-mix(in srgb, var(--app-color-success, #0d9488) 10%, transparent); color: var(--app-color-success-text, #0b7a6f); } .ds-tool-path { margin: 4px 0 0; color: var(--app-color-muted-foreground, #5f6c7e); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-tool-acts { display: flex; align-items: center; gap: 4px; flex: none; } .ds-tool-act { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; border-radius: var(--radius-md, 10px); background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); cursor: pointer; } .ds-tool-act:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-tool-toggle { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: var(--radius-md, 10px); background: color-mix(in srgb, var(--app-color-background, #f5f6f8) 60%, transparent); cursor: pointer; } .ds-tool-toggle-title { display: block; color: var(--app-color-foreground, #17202a); font-size: 0.75rem; font-weight: 500; } .ds-tool-toggle-help { display: block; margin-top: 2px; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; line-height: 1.25rem; }"
+    },
+    {
+      "name": "Dialog / Modal",
+      "kind": "custom",
+      "description": "签名组件。所有浮层的唯一定义（components/ui/dialog-shell.ts）。一个外壳，两种语义：Dialog 用于表单与详情，ConfirmDialog 用于必须作出决定的打断。三段结构：头部 │ 主体（唯一滚动区）│ 页脚（操作右对齐）。",
+      "html": "<div class=\"ds-dlg\"><div class=\"ds-dlg-head\"><p class=\"ds-dlg-title\">确认卸载</p><p class=\"ds-dlg-desc\">会删除这个技能在共享目录中的文件夹和记录，所有读取该目录的 AI 工具会立即失去它。</p></div><div class=\"ds-dlg-body\"><p class=\"ds-dlg-note\">受影响的技能</p></div><div class=\"ds-dlg-foot\"><button class=\"ds-dlg-btn\">取消</button><button class=\"ds-dlg-btn ds-dlg-btn-danger\">卸载</button></div></div>",
+      "css": ".ds-dlg { width: min(28rem, calc(100vw - 2rem)); overflow: hidden; border: 1px solid var(--app-color-border, #e1e6eb); border-radius: var(--radius-lg, 14px); background: var(--app-color-popover, #ffffff); box-shadow: 0 18px 50px rgba(23, 32, 42, 0.14); } .ds-dlg-head { padding: 20px 24px; border-bottom: 1px solid var(--app-color-border, #e1e6eb); } .ds-dlg-title { margin: 0; color: var(--app-color-foreground, #17202a); font-size: 1.125rem; font-weight: 600; letter-spacing: -0.025em; } .ds-dlg-desc { margin: 4px 0 0; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.875rem; line-height: 1.5rem; } .ds-dlg-body { padding: 24px; } .ds-dlg-note { margin: 0; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.75rem; } .ds-dlg-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--app-color-border, #e1e6eb); } .ds-dlg-btn { display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-md, 10px); background: transparent; color: var(--app-color-foreground, #17202a); font-size: 0.875rem; font-weight: 500; cursor: pointer; } .ds-dlg-btn:hover { background: var(--app-color-muted, #eef1f4); } .ds-dlg-btn-danger { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 10%, transparent); color: var(--app-color-destructive-text, #b23b37); } .ds-dlg-btn-danger:hover { background: color-mix(in srgb, var(--app-color-destructive, #c2413d) 20%, transparent); }"
+    },
+    {
+      "name": "Settings Section Nav",
+      "kind": "nav",
+      "description": "签名组件。设置页的左侧分区导航（176px）+ 右侧单一分区内容。复用主导航的样式语言，因为两者都是「选一个地方去」。一次只渲染一个分区，只有右侧滚动。",
+      "html": "<div class=\"ds-set\"><nav class=\"ds-set-nav\"><button class=\"ds-set-item ds-set-item-on\">外观</button><button class=\"ds-set-item\">安全与连接</button><button class=\"ds-set-item\">AI 工具与分发</button><button class=\"ds-set-item\">设备同步</button><button class=\"ds-set-item\">关于与更新</button></nav><div class=\"ds-set-pane\"><p class=\"ds-set-title\">外观</p><p class=\"ds-set-desc\">调整显示模式和主题色，设置会立即生效。</p></div></div>",
+      "css": ".ds-set { display: flex; gap: 24px; } .ds-set-nav { display: flex; flex-direction: column; gap: 4px; width: 176px; flex: none; } .ds-set-item { display: flex; align-items: center; height: 36px; padding: 0 12px; border: none; border-radius: var(--radius-md, 10px); background: transparent; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.875rem; font-weight: 500; text-align: left; cursor: pointer; } .ds-set-item:hover { background: var(--app-color-muted, #eef1f4); color: var(--app-color-foreground, #17202a); } .ds-set-item-on { background: var(--app-color-primary-soft, #e6f4f1); color: var(--app-color-primary-text, #0a7d70); } .ds-set-pane { flex: 1; min-width: 0; } .ds-set-title { margin: 0; color: var(--app-color-foreground, #17202a); font-size: 1rem; font-weight: 600; } .ds-set-desc { margin: 4px 0 0; color: var(--app-color-muted-foreground, #5f6c7e); font-size: 0.875rem; line-height: 1.5rem; }"
     }
   ],
   "narrative": {
@@ -351,11 +365,13 @@
       "状态必须真实：说不清楚的结论用专门的「无更新源」，绝不谎报「已是最新」。",
       "全部文本 ≥ 4.5:1，含浅色模式的次要文字。",
       "留白由真实状态填充：侧栏显示共享目录路径与计数，而不是装饰。",
-      "页头并入标题栏：页面名与操作都在 36px 标题栏，页面省下的纵向空间全部给内容。",
+      "页头并入标题栏：页面名与操作都在 44px 标题栏，页面省下的纵向空间全部给内容。",
       "控件永远小于容器：chrome 用 28px，内容区用 32–36px。",
       "配置列全集、执行列相关项：设置页给完整清单，技能页只给本机检测到的工具。",
       "不确定必须可见：未核实来源的条目带「路径未核实」标记与依据链接。",
-      "对齐不靠内容：同排对齐元素固定行高，删掉可选元素后位置不变。"
+      "对齐不靠内容：同排对齐元素固定行高，删掉可选元素后位置不变。",
+      "一个外壳两种语义：所有浮层共用 dialog-shell 的外观，行为差异由 Radix 原语承担。",
+      "设置用分区导航：一次只渲染一个分区，导航固定、内容滚动。"
     ],
     "rules": [
       {
@@ -454,6 +470,16 @@
         "section": "layout"
       },
       {
+        "name": "「一种外观，多种语义」规则",
+        "body": "组件可以因为行为不同而分开（Dialog 与 AlertDialog 的焦点管理、外部点击行为确实不同），但外观必须来自同一处定义。dialog-shell.ts 是浮层外观的唯一来源，Dialog 和 ConfirmDialog 都组合它。如果两个组件看起来像两个产品，那不是「语义不同」，是外观没有统一。",
+        "section": "layout"
+      },
+      {
+        "name": "「分区导航优于瀑布流」规则",
+        "body": "设置类页面用「左侧分区导航 + 右侧单一分区内容」，不要用多列卡片瀑布。瀑布流没有阅读顺序——某一项落在哪一列只取决于上一列排满了没有——所以每次找设置都要两列都扫一遍。分区导航让「东西在哪」这个问题由导航本身回答。判断标准：这一页的内容之间是否互相独立；独立就该分区，有先后关系才该顺序排列。",
+        "section": "layout"
+      },
+      {
         "name": "「浮层才投影」规则",
         "body": "阴影是「这一层可以关闭、且盖住了下方内容」的信号。静态内容用边框，不用阴影。零偏移的彩色光晕属于装饰，不在这套系统里。",
         "section": "elevation"
@@ -482,7 +508,9 @@
       "Do 让配置界面列出全集，让执行界面只列出本机相关的项。",
       "Do 把数据来源的可靠程度显示出来（「路径未核实」+ 依据链接）。",
       "Do 给同排需要对齐的行加显式 min-h-*；判断方法是删掉可选元素后位置不变。",
-      "Do 用原生文件/目录选择器代替让用户手打路径。"
+      "Do 用原生文件/目录选择器代替让用户手打路径。",
+      "Do 让所有浮层的外观来自 dialog-shell.ts，页脚是组件的一部分。",
+      "Do 设置类页面用分区导航，一次只渲染一个分区。"
     ],
     "donts": [
       "Don't 用 text-muted-foreground 渲染彩色底上的文字（chip、彩色 Badge）——实测只有 3.5:1 左右。",
@@ -502,7 +530,10 @@
       "Don't 把全部注册项铺进执行界面；用户只关心本机相关的那几项。",
       "Don't 让未核实的数据和已确认的数据长得一样。",
       "Don't 让同一排的对齐元素依赖内容高度；可选元素出现或消失都会错位。",
-      "Don't 要求用户手动输入文件或目录路径作为唯一方式。"
+      "Don't 要求用户手动输入文件或目录路径作为唯一方式。",
+      "Don't 让两个语义不同的浮层长成两个样子；外观必须来自同一处。",
+      "Don't 在对话框里各写一套按钮行；用 footer。",
+      "Don't 用多列卡片瀑布排设置项；那没有阅读顺序。"
     ]
   }
 }
