@@ -1,4 +1,6 @@
 use crate::error::SkillsageError;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use crate::core::limits::{MAX_REMOTE_JSON_BYTES, MAX_REMOTE_TEXT_BYTES};
@@ -12,9 +14,48 @@ const HUNYUAN_MAX_CHARS: usize = 4_000;
 const HUNYUAN_TIMEOUT: Duration = Duration::from_secs(65);
 const HUNYUAN_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
+/// Distinct proxy settings worth keeping a client for. A proxy is a user
+/// setting, so this is really "one, plus whatever the user was on before";
+/// the bound only exists so a pathological sequence of edits cannot grow the
+/// map without limit.
+const MAX_CACHED_CLIENTS: usize = 4;
+
 #[derive(Clone)]
 pub struct StoreClient {
     http: reqwest::Client,
+}
+
+/// One client per proxy setting, reused across store commands.
+///
+/// Every command used to build its own client, and therefore its own connection
+/// pool — so each search paid a fresh DNS lookup and TLS handshake before any
+/// request went out. Search is debounced but still fires on every pause in
+/// typing, which made the handshake the dominant cost of the whole interaction.
+///
+/// Keyed by proxy so changing the setting takes effect on the next call instead
+/// of reusing a client still pointed at the old proxy.
+static CLIENTS: OnceLock<Mutex<HashMap<Option<String>, StoreClient>>> = OnceLock::new();
+
+impl StoreClient {
+    /// Returns a shared client for `proxy_url`, building one on first use.
+    pub fn shared(proxy_url: Option<String>) -> Result<StoreClient, SkillsageError> {
+        let cache = CLIENTS.get_or_init(|| Mutex::new(HashMap::new()));
+        // A poisoned lock only means some other thread panicked while holding
+        // it; the map itself is still consistent, and refusing every store
+        // request because of an unrelated panic would be worse than continuing.
+        let mut clients = cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(client) = clients.get(&proxy_url) {
+            return Ok(client.clone());
+        }
+        let client = StoreClient::new_with_proxy(proxy_url.clone())?;
+        if clients.len() >= MAX_CACHED_CLIENTS {
+            clients.clear();
+        }
+        clients.insert(proxy_url, client.clone());
+        Ok(client)
+    }
 }
 
 impl StoreClient {
@@ -248,5 +289,42 @@ mod tests {
             "data": { "code": 0, "content": "中文说明" }
         });
         assert_eq!(super::parse_hunyuan_content(json).unwrap(), "中文说明");
+    }
+
+    /// Both cache properties live in one test because they share the
+    /// process-wide `CLIENTS` map: as separate `#[test]`s they run in parallel
+    /// and clear each other's entries.
+    #[test]
+    fn the_client_cache_reuses_per_proxy_and_stays_bounded() {
+        let cache = super::CLIENTS
+            .get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+        let len = || cache.lock().expect("lock").len();
+        cache.lock().expect("lock").clear();
+
+        // Repeated calls with one setting must not keep building clients, or
+        // every command pays a fresh DNS lookup and TLS handshake. Asserted
+        // through the cache's bookkeeping, because reqwest::Client is a newtype
+        // whose inner Arc is not reachable for comparison.
+        super::StoreClient::shared(None).expect("client");
+        super::StoreClient::shared(None).expect("client");
+        super::StoreClient::shared(None).expect("client");
+        assert_eq!(len(), 1, "three calls with one proxy must share a client");
+
+        // A different proxy must NOT reuse the pooled connections, or changing
+        // the setting would silently keep using the old route.
+        super::StoreClient::shared(Some("http://127.0.0.1:1".to_string())).expect("client");
+        assert_eq!(len(), 2, "a different proxy must get its own client");
+
+        // Guards the eviction path: a user editing the proxy repeatedly must not
+        // grow the map without limit. Which entry is dropped is unspecified.
+        for index in 0..(super::MAX_CACHED_CLIENTS + 2) {
+            super::StoreClient::shared(Some(format!("http://127.0.0.1:{}", 9000 + index)))
+                .expect("client");
+        }
+        assert!(
+            len() <= super::MAX_CACHED_CLIENTS,
+            "cache grew past its bound: {}",
+            len()
+        );
     }
 }

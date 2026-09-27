@@ -58,6 +58,18 @@ pub fn load_view(layout: &RepoLayout) -> Result<SettingsView, SkillsageError> {
     })
 }
 
+/// The proxy alone, without touching the OS keyring.
+///
+/// The store commands need only the proxy, and `read_token` is a blocking
+/// keyring call that on macOS can prompt the user. Reading it for a request
+/// that cannot use the token would make every store call pay for a secret it
+/// never sends.
+pub fn load_proxy(layout: &RepoLayout) -> Result<Option<String>, SkillsageError> {
+    layout.ensure_roots()?;
+    let stored = load_stored(layout)?;
+    normalize_proxy(stored.proxy_url)
+}
+
 pub fn save(
     layout: &RepoLayout,
     proxy_url: Option<String>,
