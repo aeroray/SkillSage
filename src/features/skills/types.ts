@@ -11,8 +11,16 @@ export type InstalledSkill = {
   currentVersion: string;
   currentHash: string;
   installedAt: string;
-  claudeDistributed: boolean;
-  workbuddyDistributed: boolean;
+  /** Tool ids this skill is linked into. Comes from the backend registry, so
+   * the UI never hardcodes a tool name. */
+  distributedTo: string[];
+};
+
+/** One tool a skill can be distributed into. Supplied by the backend so a newly
+ * registered tool appears without a frontend change. */
+export type ToolOption = {
+  id: string;
+  label: string;
 };
 
 /** Mirrors the closed set the backend produces in
@@ -40,6 +48,9 @@ export type LocalSkillMatch = SkillSearchResult & {
 export type InstalledSkillsList = {
   skillsRoot: string;
   skills: InstalledSkill[];
+  distributableTools: ToolOption[];
+  /** Ids of tools detected on this machine. */
+  detectedTools: string[];
 };
 
 export type InstallResult = {

@@ -14,6 +14,7 @@ import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { AccentControl } from "../../components/common/AccentControl";
 import { ThemeControl } from "../../components/common/ThemeControl";
 import { useSettings } from "../../features/settings/hooks";
+import { ToolSettingsCard } from "../../features/tools/ToolSettingsCard";
 import { SyncImportDialog } from "../sync/SyncImportDialog";
 import { useSyncExport, type SyncSettings } from "../../features/sync";
 import { useThemeStore } from "../../features/theme/store";
@@ -154,6 +155,11 @@ export function SettingsPage() {
         </div>
 
         <div className="flex min-w-0 flex-col gap-5">
+          {/* Distribution is about which tools read the shared directory, so it
+              belongs with the other machine-level configuration rather than
+              inside an individual skill's row. */}
+          <ToolSettingsCard />
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-4">
               <div className="flex min-w-0 items-center gap-4"><div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><Info aria-hidden="true" className="h-5 w-5" /></div><div><CardTitle>关于与更新</CardTitle><CardDescription className="mt-1">技匠（SkillSage）技能管理器与版本信息。</CardDescription></div></div>

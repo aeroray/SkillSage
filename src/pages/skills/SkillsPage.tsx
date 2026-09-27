@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -98,6 +98,7 @@ import {
 } from "../../features/skills/api";
 import { translateSkillDescription } from "../../features/store/api";
 import {
+  distributionTargetsFor,
   useInstalledSkills,
   useSkillManagement,
   useSkillUpdates,
@@ -106,6 +107,7 @@ import { useSkillDescriptionTranslations } from "../../features/store/hooks";
 import type {
   InstalledSkill,
   LocalSkillMatch,
+  ToolOption,
 } from "../../features/skills/types";
 import {
   countSkillsBySource,
@@ -199,8 +201,10 @@ function SkillDetailField({
 
 function SkillDetailContent({
   descriptionMode,
+  detectedTools,
   skill,
   skillsRoot,
+  tools,
   onDescriptionModeChange,
   onTranslate,
   translatedDescription,
@@ -208,8 +212,10 @@ function SkillDetailContent({
   translationLoading,
 }: {
   descriptionMode: DescriptionMode;
+  detectedTools: string[];
   skill: InstalledSkill;
   skillsRoot?: string;
+  tools: ToolOption[];
   onDescriptionModeChange: (mode: DescriptionMode) => void;
   onTranslate: () => void;
   translatedDescription?: string;
@@ -228,12 +234,16 @@ function SkillDetailContent({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="muted">{skill.source || "本地技能"}</Badge>
-        <Badge variant={skill.claudeDistributed ? "success" : "muted"}>
-          Claude Code · {skill.claudeDistributed ? "已分发" : "未分发"}
-        </Badge>
-        <Badge variant={skill.workbuddyDistributed ? "success" : "muted"}>
-          Work Buddy · {skill.workbuddyDistributed ? "已分发" : "未分发"}
-        </Badge>
+        {/* Only tools installed on this machine (plus any that already hold a
+            link), so the detail view does not list the whole registry. */}
+        {distributionTargetsFor(tools, detectedTools, skill).map((tool) => {
+          const distributed = skill.distributedTo.includes(tool.id);
+          return (
+            <Badge key={tool.id} variant={distributed ? "success" : "muted"}>
+              {tool.label} · {distributed ? "已分发" : "未分发"}
+            </Badge>
+          );
+        })}
       </div>
 
       <SkillDescriptionPanel
@@ -502,8 +512,7 @@ function SkillRow({
   interactionDisabled,
   onCheck,
   onCheckUpdate,
-  onClaudeDistribution,
-  onWorkBuddyDistribution,
+  onToolDistribution,
   onDetail,
   onOnlineMatch,
   onOpenDirectory,
@@ -511,7 +520,9 @@ function SkillRow({
   onUpdate,
   pending,
   distributionPending,
+  detectedTools,
   skill,
+  tools,
   updating,
   updateAvailable,
 }: {
@@ -521,9 +532,9 @@ function SkillRow({
   interactionDisabled: boolean;
   onCheck: (checked: boolean) => void;
   onCheckUpdate: (skill: InstalledSkill) => void;
-  onClaudeDistribution: (skill: InstalledSkill, distributed: boolean) => void;
-  onWorkBuddyDistribution: (
+  onToolDistribution: (
     skill: InstalledSkill,
+    toolId: string,
     distributed: boolean,
   ) => void;
   onDetail: (skill: InstalledSkill) => void;
@@ -533,7 +544,9 @@ function SkillRow({
   onUpdate: (skill: InstalledSkill) => void;
   pending: boolean;
   distributionPending: boolean;
+  detectedTools: string[];
   skill: InstalledSkill;
+  tools: ToolOption[];
   updating: boolean;
   updateAvailable: boolean;
 }) {
@@ -541,6 +554,10 @@ function SkillRow({
   const rowBusy = checking || (pending && !distributionPending);
   const controlsDisabled = busy || interactionDisabled;
   const hasRemoteUpdateSource = isRemoteUpdateable(skill);
+  // Only tools installed on this machine, plus any that already hold a link for
+  // this skill. Showing all ~19 registered tools per row would bury the two or
+  // three that matter.
+  const visibleTools = distributionTargetsFor(tools, detectedTools, skill);
 
   return (
     <div aria-busy={busy} className="relative">
@@ -577,17 +594,18 @@ function SkillRow({
               <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
               分发中
             </span>
+          ) : visibleTools.length === 0 ? (
+            // No installed tool needs its own copy, so there is nothing to
+            // distribute. Saying so beats an empty column.
+            <span className="text-muted-foreground">无需分发</span>
           ) : (
-            <>
+            visibleTools.map((tool) => (
               <DistributionStatus
-                distributed={skill.claudeDistributed}
-                label="Claude Code"
+                distributed={skill.distributedTo.includes(tool.id)}
+                key={tool.id}
+                label={tool.label}
               />
-              <DistributionStatus
-                distributed={skill.workbuddyDistributed}
-                label="Work Buddy"
-              />
-            </>
+            ))
           )}
         </div>
         <DropdownMenu>
@@ -650,26 +668,25 @@ function SkillRow({
                   分发到工具
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                  <DropdownMenuCheckboxItem
-                    checked={skill.claudeDistributed}
-                    disabled={controlsDisabled}
-                    onCheckedChange={(checked) =>
-                      onClaudeDistribution(skill, checked === true)
-                    }
-                    onSelect={(event) => event.preventDefault()}
-                  >
-                    Claude Code
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={skill.workbuddyDistributed}
-                    disabled={controlsDisabled}
-                    onCheckedChange={(checked) =>
-                      onWorkBuddyDistribution(skill, checked === true)
-                    }
-                    onSelect={(event) => event.preventDefault()}
-                  >
-                    Work Buddy
-                  </DropdownMenuCheckboxItem>
+                  {visibleTools.length === 0 ? (
+                    <DropdownMenuItem disabled>
+                      没有需要分发的工具
+                    </DropdownMenuItem>
+                  ) : (
+                    visibleTools.map((tool) => (
+                      <DropdownMenuCheckboxItem
+                        checked={skill.distributedTo.includes(tool.id)}
+                        disabled={controlsDisabled}
+                        key={tool.id}
+                        onCheckedChange={(checked) =>
+                          onToolDistribution(skill, tool.id, checked === true)
+                        }
+                        onSelect={(event) => event.preventDefault()}
+                      >
+                        {tool.label}
+                      </DropdownMenuCheckboxItem>
+                    ))
+                  )}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
               <DropdownMenuItem
@@ -702,10 +719,12 @@ export function SkillsPage() {
   const { toast } = useToast();
   const {
     error: skillsError,
+    detectedTools,
     loading: skillsLoading,
     skillsRoot,
     refresh: refreshSkills,
     skills,
+    tools,
     updateSkill: updateInstalledSkill,
   } = useInstalledSkills();
   const {
@@ -859,12 +878,24 @@ export function SkillsPage() {
     () => selectedSkills.filter(isRemoteUpdateable),
     [selectedSkills],
   );
-  const selectedNotClaudeCount = selectedSkills.filter(
-    (skill) => !skill.claudeDistributed,
-  ).length;
-  const selectedNotWorkBuddyCount = selectedSkills.filter(
-    (skill) => !skill.workbuddyDistributed,
-  ).length;
+  // Per-tool counts of selected skills that still need a link. Only tools
+  // installed on this machine are counted, so a batch action shows the real
+  // number for the tools that matter rather than all ~19 registered ones.
+  const detectedToolList = useMemo(
+    () => tools.filter((tool) => detectedTools.includes(tool.id)),
+    [detectedTools, tools],
+  );
+  const selectedMissingByTool = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const tool of detectedToolList) {
+      counts.set(
+        tool.id,
+        selectedSkills.filter((skill) => !skill.distributedTo.includes(tool.id))
+          .length,
+      );
+    }
+    return counts;
+  }, [detectedToolList, selectedSkills]);
   // Facet counts come from the search-only set, so a chip's number answers
   // "how many matches are in this group" instead of collapsing to the count of
   // whichever facet is currently active.
@@ -981,40 +1012,24 @@ export function SkillsPage() {
       variant: update?.updateAvailable ? "info" : "success",
     });
   };
-  const toggleClaudeDistribution = async (
+  /**
+   * Adds or removes one tool's link for one skill. The backend returns the
+   * record with `distributedTo` recomputed from disk, so the local cache is
+   * replaced rather than patched with a guess.
+   */
+  const toggleToolDistribution = async (
     skill: InstalledSkill,
+    toolId: string,
     distributed: boolean,
   ) => {
-    const updated = await management.setClaudeDistribution(
+    const updated = await management.setToolDistribution(
       skill.id,
+      toolId,
       distributed,
       { refresh: false },
     );
     if (updated) {
-      updateInstalledSkill({
-        ...skill,
-        ...updated,
-        claudeDistributed: distributed,
-        workbuddyDistributed: skill.workbuddyDistributed,
-      });
-    }
-  };
-  const toggleWorkBuddyDistribution = async (
-    skill: InstalledSkill,
-    distributed: boolean,
-  ) => {
-    const updated = await management.setWorkbuddyDistribution(
-      skill.id,
-      distributed,
-      { refresh: false },
-    );
-    if (updated) {
-      updateInstalledSkill({
-        ...skill,
-        ...updated,
-        claudeDistributed: skill.claudeDistributed,
-        workbuddyDistributed: distributed,
-      });
+      updateInstalledSkill({ ...skill, ...updated });
     }
   };
   const updateSingleSkill = async (skill: InstalledSkill) => {
@@ -1029,42 +1044,29 @@ export function SkillsPage() {
    * skills that actually need the link are targeted, so a second click is a
    * no-op instead of a re-link of everything.
    */
-  const distributeSelected = async (
-    target: "claude" | "workbuddy",
-    enable: boolean,
-  ) => {
+  const distributeSelected = async (toolId: string, enable: boolean) => {
     if (bulkWorking) return;
-    const targets = selectedSkills.filter((skill) =>
-      target === "claude"
-        ? skill.claudeDistributed !== enable
-        : skill.workbuddyDistributed !== enable,
+    const tool = tools.find((entry) => entry.id === toolId);
+    const targets = selectedSkills.filter(
+      (skill) => skill.distributedTo.includes(toolId) !== enable,
     );
     if (targets.length === 0) return;
 
-    const label = target === "claude" ? "Claude Code" : "Work Buddy";
+    const label = tool?.label ?? toolId;
     setBulkAction({ kind: "distribute", completed: 0, total: targets.length });
     let doneCount = 0;
     let failedCount = 0;
     try {
       for (const skill of targets) {
-        const updated =
-          target === "claude"
-            ? await management.setClaudeDistribution(skill.id, enable, {
-                refresh: false,
-              })
-            : await management.setWorkbuddyDistribution(skill.id, enable, {
-                refresh: false,
-              });
+        const updated = await management.setToolDistribution(
+          skill.id,
+          toolId,
+          enable,
+          { refresh: false },
+        );
         if (updated) {
           doneCount += 1;
-          updateInstalledSkill({
-            ...skill,
-            ...updated,
-            claudeDistributed:
-              target === "claude" ? enable : skill.claudeDistributed,
-            workbuddyDistributed:
-              target === "workbuddy" ? enable : skill.workbuddyDistributed,
-          });
+          updateInstalledSkill({ ...skill, ...updated });
         } else {
           failedCount += 1;
         }
@@ -1512,51 +1514,45 @@ export function SkillsPage() {
                         为选中的技能管理工具链接
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        disabled={selectedNotClaudeCount === 0}
-                        onSelect={() => void distributeSelected("claude", true)}
-                      >
-                        <CheckCircle2 />
-                        添加到 Claude Code
-                        {selectedNotClaudeCount > 0 ? (
-                          <DropdownMenuShortcut>
-                            {selectedNotClaudeCount}
-                          </DropdownMenuShortcut>
-                        ) : null}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={selectedSkills.length - selectedNotClaudeCount === 0}
-                        onSelect={() => void distributeSelected("claude", false)}
-                      >
-                        <MinusCircle />
-                        从 Claude Code 移除
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        disabled={selectedNotWorkBuddyCount === 0}
-                        onSelect={() =>
-                          void distributeSelected("workbuddy", true)
-                        }
-                      >
-                        <CheckCircle2 />
-                        添加到 Work Buddy
-                        {selectedNotWorkBuddyCount > 0 ? (
-                          <DropdownMenuShortcut>
-                            {selectedNotWorkBuddyCount}
-                          </DropdownMenuShortcut>
-                        ) : null}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={
-                          selectedSkills.length - selectedNotWorkBuddyCount === 0
-                        }
-                        onSelect={() =>
-                          void distributeSelected("workbuddy", false)
-                        }
-                      >
-                        <MinusCircle />
-                        从 Work Buddy 移除
-                      </DropdownMenuItem>
+                      {detectedToolList.length === 0 ? (
+                        <DropdownMenuItem disabled>
+                          没有需要分发的工具
+                        </DropdownMenuItem>
+                      ) : (
+                        detectedToolList.map((tool, index) => {
+                          const missing =
+                            selectedMissingByTool.get(tool.id) ?? 0;
+                          const linked = selectedSkills.length - missing;
+                          return (
+                            <Fragment key={tool.id}>
+                              {index > 0 ? <DropdownMenuSeparator /> : null}
+                              <DropdownMenuItem
+                                disabled={missing === 0}
+                                onSelect={() =>
+                                  void distributeSelected(tool.id, true)
+                                }
+                              >
+                                <CheckCircle2 />
+                                添加到 {tool.label}
+                                {missing > 0 ? (
+                                  <DropdownMenuShortcut>
+                                    {missing}
+                                  </DropdownMenuShortcut>
+                                ) : null}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={linked === 0}
+                                onSelect={() =>
+                                  void distributeSelected(tool.id, false)
+                                }
+                              >
+                                <MinusCircle />
+                                从 {tool.label} 移除
+                              </DropdownMenuItem>
+                            </Fragment>
+                          );
+                        })
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                   <Tooltip>
@@ -1738,6 +1734,7 @@ export function SkillsPage() {
                                 ? translations[skill.id] ?? skill.description
                                 : skill.description
                             }
+                            detectedTools={detectedTools}
                             interactionDisabled={bulkWorking}
                             key={skill.id}
                             onCheck={(checked) =>
@@ -1748,24 +1745,25 @@ export function SkillsPage() {
                               )
                             }
                             onCheckUpdate={(item) => void checkSingleUpdate(item)}
-                            onClaudeDistribution={(item, distributed) =>
-                              void toggleClaudeDistribution(item, distributed)
-                            }
                             onDetail={setDetailSkill}
                             onOnlineMatch={(item) => void openOnlineMatch(item)}
                             onOpenDirectory={(item) => void openDirectory(item)}
-                            onUninstall={setUninstallTarget}
-                            onWorkBuddyDistribution={(item, distributed) =>
-                              void toggleWorkBuddyDistribution(item, distributed)
+                            onToolDistribution={(item, toolId, distributed) =>
+                              void toggleToolDistribution(
+                                item,
+                                toolId,
+                                distributed,
+                              )
                             }
+                            onUninstall={setUninstallTarget}
                             onUpdate={(item) => void updateSingleSkill(item)}
                             pending={management.pending === skill.id}
                             distributionPending={
                               management.pending === skill.id &&
-                              (management.pendingAction?.kind === "claude" ||
-                                management.pendingAction?.kind === "workbuddy")
+                              management.pendingAction?.kind === "distribution"
                             }
                             skill={skill}
+                            tools={tools}
                             updating={
                               management.pendingAction?.skillId === skill.id &&
                               management.pendingAction.kind === "update"
@@ -1827,6 +1825,7 @@ export function SkillsPage() {
               localDescriptionModes[detailSkill.id] ??
               (translations[detailSkill.id] ? "translated" : "original")
             }
+            detectedTools={detectedTools}
             onDescriptionModeChange={(mode) =>
               setLocalDescriptionModes((current) => ({
                 ...current,
@@ -1836,6 +1835,7 @@ export function SkillsPage() {
             onTranslate={() => void translateLocalDescription()}
             skill={detailSkill}
             skillsRoot={skillsRoot}
+            tools={tools}
             translatedDescription={
               translations[detailSkill.id]
             }

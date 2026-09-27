@@ -23,16 +23,14 @@ export function uninstallSkill(skillId: string) {
   return invokeCommand<void>("uninstall_skill", { skillId });
 }
 
-export function setClaudeDistribution(skillId: string, distributed: boolean) {
-  return invokeCommand<InstalledSkill>("set_claude_distribution", {
+export function setToolDistribution(
+  skillId: string,
+  toolId: string,
+  distributed: boolean,
+) {
+  return invokeCommand<InstalledSkill>("set_tool_distribution", {
     skillId,
-    distributed,
-  });
-}
-
-export function setWorkbuddyDistribution(skillId: string, distributed: boolean) {
-  return invokeCommand<InstalledSkill>("set_workbuddy_distribution", {
-    skillId,
+    toolId,
     distributed,
   });
 }

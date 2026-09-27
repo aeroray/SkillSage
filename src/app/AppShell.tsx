@@ -103,11 +103,8 @@ function PageLoadingState() {
  * also gives the previously empty rail a job.
  */
 function SidebarWorkspace() {
-  const { loading, skills, skillsRoot } = useInstalledSkills();
+  const { detectedTools, loading, skills, skillsRoot, tools } = useInstalledSkills();
   const [copied, setCopied] = useState(false);
-
-  const claudeCount = skills.filter((skill) => skill.claudeDistributed).length;
-  const workbuddyCount = skills.filter((skill) => skill.workbuddyDistributed).length;
 
   const copyPath = async () => {
     if (!skillsRoot) return;
@@ -120,10 +117,18 @@ function SidebarWorkspace() {
     }
   };
 
+  // One row per tool that needs a link *and is installed here*. The registry
+  // holds ~19 such tools; listing them all would make this card taller than the
+  // window, so it shows the ones this machine actually has.
   const stats = [
     { label: "已安装", value: skills.length },
-    { label: "Claude Code", value: claudeCount },
-    { label: "Work Buddy", value: workbuddyCount },
+    ...tools
+      .filter((tool) => detectedTools.includes(tool.id))
+      .map((tool) => ({
+        label: tool.label,
+        value: skills.filter((skill) => skill.distributedTo.includes(tool.id))
+          .length,
+      })),
   ];
 
   return (

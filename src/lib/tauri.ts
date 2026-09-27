@@ -71,8 +71,28 @@ const previewSkills = [
 
 let previewSettings = { proxyUrl: "", githubTokenConfigured: false };
 let previewSkillTranslations: Record<string, string> = {};
-const previewClaudeDistributed = new Set<string>();
-const previewWorkbuddyDistributed = new Set<string>();
+
+/** Per-skill distribution, mirroring the backend's `distributedTo` list. */
+const previewDistributed = new Map<string, Set<string>>();
+
+/** A trimmed version of the real registry, including one tool that already
+ * reads the shared directory and one whose path is unverified, so both UI
+ * states are visible in the preview. */
+const PREVIEW_TOOLS: {
+  id: string;
+  label: string;
+  skillsDir: string | null;
+  readsShared: boolean;
+  detected: boolean;
+  source: string;
+  verified: boolean;
+}[] = [
+  { id: "claude-code", label: "Claude Code", skillsDir: ".claude/skills", readsShared: false, detected: true, source: "https://code.claude.com/docs/en/skills", verified: true },
+  { id: "codebuddy", label: "CodeBuddy / WorkBuddy", skillsDir: ".codebuddy/skills", readsShared: false, detected: false, source: "https://www.workbuddy.ai/docs/cli/skills", verified: true },
+  { id: "codex", label: "OpenAI Codex CLI", skillsDir: ".codex/skills", readsShared: false, detected: true, source: "https://cursor.com/docs/skills", verified: false },
+  { id: "cursor", label: "Cursor", skillsDir: ".cursor/skills", readsShared: true, detected: true, source: "https://cursor.com/docs/skills", verified: true },
+  { id: "copilot", label: "GitHub Copilot", skillsDir: ".copilot/skills", readsShared: true, detected: true, source: "https://docs.github.com/en/copilot/concepts/agents/about-agent-skills", verified: true },
+];
 const previewMatchedLocalSkills = new Set<string>();
 const previewLocalMatch = {
   id: "vercel-labs/agent-skills/local-research",
@@ -149,7 +169,16 @@ async function previewInvoke<T>(
     const skillId = String(args?.skillId ?? "");
     const skill = previewSkills.find((item) => item.id === skillId) ?? previewSkills[0];
     const [owner] = skill.source.split("/");
-    previewClaudeDistributed.add(skill.id);
+    // A store install auto-distributes to every tool that needs its own copy,
+    // matching the backend.
+    previewDistributed.set(
+      skill.id,
+      new Set(
+        PREVIEW_TOOLS.filter((tool) => tool.skillsDir && !tool.readsShared).map(
+          (tool) => tool.id,
+        ),
+      ),
+    );
     return {
       id: skill.id,
       name: skill.name,
@@ -177,8 +206,7 @@ async function previewInvoke<T>(
           currentVersion: index === 0 ? "a1b2c3d" : "d4e5f6a",
           currentHash: "9c8b7a6d5e4f3210",
           installedAt: "2026-08-18T08:00:00Z",
-          claudeDistributed: previewClaudeDistributed.has(skill.id),
-          workbuddyDistributed: previewWorkbuddyDistributed.has(skill.id),
+          distributedTo: [...previewDistributed.get(skill.id) ?? []],
         })),
         {
           id: localMatched ? previewLocalMatch.id : "local/local-research",
@@ -193,17 +221,27 @@ async function previewInvoke<T>(
           currentVersion: localMatched ? "preview-remote" : "local",
           currentHash: "preview-local",
           installedAt: "2026-08-18T08:00:00Z",
-          claudeDistributed: false,
-          workbuddyDistributed: previewWorkbuddyDistributed.has("local/local-research"),
+          distributedTo: [...previewDistributed.get("local/local-research") ?? []],
         },
       ],
+      // Mirrors the backend: only tools that do NOT read the shared directory
+      // are offered, and only tools with their own directory can be.
+      distributableTools: PREVIEW_TOOLS.filter(
+        (tool) => !tool.readsShared,
+      ).map(({ id, label }) => ({ id, label })),
+      detectedTools: PREVIEW_TOOLS.filter((tool) => tool.detected).map(
+        (tool) => tool.id,
+      ),
     } as T;
   }
-  if (command === "set_claude_distribution") {
+  if (command === "set_tool_distribution") {
     const skillId = String(args?.skillId ?? "");
+    const toolId = String(args?.toolId ?? "");
     const distributed = args?.distributed === true;
-    if (distributed) previewClaudeDistributed.add(skillId);
-    else previewClaudeDistributed.delete(skillId);
+    const targets = previewDistributed.get(skillId) ?? new Set<string>();
+    if (distributed) targets.add(toolId);
+    else targets.delete(toolId);
+    previewDistributed.set(skillId, targets);
     const skill = previewSkills.find((item) => item.id === skillId);
     const [owner = "local", repo = "local"] = (skill?.source ?? "local/local").split("/");
     return {
@@ -216,30 +254,40 @@ async function previewInvoke<T>(
       currentVersion: "preview",
       currentHash: "preview",
       installedAt: "2026-08-18T08:00:00Z",
-      claudeDistributed: distributed,
-      workbuddyDistributed: previewWorkbuddyDistributed.has(skillId),
+      distributedTo: [...targets],
     } as T;
   }
-  if (command === "set_workbuddy_distribution") {
-    const skillId = String(args?.skillId ?? "");
-    const distributed = args?.distributed === true;
-    if (distributed) previewWorkbuddyDistributed.add(skillId);
-    else previewWorkbuddyDistributed.delete(skillId);
-    const skill = previewSkills.find((item) => item.id === skillId);
-    const [owner = "local", repo = "local"] = (skill?.source ?? "local/local").split("/");
-    return {
-      id: skillId,
-      name: skill?.name ?? skillId.split("/").at(-1) ?? skillId,
-      owner,
-      repo,
-      source: skill?.source ?? "local://local-research",
-      description: skill?.description ?? "用于整理本地研究资料。",
-      currentVersion: "preview",
-      currentHash: "preview",
-      installedAt: "2026-08-18T08:00:00Z",
-      claudeDistributed: previewClaudeDistributed.has(skillId),
-      workbuddyDistributed: distributed,
-    } as T;
+  if (command === "list_tools") {
+    return PREVIEW_TOOLS.map((tool) => ({
+      ...tool,
+      skillsDir: tool.skillsDir
+        ? `C:\\Users\\PC\\${tool.skillsDir.replace(/\//g, "\\")}`
+        : null,
+      readsSharedDefault: tool.readsShared,
+      customized: false,
+      distributable: Boolean(tool.skillsDir) && !tool.readsShared,
+    })) as T;
+  }
+  if (command === "set_tool_override") {
+    const toolId = String(args?.toolId ?? "");
+    const target = PREVIEW_TOOLS.find((tool) => tool.id === toolId);
+    if (target) {
+      if (args?.readsShared !== undefined) {
+        target.readsShared = args.readsShared === true;
+      }
+      if (args?.skillsDir !== undefined) {
+        target.skillsDir = args.skillsDir ? String(args.skillsDir) : null;
+      }
+    }
+    return PREVIEW_TOOLS.map((tool) => ({
+      ...tool,
+      skillsDir: tool.skillsDir
+        ? `C:\\Users\\PC\\${tool.skillsDir.replace(/\//g, "\\")}`
+        : null,
+      readsSharedDefault: tool.id === "cursor" || tool.id === "copilot",
+      customized: false,
+      distributable: Boolean(tool.skillsDir) && !tool.readsShared,
+    })) as T;
   }
   if (command === "search_local_skill_matches") {
     return [
@@ -266,8 +314,7 @@ async function previewInvoke<T>(
       currentVersion: String(args?.remoteVersion ?? "unverified"),
       currentHash: "preview-local",
       installedAt: "2026-08-18T08:00:00Z",
-      claudeDistributed: false,
-      workbuddyDistributed: false,
+      distributedTo: [],
     } as T;
   }
   if (command === "get_settings") return previewSettings as T;

@@ -6,8 +6,7 @@ import {
   installSkill,
   linkLocalSkill as linkLocalSkillApi,
   refreshInstalled,
-  setClaudeDistribution,
-  setWorkbuddyDistribution,
+  setToolDistribution,
   uninstallSkill,
   updateSkill,
 } from "./api";
@@ -16,6 +15,7 @@ import type {
   InstalledSkillsList,
   PathConflict,
   SkillProgress,
+  ToolOption,
   UpdateInfo,
 } from "./types";
 import { normalizeTauriError } from "../../lib/tauri";
@@ -29,7 +29,12 @@ let installedSkillsGeneration = 0;
 /** Stable snapshot for "nothing loaded yet". A fresh object here would make
  * `useSyncExternalStore` re-render forever. The empty root is falsy, which is
  * how every consumer already distinguishes "not loaded" from a real path. */
-const EMPTY_INSTALLED: InstalledSkillsList = { skills: [], skillsRoot: "" };
+const EMPTY_INSTALLED: InstalledSkillsList = {
+  skills: [],
+  skillsRoot: "",
+  distributableTools: [],
+  detectedTools: [],
+};
 
 const installedSubscribers = new Set<() => void>();
 
@@ -130,8 +135,34 @@ export function useInstalledSkills() {
     refresh,
     skills,
     skillsRoot,
+    // Every tool that needs a link, for the Settings list which shows the whole
+    // registry.
+    tools: snapshot.distributableTools,
+    detectedTools: snapshot.detectedTools,
     updateSkill,
   };
+}
+
+/**
+ * The tools a skill should actually be offered for, which is narrower than the
+ * full registry:
+ *
+ * - a tool that is not installed on this machine is noise in every row, so it
+ *   is dropped;
+ * - a tool that is already linked is kept even if it is no longer detected, so
+ *   a link left behind by an uninstalled tool can still be removed.
+ *
+ * Without the detection filter the skills page would list all ~19 registered
+ * tools against every skill.
+ */
+export function distributionTargetsFor(
+  tools: ToolOption[],
+  detectedTools: string[],
+  skill: InstalledSkill,
+): ToolOption[] {
+  return tools.filter(
+    (tool) => detectedTools.includes(tool.id) || skill.distributedTo.includes(tool.id),
+  );
 }
 
 export function useSkillInstall(onCompleted: () => void) {
@@ -220,8 +251,7 @@ export function useSkillUpdates() {
 }
 
 type SkillManagementAction =
-  | "claude"
-  | "workbuddy"
+  | "distribution"
   | "match"
   | "uninstall"
   | "update";
@@ -276,26 +306,16 @@ export function useSkillManagement(onCompleted: () => void) {
         },
         "uninstall",
       ),
-    setClaudeDistribution: (
+    setToolDistribution: (
       skillId: string,
+      toolId: string,
       distributed: boolean,
       options?: SkillManagementOptions,
     ) =>
       run(
         skillId,
-        () => setClaudeDistribution(skillId, distributed),
-        "claude",
-        options,
-      ),
-    setWorkbuddyDistribution: (
-      skillId: string,
-      distributed: boolean,
-      options?: SkillManagementOptions,
-    ) =>
-      run(
-        skillId,
-        () => setWorkbuddyDistribution(skillId, distributed),
-        "workbuddy",
+        () => setToolDistribution(skillId, toolId, distributed),
+        "distribution",
         options,
       ),
     linkLocalSkill: (
