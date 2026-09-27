@@ -1,8 +1,7 @@
 use serde::Serialize;
 use tauri::State;
 
-use crate::core::claude;
-use crate::core::distribution::DistributionTarget;
+use crate::core::distribution;
 use crate::core::github::client::GitHubClient;
 use crate::core::lifecycle::{install, match_local, remote, update};
 use crate::core::migrate::classifier::find_legacy_remote;
@@ -10,7 +9,7 @@ use crate::core::paths;
 use crate::core::repo::{layout::RepoLayout, lockfile::SkillLockRecord};
 use crate::core::settings;
 use crate::core::store::client::StoreClient;
-use crate::core::workbuddy;
+use crate::core::tools::{self, ToolResolver};
 use crate::error::SkillsageError;
 use crate::state::AppState;
 
@@ -18,30 +17,68 @@ use crate::state::AppState;
 /// GitHub requests, so the fan-out stays bounded to protect the API quota.
 const MAX_CONCURRENT_UPDATE_CHECKS: usize = 4;
 
+/// Builds the tool resolver from the user's home and their saved overrides.
+/// Every distribution path goes through this, so a Settings change takes
+/// effect on the next action without any state to invalidate.
+pub(crate) fn tool_resolver(layout: &RepoLayout) -> Result<ToolResolver, SkillsageError> {
+    let home = dirs::home_dir().ok_or(SkillsageError::HomeDirectoryUnavailable)?;
+    let overrides = settings::load_tool_overrides(layout)?;
+    Ok(ToolResolver::new(home, overrides))
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstalledSkillsList {
     pub skills_root: String,
     pub skills: Vec<SkillLockRecord>,
+    /// The tools a skill can currently be distributed into, so the page does
+    /// not have to hardcode any tool names.
+    pub distributable_tools: Vec<ToolOption>,
+    /// Tools detected on this machine, for display alongside each skill.
+    pub detected_tools: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolOption {
+    pub id: String,
+    pub label: String,
 }
 
 #[tauri::command]
 pub async fn refresh_installed() -> Result<InstalledSkillsList, SkillsageError> {
     tokio::task::spawn_blocking(|| {
         let layout = RepoLayout::from_user_home()?;
+        let resolver = tool_resolver(&layout)?;
         let lock = crate::core::repo::lockfile::load(&layout)?;
+        // Report distribution from what is on disk, not from the stored list:
+        // a link removed outside the app must stop showing as distributed.
         let skills = lock
             .skills
             .into_values()
             .map(|mut record| {
-                record.claude_distributed = claude::is_distributed_at(&layout, &record)?;
-                record.workbuddy_distributed = workbuddy::is_distributed_at(&layout, &record)?;
+                record.distributed_to =
+                    distribution::current_distributed_targets(&layout, &resolver, &record)?;
                 Ok(record)
             })
             .collect::<Result<Vec<_>, SkillsageError>>()?;
+        let distributable_tools = distribution::distributable_tools(&resolver)
+            .into_iter()
+            .map(|tool| ToolOption {
+                id: tool.id.to_string(),
+                label: tool.label.to_string(),
+            })
+            .collect();
+        let detected_tools = tools::TOOLS
+            .iter()
+            .filter(|tool| resolver.detected(tool))
+            .map(|tool| tool.id.to_string())
+            .collect();
         Ok(InstalledSkillsList {
             skills_root: paths::display(&layout.public_root),
             skills,
+            distributable_tools,
+            detected_tools,
         })
     })
     .await
@@ -345,36 +382,19 @@ pub async fn uninstall_skill(
 }
 
 #[tauri::command]
-pub async fn set_claude_distribution(
+pub async fn set_tool_distribution(
     skill_id: String,
+    tool_id: String,
     distributed: bool,
     state: State<'_, AppState>,
 ) -> Result<SkillLockRecord, SkillsageError> {
-    set_distribution(skill_id, distributed, state, DistributionTarget::ClaudeCode).await
-}
-
-#[tauri::command]
-pub async fn set_workbuddy_distribution(
-    skill_id: String,
-    distributed: bool,
-    state: State<'_, AppState>,
-) -> Result<SkillLockRecord, SkillsageError> {
-    set_distribution(skill_id, distributed, state, DistributionTarget::WorkBuddy).await
-}
-
-async fn set_distribution(
-    skill_id: String,
-    distributed: bool,
-    state: State<'_, AppState>,
-    target: DistributionTarget,
-) -> Result<SkillLockRecord, SkillsageError> {
+    let tool = tools::find(&tool_id)
+        .ok_or_else(|| SkillsageError::InvalidSkill(format!("未知的工具: {tool_id}")))?;
     let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
-        match target {
-            DistributionTarget::ClaudeCode => claude::set_at(&layout, &skill_id, distributed),
-            DistributionTarget::WorkBuddy => workbuddy::set_at(&layout, &skill_id, distributed),
-        }
+        let resolver = tool_resolver(&layout)?;
+        distribution::set_at(&layout, &resolver, &skill_id, distributed, tool)
     })
     .await
     .map_err(|error| SkillsageError::Task(error.to_string()))?

@@ -18,6 +18,12 @@ pub struct StoredSettings {
     pub proxy_url: Option<String>,
     #[serde(default)]
     pub translated_descriptions: BTreeMap<String, String>,
+    /// Per-tool overrides of the built-in registry: whether a tool reads the
+    /// shared directory, and where its skills live. Kept here rather than in
+    /// the lock file because it describes the machine's tools, not the
+    /// installed skills.
+    #[serde(default)]
+    pub tool_overrides: BTreeMap<String, crate::core::tools::ToolOverride>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -89,6 +95,79 @@ pub fn load_translations(layout: &RepoLayout) -> Result<BTreeMap<String, String>
     let stored = load_stored(layout)?;
     validate_translations(&stored.translated_descriptions)?;
     Ok(stored.translated_descriptions)
+}
+
+/// The user's per-tool overrides, used to build a [`crate::core::tools::ToolResolver`].
+pub fn load_tool_overrides(
+    layout: &RepoLayout,
+) -> Result<BTreeMap<String, crate::core::tools::ToolOverride>, SkillsageError> {
+    layout.ensure_roots()?;
+    let stored = load_stored(layout)?;
+    validate_tool_overrides(&stored.tool_overrides)?;
+    Ok(stored.tool_overrides)
+}
+
+/// Persists one tool's override. `None` for both fields clears the entry, so
+/// the registry default applies again rather than the override lingering as an
+/// explicit "same as default".
+pub fn save_tool_override(
+    layout: &RepoLayout,
+    tool_id: String,
+    reads_shared: Option<bool>,
+    skills_dir: Option<String>,
+) -> Result<(), SkillsageError> {
+    let tool_id = tool_id.trim().to_string();
+    if crate::core::tools::find(&tool_id).is_none() {
+        return Err(SkillsageError::Settings(format!("未知的工具: {tool_id}")));
+    }
+    let skills_dir = skills_dir
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    layout.ensure_roots()?;
+    let mut stored = load_stored(layout)?;
+    validate_tool_overrides(&stored.tool_overrides)?;
+
+    if reads_shared.is_none() && skills_dir.is_none() {
+        stored.tool_overrides.remove(&tool_id);
+    } else {
+        stored.tool_overrides.insert(
+            tool_id,
+            crate::core::tools::ToolOverride {
+                reads_shared,
+                skills_dir,
+            },
+        );
+    }
+    write_stored(layout, &stored)
+}
+
+/// A tool id must be one we know, and a custom path must be absolute or
+/// home-relative — never something that climbs out with `..`, which would let
+/// a settings file point a link at an arbitrary location.
+fn validate_tool_overrides(
+    overrides: &BTreeMap<String, crate::core::tools::ToolOverride>,
+) -> Result<(), SkillsageError> {
+    for (tool_id, entry) in overrides {
+        if crate::core::tools::find(tool_id).is_none() {
+            return Err(SkillsageError::Settings(format!("未知的工具: {tool_id}")));
+        }
+        if let Some(path) = entry.skills_dir.as_deref() {
+            let path = path.trim();
+            if path.is_empty() {
+                continue;
+            }
+            if path.chars().count() > 512 {
+                return Err(SkillsageError::Settings("工具技能目录路径过长".into()));
+            }
+            if path.split(['/', '\\']).any(|segment| segment == "..") {
+                return Err(SkillsageError::Settings(format!(
+                    "工具技能目录不能包含 ..: {path}"
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn save_translation(

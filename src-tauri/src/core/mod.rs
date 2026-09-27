@@ -1,4 +1,3 @@
-pub mod claude;
 pub mod distribution;
 pub mod github;
 pub mod import;
@@ -11,5 +10,5 @@ pub mod settings;
 pub mod skill;
 pub mod store;
 pub mod sync;
+pub mod tools;
 pub mod url_install;
-pub mod workbuddy;

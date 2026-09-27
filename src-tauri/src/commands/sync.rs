@@ -152,8 +152,7 @@ pub async fn import_package(
             current_hash: entry.current_hash.clone(),
             installed_at: String::new(),
             description: entry.description.clone(),
-            claude_distributed: false,
-            workbuddy_distributed: false,
+            distributed_to: Vec::new(),
         };
         let files = match remote::fetch_at(&record, &entry.current_version).await {
             Ok(files) => files,

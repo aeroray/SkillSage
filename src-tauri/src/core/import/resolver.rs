@@ -233,8 +233,7 @@ pub fn import_at(
             current_hash: current_hash.clone(),
             installed_at: lockfile::unix_timestamp(),
             description: parsed.manifest.description.clone(),
-            claude_distributed: false,
-            workbuddy_distributed: false,
+            distributed_to: Vec::new(),
         },
     );
     if let Err(error) = lockfile::save(layout, &lock) {

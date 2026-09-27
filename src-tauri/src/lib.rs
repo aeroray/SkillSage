@@ -33,8 +33,7 @@ pub fn run() {
             commands::manage::check_updates,
             commands::manage::update_skill,
             commands::manage::uninstall_skill,
-            commands::manage::set_claude_distribution,
-            commands::manage::set_workbuddy_distribution,
+            commands::manage::set_tool_distribution,
             commands::store::get_leaderboard,
             commands::store::get_skill_detail,
             commands::store::search_skills,
@@ -43,6 +42,8 @@ pub fn run() {
             commands::settings::set_settings,
             commands::settings::get_skill_translations,
             commands::settings::save_skill_translation,
+            commands::settings::list_tools,
+            commands::settings::set_tool_override,
             commands::sync::export_package,
             commands::sync::preview_import_package,
             commands::sync::import_package,
@@ -76,6 +77,30 @@ pub fn run() {
                 }
                 Ok(_) => {}
                 Err(error) => tracing::warn!(error = %error, "清理临时目录失败"),
+            }
+
+            // Remove links left in directories that turned out never to be real
+            // (the old `.workbuddy-ai/skills`). A link there pointed at a
+            // directory no tool reads, which is why an uninstalled tool could
+            // still appear as a valid distribution target.
+            if let Ok(layout) = core::repo::layout::RepoLayout::from_user_home() {
+                if let Some(home) = dirs::home_dir() {
+                    match core::distribution::clean_legacy_links(&layout, &home) {
+                        Ok(removed) if removed > 0 => {
+                            tracing::info!(removed, "已清理旧版工具目录中的残留链接")
+                        }
+                        Ok(_) => {}
+                        Err(error) => tracing::warn!(error = %error, "清理旧版工具链接失败"),
+                    }
+                }
+                // Bring stored distribution state in line with the new
+                // registry, including a lock file upgraded from the old
+                // two-boolean format.
+                if let Ok(resolver) = commands::manage::tool_resolver(&layout) {
+                    if let Err(error) = core::distribution::refresh_all(&layout, &resolver) {
+                        tracing::warn!(error = %error, "刷新分发状态失败");
+                    }
+                }
             }
 
             app.handle().plugin(

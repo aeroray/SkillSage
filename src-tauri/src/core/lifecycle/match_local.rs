@@ -235,8 +235,7 @@ async fn verify_candidate(
                 current_hash: local_hash.to_string(),
                 installed_at: String::new(),
                 description: String::new(),
-                claude_distributed: false,
-                workbuddy_distributed: false,
+                distributed_to: Vec::new(),
             };
             match github_client.get_latest_commit_sha(owner, repo).await {
                 Ok(version) => match remote::fetch_with_probe_at(

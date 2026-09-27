@@ -175,8 +175,7 @@ mod tests {
                 current_hash: "hash".into(),
                 installed_at: "1".into(),
                 description: "Remote".into(),
-                claude_distributed: false,
-                workbuddy_distributed: false,
+                distributed_to: Vec::new(),
             },
         );
         lock.skills.insert(
@@ -192,8 +191,7 @@ mod tests {
                 current_hash: "hash".into(),
                 installed_at: "1".into(),
                 description: "Local".into(),
-                claude_distributed: false,
-                workbuddy_distributed: false,
+                distributed_to: Vec::new(),
             },
         );
         lockfile::save(&layout, &lock).expect("save lock");

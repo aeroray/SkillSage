@@ -1,7 +1,8 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::core::claude;
+use crate::commands::manage;
+use crate::core::distribution;
 use crate::core::github::{client::GitHubClient, download::fetch_skill_files_with_path};
 use crate::core::lifecycle::install::{self, InstallResult};
 use crate::core::repo::conflict::ConflictAction;
@@ -70,18 +71,31 @@ pub async fn install_skill(
         &app,
         &skill_id,
         "distributing",
-        "Installing skill and distributing to Claude Code",
+        "Installing skill and distributing to detected tools",
     )?;
     let _write_guard = state.write_lock.lock().await;
     let result = tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
         let result = install::install_skill_from_store_at(&layout, detail, conflict_action)?;
-        if let Err(error) = claude::set_at(&layout, &result.id, true) {
-            tracing::warn!(
-                skill_id = %result.id,
-                error = %error,
-                "技能已安装，但自动分发到 Claude Code 失败"
-            );
+        // A newly installed skill should be immediately usable. Distribute to
+        // every detected tool that needs its own copy and does not already
+        // read the shared directory — a tool the user has marked as reading
+        // the shared directory is skipped rather than linked redundantly.
+        let resolver = manage::tool_resolver(&layout)?;
+        for tool in distribution::distributable_tools(&resolver) {
+            if !resolver.detected(tool) {
+                continue;
+            }
+            if let Err(error) =
+                distribution::set_at(&layout, &resolver, &result.id, true, tool)
+            {
+                tracing::warn!(
+                    skill_id = %result.id,
+                    tool = %tool.id,
+                    error = %error,
+                    "技能已安装，但自动分发失败"
+                );
+            }
         }
         Ok::<InstallResult, SkillsageError>(result)
     })

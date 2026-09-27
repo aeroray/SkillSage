@@ -5,52 +5,26 @@ use crate::error::SkillsageError;
 /// `root` holds only SkillSage's own bookkeeping (lock file, tmp, settings) —
 /// never skill content. `public_root` is the single shared
 /// directory (`~/.agents/skills`) every skill installs into directly, flat,
-/// with no per-owner subfolders. Compatibility links for supported AI tools
-/// point back to the real directories in `public_root`.
+/// with no per-owner subfolders. Tool directories are not here: they come from
+/// the registry in [`crate::core::tools`], which knows about every supported
+/// tool rather than the two this struct used to hardcode.
 #[derive(Debug, Clone)]
 pub struct RepoLayout {
     pub root: PathBuf,
     pub public_root: PathBuf,
-    pub claude_root: PathBuf,
-    pub workbuddy_root: PathBuf,
 }
 
 impl RepoLayout {
     pub fn from_user_home() -> Result<Self, SkillsageError> {
         let home = dirs::home_dir().ok_or(SkillsageError::HomeDirectoryUnavailable)?;
-        Ok(Self::with_tool_roots(
+        Ok(Self::new(
             home.join(".skillsage"),
             home.join(".agents").join("skills"),
-            home.join(".claude").join("skills"),
-            home.join(".workbuddy-ai").join("skills"),
         ))
     }
 
-    #[cfg(test)]
     pub fn new(root: PathBuf, public_root: PathBuf) -> Self {
-        let claude_root = root
-            .parent()
-            .map(|parent| parent.join(".claude").join("skills"))
-            .unwrap_or_else(|| PathBuf::from(".claude").join("skills"));
-        let workbuddy_root = root
-            .parent()
-            .map(|parent| parent.join(".workbuddy-ai").join("skills"))
-            .unwrap_or_else(|| PathBuf::from(".workbuddy-ai").join("skills"));
-        Self::with_tool_roots(root, public_root, claude_root, workbuddy_root)
-    }
-
-    pub fn with_tool_roots(
-        root: PathBuf,
-        public_root: PathBuf,
-        claude_root: PathBuf,
-        workbuddy_root: PathBuf,
-    ) -> Self {
-        Self {
-            root,
-            public_root,
-            claude_root,
-            workbuddy_root,
-        }
+        Self { root, public_root }
     }
 
     /// The single flat path a skill named `name` lives at. Replaces the old
@@ -58,14 +32,6 @@ impl RepoLayout {
     /// skill, regardless of source, lands at the same kind of path now.
     pub fn skill(&self, name: &str) -> Result<PathBuf, SkillsageError> {
         Ok(self.public_root.join(safe_component(name)?))
-    }
-
-    pub fn claude_skill(&self, name: &str) -> Result<PathBuf, SkillsageError> {
-        Ok(self.claude_root.join(safe_component(name)?))
-    }
-
-    pub fn workbuddy_skill(&self, name: &str) -> Result<PathBuf, SkillsageError> {
-        Ok(self.workbuddy_root.join(safe_component(name)?))
     }
 
     pub fn lock_root(&self) -> PathBuf {
@@ -93,14 +59,6 @@ impl RepoLayout {
         // writes outside the intended home directory.
         ensure_directory_chain(&self.public_root, "公共技能目录")?;
         Ok(())
-    }
-
-    pub fn ensure_claude_root(&self) -> Result<(), SkillsageError> {
-        ensure_directory_chain(&self.claude_root, "Claude 技能目录")
-    }
-
-    pub fn ensure_workbuddy_root(&self) -> Result<(), SkillsageError> {
-        ensure_directory_chain(&self.workbuddy_root, "Work Buddy 技能目录")
     }
 }
 
@@ -166,7 +124,7 @@ fn ensure_real_directory(path: &Path, label: &str) -> Result<(), SkillsageError>
     }
 }
 
-fn safe_component(value: &str) -> Result<&str, SkillsageError> {
+pub(crate) fn safe_component(value: &str) -> Result<&str, SkillsageError> {
     let path = Path::new(value);
     if value.is_empty()
         || path.components().count() != 1

@@ -185,8 +185,7 @@ pub fn install_skill_from_store_at(
         current_hash: current_hash.clone(),
         installed_at: lockfile::unix_timestamp(),
         description: detail.description,
-        claude_distributed: false,
-        workbuddy_distributed: false,
+        distributed_to: Vec::new(),
     };
     let mut lock = lock;
     lock.skills.insert(detail.id.clone(), record);
@@ -281,8 +280,7 @@ pub fn install_test_skill_at(layout: &RepoLayout) -> Result<InstallResult, Skill
         current_hash: current_hash.clone(),
         installed_at: lockfile::unix_timestamp(),
         description: parsed.manifest.description.clone(),
-        claude_distributed: false,
-        workbuddy_distributed: false,
+        distributed_to: Vec::new(),
     };
     lock.skills.insert(TEST_SKILL_ID.to_string(), record);
 
@@ -321,12 +319,15 @@ pub fn uninstall_skill_at(layout: &RepoLayout, skill_id: &str) -> Result<(), Ski
 
     // Link removal and content deletion are now best-effort cleanup; the skill
     // is already untracked, so a failure here leaves recoverable leftovers
-    // rather than an inconsistent record.
-    if let Err(error) = crate::core::claude::remove_link_at(layout, &record) {
-        tracing::warn!(error = %error, "卸载时无法移除 Claude Code 链接");
-    }
-    if let Err(error) = crate::core::workbuddy::remove_link_at(layout, &record) {
-        tracing::warn!(error = %error, "卸载时无法移除 Work Buddy 链接");
+    // rather than an inconsistent record. Every tool link is swept, not just
+    // the two that used to be hardcoded, so a skill distributed into any
+    // registered tool does not leave a dangling link behind.
+    let resolver = crate::core::tools::ToolResolver::new(
+        dirs::home_dir().ok_or(SkillsageError::HomeDirectoryUnavailable)?,
+        crate::core::settings::load_tool_overrides(layout).unwrap_or_default(),
+    );
+    if let Err(error) = crate::core::distribution::remove_all_links(layout, &resolver, &record) {
+        tracing::warn!(error = %error, "卸载时无法移除全部工具链接");
     }
     atomic::remove_dir(&destination)
 }

@@ -8,10 +8,12 @@ use crate::error::SkillsageError;
 
 use super::{atomic, layout::RepoLayout};
 
-/// The lockfile format version this build reads and writes. Bumped from 1 to
-/// 2 alongside the single-shared-directory redesign; tool compatibility
-/// distribution fields are optional for backwards compatibility.
-pub const LOCK_FORMAT_VERSION: u32 = 2;
+/// The lockfile format version this build reads and writes. Bumped from 1 to 2
+/// alongside the single-shared-directory redesign, and from 2 to 3 when the two
+/// hardcoded tool booleans were replaced by a registry-driven `distributedTo`
+/// list. A version 2 file still loads: its `claudeDistributed` /
+/// `workbuddyDistributed` flags are folded into `distributedTo` on read.
+pub const LOCK_FORMAT_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,10 +33,12 @@ pub struct SkillLockRecord {
     pub installed_at: String,
     #[serde(default)]
     pub description: String,
+    /// Tool ids this skill is currently linked into. Replaces the old
+    /// `claudeDistributed` / `workbuddyDistributed` booleans, which could not
+    /// express a tool registry and silently kept reporting a tool that had
+    /// been uninstalled.
     #[serde(default)]
-    pub claude_distributed: bool,
-    #[serde(default)]
-    pub workbuddy_distributed: bool,
+    pub distributed_to: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,19 +73,82 @@ pub fn load(layout: &RepoLayout) -> Result<SkillLockFile, SkillsageError> {
         Err(error) => return Err(error.into()),
     }
     let content = std::fs::read_to_string(path)?;
-    let parsed: SkillLockFile = serde_json::from_str(&content)?;
-    if parsed.version != LOCK_FORMAT_VERSION {
-        // A pre-cutover (version 1) lock file describes skills that were
-        // distributed via per-tool symlinks under the old model; those
-        // records no longer map to anything under the new flat
-        // `layout.skill(name)` scheme. Rather than silently accept the old
-        // JSON (serde would just ignore the now-removed `distributedTo`
-        // field) and produce lock records pointing at nothing, treat it as
-        // absent. The old ~/.skillsage content and tool symlinks are left
-        // untouched on disk, just untracked, per the clean-slate cutover.
-        return Ok(SkillLockFile::default());
+    // Read the version before deserializing the records. A pre-cutover file
+    // does not satisfy the current record shape, so parsing it into
+    // `SkillLockFile` first would surface a deserialization error for a file
+    // that is supposed to be treated as absent.
+    let version = serde_json::from_str::<serde_json::Value>(&content)
+        .ok()
+        .and_then(|value| value.get("version").and_then(|v| v.as_u64()));
+    match version {
+        // Current format.
+        Some(version) if version == u64::from(LOCK_FORMAT_VERSION) => {
+            Ok(serde_json::from_str(&content)?)
+        }
+        // The two-boolean tool format. Its records are still valid — same
+        // paths, same hashes — only the distribution representation changed,
+        // so fold the flags into the list and upgrade in place rather than
+        // discarding real installed-skill metadata.
+        Some(2) => migrate_from_v2(&content),
+        // A version 1 file describes skills that were distributed via per-tool
+        // symlinks under the old central-repository model; those records no
+        // longer map to anything under the flat `layout.skill(name)` scheme.
+        // Treat it as absent. The old ~/.skillsage content and tool symlinks
+        // are left on disk, untracked, per the clean-slate cutover.
+        //
+        // An unreadable or unversioned file is treated the same way rather
+        // than failing every command that touches the lock file.
+        _ => Ok(SkillLockFile::default()),
     }
-    Ok(parsed)
+}
+
+/// Folds the version 2 `claudeDistributed` / `workbuddyDistributed` booleans
+/// into `distributedTo`.
+///
+/// This runs on the raw JSON rather than through serde aliases so that the
+/// current `SkillLockRecord` carries no vestigial fields: the two booleans are
+/// gone from the type entirely, and the old keys are understood only here, at
+/// the one place that reads an old file.
+fn migrate_from_v2(content: &str) -> Result<SkillLockFile, SkillsageError> {
+    let mut value: serde_json::Value = serde_json::from_str(content)?;
+    if let Some(skills) = value.get_mut("skills").and_then(|s| s.as_object_mut()) {
+        for record in skills.values_mut() {
+            let Some(object) = record.as_object_mut() else {
+                continue;
+            };
+            let mut targets: Vec<String> = object
+                .get("distributedTo")
+                .and_then(|value| value.as_array())
+                .map(|entries| {
+                    entries
+                        .iter()
+                        .filter_map(|entry| entry.as_str().map(ToOwned::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default();
+            // The old flag names map to the ids the registry uses today.
+            for (key, id) in [
+                ("claudeDistributed", "claude-code"),
+                ("workbuddyDistributed", "codebuddy"),
+            ] {
+                let present = object
+                    .remove(key)
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(false);
+                if present && !targets.iter().any(|entry| entry == id) {
+                    targets.push(id.to_string());
+                }
+            }
+            object.insert(
+                "distributedTo".to_string(),
+                serde_json::Value::Array(
+                    targets.into_iter().map(serde_json::Value::String).collect(),
+                ),
+            );
+        }
+    }
+    value["version"] = serde_json::Value::from(LOCK_FORMAT_VERSION);
+    Ok(serde_json::from_value(value)?)
 }
 
 pub fn save(layout: &RepoLayout, lockfile: &SkillLockFile) -> Result<(), SkillsageError> {
@@ -182,7 +249,91 @@ pub fn unix_timestamp() -> String {
 mod tests {
     use std::fs;
 
-    use super::{content_hash, content_hash_files};
+    use super::{content_hash, content_hash_files, load, LOCK_FORMAT_VERSION};
+    use crate::core::repo::layout::RepoLayout;
+
+    /// A version 2 lock file carried `claudeDistributed` /
+    /// `workbuddyDistributed` booleans. Reading one must keep the installed
+    /// skills and translate those flags into the registry's tool ids, rather
+    /// than discarding real metadata.
+    #[test]
+    fn migrates_a_version_2_lock_file_into_distribution_targets() {
+        let root = std::env::temp_dir().join(format!("skillsage-lock-v2-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("central/lock")).expect("create lock dir");
+        let layout = RepoLayout::new(root.join("central"), root.join("public"));
+
+        let v2 = r#"{
+  "version": 2,
+  "skills": {
+    "demo": {
+      "id": "demo",
+      "name": "demo",
+      "owner": "o",
+      "repo": "r",
+      "source": "https://example.test/o/r",
+      "currentVersion": "abc",
+      "currentHash": "hash",
+      "installedAt": "1",
+      "description": "d",
+      "claudeDistributed": true,
+      "workbuddyDistributed": true
+    },
+    "other": {
+      "id": "other",
+      "name": "other",
+      "owner": "o",
+      "repo": "r",
+      "source": "https://example.test/o/r",
+      "currentVersion": "abc",
+      "currentHash": "hash",
+      "installedAt": "1",
+      "description": "d",
+      "claudeDistributed": false,
+      "workbuddyDistributed": false
+    }
+  }
+}"#;
+        fs::write(layout.lock_path(), v2).expect("write v2 lock");
+
+        let lock = load(&layout).expect("v2 lock should load");
+        assert_eq!(lock.version, LOCK_FORMAT_VERSION);
+        assert_eq!(lock.skills.len(), 2, "records must be preserved");
+
+        let mut migrated = lock.skills["demo"].distributed_to.clone();
+        migrated.sort();
+        assert_eq!(migrated, vec!["claude-code".to_string(), "codebuddy".to_string()]);
+        assert!(lock.skills["other"].distributed_to.is_empty());
+
+        // Saving must emit the new format, with the old keys gone.
+        super::save(&layout, &lock).expect("save");
+        let written = fs::read_to_string(layout.lock_path()).expect("read back");
+        assert!(!written.contains("claudeDistributed"));
+        assert!(!written.contains("workbuddyDistributed"));
+        assert!(written.contains("distributedTo"));
+
+        fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    /// A pre-cutover version 1 file describes the old central-repository model
+    /// and must still be treated as absent rather than partially parsed.
+    #[test]
+    fn a_version_1_lock_file_is_treated_as_absent() {
+        let root = std::env::temp_dir().join(format!("skillsage-lock-v1-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("central/lock")).expect("create lock dir");
+        let layout = RepoLayout::new(root.join("central"), root.join("public"));
+        fs::write(
+            layout.lock_path(),
+            r#"{"version":1,"skills":{"old":{"id":"old","name":"old"}}}"#,
+        )
+        .expect("write v1 lock");
+
+        let lock = load(&layout).expect("v1 lock should load as empty");
+        assert!(lock.skills.is_empty());
+
+        fs::remove_dir_all(root).expect("remove test root");
+    }
 
     #[test]
     fn content_hash_is_stable_for_same_files() {

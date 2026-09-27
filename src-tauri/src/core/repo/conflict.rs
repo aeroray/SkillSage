@@ -156,8 +156,7 @@ mod tests {
             current_hash: "hash".into(),
             installed_at: "1".into(),
             description: String::new(),
-            claude_distributed: false,
-            workbuddy_distributed: false,
+            distributed_to: Vec::new(),
         }
     }
 
