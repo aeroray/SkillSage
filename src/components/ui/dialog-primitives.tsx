@@ -3,6 +3,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { DIALOG_CONTENT, DIALOG_SIZES } from "@/components/ui/dialog-shell"
 import { XIcon } from "lucide-react"
 
 function Dialog({
@@ -33,6 +34,12 @@ function DialogOverlay({
   )
 }
 
+/**
+ * The raw content frame. Sizing and padding come from `dialog-shell` via the
+ * higher-level `Dialog`, so this stays deliberately free of layout opinions
+ * beyond the shared frame — callers that need a different width pass a
+ * `DIALOG_SIZES` value rather than inventing one.
+ */
 function DialogContent({
   className,
   children,
@@ -46,10 +53,7 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
-        className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 grid-rows-[auto_minmax(0,1fr)] gap-4 rounded-lg border border-border bg-popover p-4 text-sm text-popover-foreground shadow-lg outline-none",
-          className
-        )}
+        className={cn(DIALOG_CONTENT, DIALOG_SIZES.default, className)}
         {...props}
       >
         {children}
@@ -58,11 +62,10 @@ function DialogContent({
             <Button
               aria-label="关闭"
               variant="ghost"
-              className="absolute top-2 right-2"
-              size="icon"
+              className="absolute top-3 right-3"
+              size="icon-sm"
             >
-              <XIcon
-              />
+              <XIcon />
               <span className="sr-only">关闭</span>
             </Button>
           </DialogPrimitive.Close>

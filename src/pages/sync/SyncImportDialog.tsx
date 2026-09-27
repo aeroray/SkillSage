@@ -8,6 +8,7 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Dialog } from "../../components/ui/dialog";
+import { DIALOG_FOOTER_NOTE } from "../../components/ui/dialog-shell";
 import { Field, FieldDescription, FieldLabel, FieldSet } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -81,7 +82,22 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open }
   };
 
   return (
-    <Dialog description="从同步文件恢复技能和应用设置。GitHub Token 不会包含在同步文件中。" onClose={onClose} open={open} title="导入同步数据">
+    <Dialog
+      description="从同步文件恢复技能和应用设置。GitHub Token 不会包含在同步文件中。"
+      footer={
+        <>
+          <p className={DIALOG_FOOTER_NOTE}>
+            {preview ? `已选 ${selectedCount} 个` : ""}
+          </p>
+          <Button disabled={!canImport} onClick={() => void submit()}>
+            {importing ? "导入中…" : "开始导入"}
+          </Button>
+        </>
+      }
+      onClose={onClose}
+      open={open}
+      title="导入同步数据"
+    >
       <div className="flex flex-col gap-5">
         <FieldSet>
           <Field>
@@ -116,7 +132,6 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open }
               })}
             </CardContent>
           </Card>
-          <div className="flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">已选 {selectedCount} 个</p><Button disabled={!canImport} onClick={() => void submit()}>{importing ? "导入中…" : "开始导入"}</Button></div>
         </> : null}
       </div>
     </Dialog>

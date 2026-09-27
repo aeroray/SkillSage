@@ -81,6 +81,19 @@ export function GithubUrlInstallDialog({
     <>
       <Dialog
         description="支持 GitHub 仓库、技能目录和 SKILL.md 直链。"
+        footer={
+          <Button
+            disabled={!canInstall || installing || conflictCheck.checking}
+            onClick={() => void startInstall()}
+          >
+            <GitBranch data-icon="inline-start" />
+            {installing
+              ? "安装中…"
+              : conflictCheck.checking
+                ? "检查冲突…"
+                : "开始安装"}
+          </Button>
+        }
         onClose={onClose}
         open={open}
         title="从 GitHub URL 安装"
@@ -183,20 +196,6 @@ export function GithubUrlInstallDialog({
               ) : null}
             </div>
           ) : null}
-
-          <div className="flex items-center justify-end gap-3">
-            <Button
-              disabled={!canInstall || installing || conflictCheck.checking}
-              onClick={() => void startInstall()}
-            >
-              <GitBranch data-icon="inline-start" />
-              {installing
-                ? "安装中…"
-                : conflictCheck.checking
-                  ? "检查冲突…"
-                  : "开始安装"}
-            </Button>
-          </div>
         </div>
       </Dialog>
       <PathConflictDialog

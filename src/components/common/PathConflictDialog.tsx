@@ -30,8 +30,22 @@ export function PathConflictDialog({
   return (
     <Dialog
       description="共享技能目录中已有同名内容，不是由 SkillSage 管理的。"
+      footer={
+        <>
+          <Button onClick={onCancel} variant="ghost">
+            取消
+          </Button>
+          <Button disabled={busy} onClick={onSkip} variant="outline">
+            跳过
+          </Button>
+          <Button disabled={busy} onClick={onTakeover}>
+            备份后继续
+          </Button>
+        </>
+      }
       onClose={onCancel}
       open={Boolean(conflict)}
+      size="sm"
       title="处理安装冲突"
     >
       <div className="flex flex-col gap-4">
@@ -44,17 +58,6 @@ export function PathConflictDialog({
         <p className="text-sm leading-6 text-muted-foreground">
           跳过：不处理这一项；备份后继续：把现有内容改名保留，再安装这个技能；取消：返回上一步。
         </p>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button onClick={onCancel} variant="ghost">
-            取消
-          </Button>
-          <Button disabled={busy} onClick={onSkip} variant="outline">
-            跳过
-          </Button>
-          <Button disabled={busy} onClick={onTakeover}>
-            备份后继续
-          </Button>
-        </div>
       </div>
     </Dialog>
   );

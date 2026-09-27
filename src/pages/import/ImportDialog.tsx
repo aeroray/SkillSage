@@ -73,7 +73,24 @@ export function ImportDialog({ onClose, onCompleted, open }: ImportDialogProps) 
 
   return (
     <>
-      <Dialog description="选择技能目录，或直接选择 SKILL.md 文件。" onClose={onClose} open={open} title="导入本地技能">
+      <Dialog
+        description="选择技能目录，或直接选择 SKILL.md 文件。"
+        footer={
+          <Button
+            disabled={!canImport || importing || conflictCheck.checking}
+            onClick={() => void startImport()}
+          >
+            {importing
+              ? "导入中…"
+              : conflictCheck.checking
+                ? "检查冲突…"
+                : "开始导入"}
+          </Button>
+        }
+        onClose={onClose}
+        open={open}
+        title="导入本地技能"
+      >
       <div className="flex flex-col gap-6">
         <FieldGroup>
           <Field>
@@ -95,8 +112,6 @@ export function ImportDialog({ onClose, onCompleted, open }: ImportDialogProps) 
           {preview.remoteConflict ? <Alert variant="destructive"><CircleAlert /><AlertDescription>远程仓库已有同名技能，不能覆盖。</AlertDescription></Alert> : null}
           {preview.existingLocal ? <Field><FieldLabel htmlFor="import-conflict">同名技能处理</FieldLabel><Select onValueChange={setConflict} value={conflict}><SelectTrigger id="import-conflict"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="reject">保留现有技能</SelectItem><SelectItem value="overwrite">覆盖现有技能</SelectItem><SelectItem value="rename">导入为新名称</SelectItem></SelectGroup></SelectContent></Select>{conflict === "rename" ? <Input aria-label="新名称" className="mt-2" onChange={(event) => setRenameTo(event.target.value)} placeholder="例如 local-research-copy" value={renameTo} /> : null}</Field> : null}
         </div> : null}
-
-        <div className="flex items-center justify-end gap-3"><Button disabled={!canImport || importing || conflictCheck.checking} onClick={() => void startImport()}>{importing ? "导入中…" : conflictCheck.checking ? "检查冲突…" : "开始导入"}</Button></div>
       </div>
       </Dialog>
       <PathConflictDialog
