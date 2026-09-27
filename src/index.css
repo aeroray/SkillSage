@@ -238,6 +238,17 @@ button {
   cursor: pointer;
 }
 
+/* A horizontally scrolling strip that hides its scrollbar. Used by the
+   distribution badge row, where a visible track would compete with the badges
+   it sits beside; the row still scrolls by wheel, trackpad, and keyboard. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;

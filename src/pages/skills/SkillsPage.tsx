@@ -100,7 +100,6 @@ import type {
   ToolOption,
 } from "../../features/skills/types";
 import {
-  countSkillsByDistribution,
   countSkillsBySource,
   countSkillsByStatus,
   filterAndSortSkills,
@@ -108,7 +107,6 @@ import {
   isRemoteUpdateable,
   searchSkills,
   sourceLabel,
-  type SkillDistributionMatch,
   type SkillSortDirection,
   type SkillSortMode,
   type SkillSourceFilter,
@@ -769,14 +767,10 @@ export function SkillsPage() {
   const [search, setSearch] = useState("");
   const [source, setSource] = useState<SkillSourceFilter>("all");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
-  /** Which tools to filter by, and how many of them a skill must be in. Kept
-   * as two pieces of state because they are two questions: an empty tool list
-   * means "not filtering", not "distributed to nothing". */
+  /** Which tools to filter by, and whether the result is inverted. An empty
+   * tool list means "not filtering", not "distributed to nothing". */
   const [distributionToolIds, setDistributionToolIds] = useState<string[]>([]);
-  /** Defaults to `any`, so choosing tools shows the full picture first instead
-   * of dropping straight into an outcome that is usually empty. */
-  const [distributionMatch, setDistributionMatch] =
-    useState<SkillDistributionMatch>("any");
+  const [distributionInverted, setDistributionInverted] = useState(false);
   const [sort, setSort] = useState<SkillSortMode>("recent");
   const [direction, setDirection] = useState<SkillSortDirection>("desc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -846,11 +840,14 @@ export function SkillsPage() {
         sort,
         source,
         status,
-        distribution: { match: distributionMatch, toolIds: distributionToolIds },
+        distribution: {
+          inverted: distributionInverted,
+          toolIds: distributionToolIds,
+        },
       }),
     [
       direction,
-      distributionMatch,
+      distributionInverted,
       distributionToolIds,
       search,
       skills,
@@ -950,12 +947,6 @@ export function SkillsPage() {
     () => countSkillsByStatus(searchedSkills, updatesById),
     [searchedSkills, updatesById],
   );
-  // Counted over the same search-only set as the other facets, so a chip's
-  // number does not collapse to the count of whichever mode is active.
-  const distributionCounts = useMemo(
-    () => countSkillsByDistribution(searchedSkills, distributionToolIds),
-    [distributionToolIds, searchedSkills],
-  );
   // The tools offered here are the ones the rows themselves can show, so the
   // filter never names a tool that no row could ever match.
   const filterTools = useMemo(
@@ -977,7 +968,7 @@ export function SkillsPage() {
     setSource("all");
     setStatus("all");
     setDistributionToolIds([]);
-    setDistributionMatch("any");
+    setDistributionInverted(false);
   }, []);
   const pageError =
     directoryError ?? skillsError ?? updatesError ?? management.error;
@@ -1436,16 +1427,6 @@ export function SkillsPage() {
                   </TooltipContent>
                 </Tooltip>
               </div>
-              {activeFilterCount > 0 ? (
-                <Button
-                  onClick={resetFilters}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <X data-icon="inline-start" />
-                  清除筛选（{activeFilterCount}）
-                </Button>
-              ) : null}
             </div>
 
             <div className="flex flex-col gap-2">
@@ -1526,10 +1507,15 @@ export function SkillsPage() {
                 ) : null}
               </div>
               <DistributionFilter
-                counts={distributionCounts}
-                match={distributionMatch}
-                onMatchChange={setDistributionMatch}
-                onToolIdsChange={setDistributionToolIds}
+                inverted={distributionInverted}
+                onInvertedChange={setDistributionInverted}
+                onToggleTool={(toolId) =>
+                  setDistributionToolIds((current) =>
+                    current.includes(toolId)
+                      ? current.filter((id) => id !== toolId)
+                      : [...current, toolId],
+                  )
+                }
                 toolIds={distributionToolIds}
                 tools={filterTools}
               />

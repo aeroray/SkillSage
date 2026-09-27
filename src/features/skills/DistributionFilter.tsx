@@ -1,143 +1,112 @@
-import { ChevronDown, ListFilter, X } from "lucide-react";
-import { Button } from "../../components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../../components/ui/dropdown-menu";
-import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group";
+import { ArrowLeftRight } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
+import { cn } from "../../lib/utils";
 import type { ToolOption } from "./types";
-import type { SkillDistributionMatch } from "./selectors";
-
-/**
- * The outcome axis. `全部` is the escape hatch every filter row here leads
- * with: it widens the outcome without discarding the chosen tools, which the
- * empty state's "清除筛选条件" cannot do because that clears the tools too.
- *
- * The other two are exact complements — a skill is either in every selected
- * tool or missing from at least one — so their counts always sum to the total.
- */
-const MATCH_MODES: Array<{ label: string; value: SkillDistributionMatch }> = [
-  { label: "全部", value: "any" },
-  { label: "已全部分发", value: "all" },
-  { label: "有未分发", value: "missing" },
-];
 
 /**
  * Filters by which tools a skill is distributed into.
  *
- * Pick the tools, then pick an outcome. The tool picker is a dropdown because
- * the registry holds ~19 tools; the three outcomes are chips to stay consistent
- * with the source and status filters above.
+ * The tools are the control: one badge per installed tool, clicked to toggle.
+ * An earlier version hid them behind a dropdown and paired them with a
+ * separate outcome chip row (all / missing / some-but-not-all), which made the
+ * user name the question before asking it. The badges show what can be filtered
+ * by, and selecting several is a union — "show me what I put in these tools".
  *
- * With no tool chosen the chips are hidden rather than shown disabled: an empty
- * selection means the axis is not filtering, and zeroed chips would read as
- * answers instead of an unset question.
+ * Inverting asks the other question, "what have I *not* put in these tools",
+ * and is a single toggle rather than a third badge, because it is a property of
+ * the whole selection rather than another thing to select.
+ *
+ * The row scrolls horizontally when there are more tools than fit, without a
+ * visible scrollbar: a track would compete with the badges it sits beside, and
+ * the row is still reachable by wheel, trackpad and keyboard.
  */
 export function DistributionFilter({
-  counts,
-  match,
-  onMatchChange,
-  onToolIdsChange,
+  inverted,
+  onInvertedChange,
+  onToggleTool,
   toolIds,
   tools,
 }: {
-  counts: Record<SkillDistributionMatch, number>;
-  match: SkillDistributionMatch;
-  onMatchChange: (match: SkillDistributionMatch) => void;
-  onToolIdsChange: (toolIds: string[]) => void;
+  inverted: boolean;
+  onInvertedChange: (inverted: boolean) => void;
+  onToggleTool: (toolId: string) => void;
   toolIds: string[];
   tools: ToolOption[];
 }) {
-  const toggleTool = (toolId: string, checked: boolean) => {
-    onToolIdsChange(
-      checked ? [...toolIds, toolId] : toolIds.filter((id) => id !== toolId),
-    );
-  };
+  const active = toolIds.length > 0;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
       <span className="w-8 shrink-0 text-xs text-foreground/70">分发</span>
 
       {tools.length === 0 ? (
-        <Button disabled size="sm" variant="outline">
-          <ListFilter data-icon="inline-start" />
-          选择工具
-        </Button>
+        <span className="text-xs text-muted-foreground">
+          没有需要分发的工具
+        </span>
       ) : (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="outline">
-              <ListFilter data-icon="inline-start" />
-              {toolIds.length === 0 ? "选择工具" : `${toolIds.length} 个工具`}
-              <ChevronDown data-icon="inline-end" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-56">
-            <DropdownMenuLabel>按分发到的工具筛选</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {tools.map((tool) => (
-              <DropdownMenuCheckboxItem
-                checked={toolIds.includes(tool.id)}
-                key={tool.id}
-                // Keep the menu open so several tools can be picked in one go,
-                // which is the whole point of the multi-select.
-                onCheckedChange={(checked) =>
-                  toggleTool(tool.id, checked === true)
-                }
-                onSelect={(event) => event.preventDefault()}
-              >
-                {tool.label}
-              </DropdownMenuCheckboxItem>
-            ))}
-            {toolIds.length > 0 ? (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => onToolIdsChange([])}>
-                  <X />
-                  清除已选工具
-                </DropdownMenuItem>
-              </>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+        <>
+          <div
+            aria-label="按分发到的工具筛选"
+            className="no-scrollbar flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto"
+            role="group"
+          >
+            {tools.map((tool) => {
+              const selected = toolIds.includes(tool.id);
+              return (
+                <button
+                  aria-pressed={selected}
+                  className={cn(
+                    // Mirrors the Badge primitive's geometry so the row reads
+                    // as badges, but as a real button so it is announced as a
+                    // toggle rather than a label.
+                    "inline-flex h-5 shrink-0 items-center rounded-full border px-2 text-xs font-medium whitespace-nowrap transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                    selected
+                      ? "border-primary-border bg-primary-soft text-primary-text"
+                      : "border-transparent bg-muted text-muted-foreground hover:text-foreground",
+                  )}
+                  key={tool.id}
+                  onClick={() => onToggleTool(tool.id)}
+                  type="button"
+                >
+                  {tool.label}
+                </button>
+              );
+            })}
+          </div>
 
-      {toolIds.length > 0 ? (
-        <ToggleGroup
-          aria-label="按分发范围筛选"
-          onValueChange={(value) => {
-            // Radix reports "" when the active chip is clicked again. An
-            // outcome always applies once tools are chosen, so an empty value
-            // is ignored rather than silently widening the filter.
-            if (value) onMatchChange(value as SkillDistributionMatch);
-          }}
-          size="sm"
-          type="single"
-          value={match}
-        >
-          {MATCH_MODES.map(({ label, value }) => (
-            <ToggleGroupItem
-              aria-label={`${label}（${counts[value]}）`}
-              // `any` is never disabled, matching the source and status rows:
-              // it is the way back out, so it must stay reachable even when it
-              // is the only mode with a non-zero count.
-              disabled={value !== "any" && counts[value] === 0}
-              key={value}
-              value={value}
-            >
-              {label}
-              {/* Inherits the chip's own foreground at reduced opacity,
-                  matching the source and status chips. */}
-              <span className="tabular-nums opacity-80">{counts[value]}</span>
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      ) : null}
+          {/* Only offered once something is selected: inverting an empty
+              selection would be "skills in none of no tools", which is every
+              skill and so says nothing. */}
+          {active ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  aria-label={inverted ? "取消反选" : "反选：改为显示未分发到所选工具的技能"}
+                  aria-pressed={inverted}
+                  className={cn(
+                    "inline-flex h-5 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-medium whitespace-nowrap transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                    inverted
+                      ? "border-primary-border bg-primary-soft text-primary-text"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => onInvertedChange(!inverted)}
+                  type="button"
+                >
+                  <ArrowLeftRight aria-hidden="true" className="size-3" />
+                  反选
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs leading-5" sideOffset={6}>
+                {inverted
+                  ? "当前显示未分发到所选工具的技能；再次点击恢复为已分发的。"
+                  : "改为显示未分发到所选工具的技能。"}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

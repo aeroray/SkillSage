@@ -1,7 +1,6 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
 import {
-  countSkillsByDistribution,
   countSkillsBySource,
   countSkillsByStatus,
   filterAndSortSkills,
@@ -10,7 +9,6 @@ import {
   searchSkills,
   sourceKindOf,
   statusKindOf,
-  type SkillDistributionMatch,
   type SkillFilters,
 } from "./selectors";
 import type { InstalledSkill, UpdateInfo } from "./types";
@@ -23,7 +21,7 @@ function filters(overrides: Partial<SkillFilters> = {}): SkillFilters {
     sort: "recent",
     source: "all",
     status: "all",
-    distribution: { match: "any", toolIds: [] },
+    distribution: { inverted: false, toolIds: [] },
     ...overrides,
   };
 }
@@ -272,70 +270,62 @@ describe("skill selectors", () => {
     });
     const all = [onlyClaudeAndCodex, onlyClaude, neither, otherTool];
 
-    const matching = (match: SkillDistributionMatch) =>
+    const matching = (inverted: boolean) =>
       all
-        .filter((item) => matchesDistribution(item, { match, toolIds: TOOLS }))
+        .filter((item) => matchesDistribution(item, { inverted, toolIds: TOOLS }))
         .map((item) => item.name);
 
-    it("`any` is the escape hatch and filters nothing", () => {
-      // It exists so picking tools does not drop straight into an outcome that
-      // is usually empty, which would read as a broken filter.
-      expect(matching("any")).toEqual([
-        "both",
-        "claude-only",
-        "neither",
-        "other-tool",
-      ]);
+    it("selecting several tools is a union", () => {
+      // "Show me what I put in these tools" 閳?being in either one qualifies.
+      // `other-tool` is only in Cursor, which is not selected, so it is out.
+      expect(matching(false)).toEqual(["both", "claude-only"]);
     });
 
-    it("`all` selects skills distributed to every selected tool", () => {
-      // "已全部分发": in Claude Code and in Codex.
-      expect(matching("all")).toEqual(["both"]);
+    it("inverting asks the opposite question", () => {
+      // "What have I not put in these tools" 閳?this is the user's original
+      // request to find skills missing from a set of tools, and it includes
+      // skills in no tool at all as well as ones only in an unselected tool.
+      expect(matching(true)).toEqual(["neither", "other-tool"]);
     });
 
-    it("`missing` selects skills not distributed to every selected tool", () => {
-      // "有未分发": missing from at least one of them. `claude-only` is the
-      // interesting case — it is linked into one selected tool but not the
-      // other, so it is incomplete rather than done.
-      expect(matching("missing")).toEqual([
-        "claude-only",
-        "neither",
-        "other-tool",
-      ]);
-    });
-
-    it("`all` and `missing` partition the list exactly", () => {
-      // Every skill is in exactly one of the two, so the counts always sum to
+    it("the two directions partition the list exactly", () => {
+      // Every skill is in exactly one direction, so the counts always sum to
       // the total and no skill can be hidden by both.
-      const all = matching("all");
-      const missing = matching("missing");
-      expect(all.length + missing.length).toBe(4);
-      expect(all.filter((name) => missing.includes(name))).toEqual([]);
+      const forward = matching(false);
+      const backward = matching(true);
+      expect(forward.length + backward.length).toBe(4);
+      expect(forward.filter((name) => backward.includes(name))).toEqual([]);
     });
 
     it("an empty tool selection does not filter anything", () => {
       // Clearing the tools must restore the full list rather than hiding every
-      // skill, which "distributed to none of nothing" would do.
-      for (const match of [
-        "any",
-        "all",
-        "missing",
-      ] as SkillDistributionMatch[]) {
+      // skill, which "distributed to none of nothing" would do 閳?and that
+      // applies to the inverted direction too.
+      for (const inverted of [false, true]) {
         expect(
           all.filter((item) =>
-            matchesDistribution(item, { match, toolIds: [] }),
+            matchesDistribution(item, { inverted, toolIds: [] }),
           ),
         ).toHaveLength(all.length);
       }
     });
 
     it("a single selected tool needs only that one link", () => {
-      const one = { toolIds: ["claude"] };
       expect(
         all
-          .filter((item) => matchesDistribution(item, { match: "all", ...one }))
+          .filter((item) =>
+            matchesDistribution(item, { inverted: false, toolIds: ["claude"] }),
+          )
           .map((item) => item.name),
       ).toEqual(["both", "claude-only"]);
+      // Inverting that one tool is the "not in Claude Code" question.
+      expect(
+        all
+          .filter((item) =>
+            matchesDistribution(item, { inverted: true, toolIds: ["claude"] }),
+          )
+          .map((item) => item.name),
+      ).toEqual(["neither", "other-tool"]);
     });
 
     it("composes with the other filters", () => {
@@ -344,37 +334,30 @@ describe("skill selectors", () => {
           id: "a/remote-both",
           name: "remote-both",
           source: "https://skills.sh/a/b",
-          distributedTo: TOOLS,
+          distributedTo: ["claude"],
         }),
         skill({
           id: "a/local-both",
           name: "local-both",
           source: "local://x",
-          distributedTo: TOOLS,
+          distributedTo: ["claude"],
         }),
       ];
       const result = filterAndSortSkills(
         skills,
         new Map(),
-        filters({ source: "remote", distribution: { match: "all", toolIds: TOOLS } }),
+        filters({
+          source: "remote",
+          distribution: { inverted: false, toolIds: ["claude"] },
+        }),
       );
       expect(result.map((item) => item.name)).toEqual(["remote-both"]);
     });
 
-    it("counts each mode over the given set", () => {
-      const counts = countSkillsByDistribution(all, TOOLS);
-      expect(counts).toEqual({ any: 4, all: 1, missing: 3 });
-      // The two outcome counts partition the set, which is what makes them
-      // trustworthy, and `any` is always the whole set.
-      expect(counts.all + counts.missing).toBe(all.length);
-      expect(counts.any).toBe(all.length);
-      // With no tools chosen every count is zero, which is what keeps the
-      // chips hidden rather than showing zeroes as if they were answers.
-      expect(countSkillsByDistribution(all, [])).toEqual({
-        any: 0,
-        all: 0,
-        missing: 0,
-      });
+    it("the two directions partition the set, so inverting hides nothing", () => {
+      // Every skill is in exactly one direction, which is what makes the
+      // invert toggle safe to use as a way of looking at the complement.
+      expect(matching(false).length + matching(true).length).toBe(all.length);
     });
   });
 });

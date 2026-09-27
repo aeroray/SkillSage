@@ -29,28 +29,21 @@ export type SkillSortMode = "recent" | "name";
 export type SkillSortDirection = "asc" | "desc";
 
 /**
- * How a skill's distribution relates to the selected tools.
+ * Which tools to filter by, and whether the result is inverted.
  *
- * `all` and `missing` are the two questions worth asking, and they are exact
- * complements: a skill is either in every selected tool or missing from at least
- * one, so their counts always sum to the total. An earlier version offered four
- * modes (any / all / none / some-but-not-all); the extra two were a distinction
- * without a decision, since "distributed to any" and "distributed to none" are
- * only meaningful once you have already decided that `all` and `missing` are not
- * what you meant.
+ * Selecting several tools is a union — a skill matches when it is distributed
+ * to *any* of them — which is what "show me what I put in these tools" means.
+ * Inverting asks the opposite question, "what have I not put in these tools",
+ * and is the reason this is two fields rather than a mode list: every earlier
+ * attempt at enumerating outcomes (all / missing / some-but-not-all) made the
+ * user choose a name for a question instead of just asking it.
  *
- * `any` applies no outcome filter. It is the same escape hatch the source and
- * status rows lead with, and it matters here because without it the very first
- * tool selection would drop straight into `all` — usually an empty list, which
- * reads as a broken filter rather than a truthful answer.
+ * An empty `toolIds` never filters, inverted or not, so clearing the selection
+ * always restores the full list.
  */
-export type SkillDistributionMatch = "any" | "all" | "missing";
-
-/** No tool selected means the distribution axis is not filtering at all, which
- * is different from "distributed to none of the selected tools". */
 export type SkillDistributionFilter = {
   toolIds: string[];
-  match: SkillDistributionMatch;
+  inverted: boolean;
 };
 
 export type SkillFilters = {
@@ -147,33 +140,15 @@ export function matchesDistribution(
   filter: SkillDistributionFilter,
 ) {
   const { toolIds } = filter;
-  if (toolIds.length === 0 || filter.match === "any") return true;
+  if (toolIds.length === 0) return true;
 
-  const distributedToAll = toolIds.every((toolId) =>
-    skill.distributedTo.includes(toolId),
-  );
-  return filter.match === "all" ? distributedToAll : !distributedToAll;
+  const inAny = isDistributedToAny(skill, toolIds);
+  return filter.inverted ? !inAny : inAny;
 }
 
-/** How many skills each mode would leave, for the chip counts. Counted over
- * the search-only set so a chip's number does not collapse to the count of
- * whichever mode is active. */
-export function countSkillsByDistribution(
-  skills: InstalledSkill[],
-  toolIds: string[],
-): Record<SkillDistributionMatch, number> {
-  const counts: Record<SkillDistributionMatch, number> = {
-    any: 0,
-    all: 0,
-    missing: 0,
-  };
-  if (toolIds.length === 0) return counts;
-  counts.any = skills.length;
-  for (const skill of skills) {
-    if (matchesDistribution(skill, { toolIds, match: "all" })) counts.all += 1;
-    else counts.missing += 1;
-  }
-  return counts;
+/** Whether a skill is distributed to at least one of the given tools. */
+export function isDistributedToAny(skill: InstalledSkill, toolIds: string[]) {
+  return toolIds.some((toolId) => skill.distributedTo.includes(toolId));
 }
 
 export function countSkillsBySource(skills: InstalledSkill[]) {
