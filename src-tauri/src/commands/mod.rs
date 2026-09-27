@@ -7,4 +7,5 @@ pub mod migrate;
 pub mod settings;
 pub mod store;
 pub mod sync;
+pub mod update;
 pub mod url_install;

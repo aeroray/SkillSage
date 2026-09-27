@@ -4,6 +4,7 @@ pub mod import;
 pub mod lifecycle;
 pub mod limits;
 pub mod migrate;
+pub mod mirrors;
 pub mod paths;
 pub mod repo;
 pub mod settings;

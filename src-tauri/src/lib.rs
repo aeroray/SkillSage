@@ -1,7 +1,10 @@
 #![allow(linker_messages)]
 
 mod commands;
-mod core;
+// Public so `tests/mirrors_live.rs` can exercise the mirror racing against the
+// real nodes. The race cannot be verified with a mock: the question is what
+// third-party hosts actually return.
+pub mod core;
 mod error;
 mod state;
 
@@ -47,6 +50,8 @@ pub fn run() {
             commands::sync::export_package,
             commands::sync::preview_import_package,
             commands::sync::import_package,
+            commands::update::check_app_update,
+            commands::update::install_app_update,
             commands::url_install::inspect_github_url,
             commands::url_install::url_install,
         ])

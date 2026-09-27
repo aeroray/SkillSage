@@ -88,6 +88,23 @@ impl From<reqwest::Error> for SkillsageError {
     }
 }
 
+impl From<url::ParseError> for SkillsageError {
+    fn from(value: url::ParseError) -> Self {
+        Self::Network(value.to_string())
+    }
+}
+
+/// The updater plugin reports network failures, signature mismatches and
+/// installer errors through one type. They are all update failures from the
+/// caller's point of view, so they map to `Network` while keeping the plugin's
+/// own message — a signature failure must stay readable, because it is the
+/// signal that a mirror served content the release key did not sign.
+impl From<tauri_plugin_updater::Error> for SkillsageError {
+    fn from(value: tauri_plugin_updater::Error) -> Self {
+        Self::Network(value.to_string())
+    }
+}
+
 impl SkillsageError {
     /// Combines a primary failure with an optional recovery failure so a
     /// partially-applied change is reported as such instead of being silently
