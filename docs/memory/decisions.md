@@ -289,6 +289,17 @@ Reason: The registry has ~19 tools that need a link. Showing all of them per ski
 Decision: Links left in `LEGACY_SKILLS_DIRS` (the old `.workbuddy-ai/skills`) are removed at startup, but only when they point back into the shared directory, and the emptied folder is deleted.
 Reason: Those links pointed at a directory no tool reads, which is precisely why an uninstalled tool still looked available. Restricting removal to links that resolve inside the shared directory means an unrelated entry in a leftover folder is never deleted.
 
+## 2026-09-27 - Mirror responses must be cache-busted
+
+Decision: Every manifest and release-metadata request carries a unique `skillsage=<nanos>` query token, and the winning hit's token is reused for the updater plugin's own fetch via `ManifestHit::endpoint()`.
+Reason: Mirrors sit behind CDNs that cache `latest.json`, and a cache hit is *faster* than a fresh fetch — so ranking sources by response time systematically prefers stale data. This was not theoretical: minutes after v1.0.3 was published, the fastest node in `MIRRORS` still served the v1.0.2 manifest on 4 of 4 attempts, and the simulated v1.0.3 race picked it, meaning an up-to-date-looking user would be told there was nothing to install. The token is reused for the plugin's fetch because the plugin re-fetches the manifest itself; dropping it there would reintroduce the same bug one layer down, with the race finding the new version and the plugin still reporting none. The metadata fetch is busted for the same reason — a stale copy lacks the asset id the fresh manifest just announced, which would silently fall the download back to a direct connection that cannot work in mainland China.
+
+Decision: `tests/mirrors_live.rs` compares the raced manifest against GitHub's own `releases/latest` tag.
+Reason: That endpoint has no CDN in front of it, so it is the one authority that can prove the race did not return stale data. A mock cannot catch this class of bug at all.
+
+Decision: The published v1.0.3 was deleted and re-released from the fixed commit rather than superseded by a v1.0.4.
+Reason: It had 0 downloads across all six assets, so re-tagging broke nobody, and shipping a known-broken v1.0.3 would have left its users unable to see the next update — the very failure the mirror work exists to fix. Deleting the tag removed the release and its assets together, with no orphans.
+
 ## 2026-09-27 - Release notes live in the repository, one file per tag
 
 Decision: Release notes are authored in `docs/releases/<tag>.md`; `scripts/load-release-notes.mjs` reads the tag's file and exposes it as the workflow's `body` output, failing the job when the file is missing or empty. `generateReleaseNotes` is off.
