@@ -130,7 +130,10 @@ const SOURCE_FILTERS: Array<{ label: string; value: SkillSourceFilter }> = [
 const STATUS_FILTERS: Array<{ label: string; value: SkillStatusFilter }> = [
   { label: "全部", value: "all" },
   { label: "有更新", value: "update" },
-  { label: "已最新", value: "current" },
+  // "已是最新", not "已最新": the clipped form is the only one in the app, and
+  // every other place that reports this state spells it out ("已是最新版本",
+  // "均为最新"). One extra character buys a phrase that reads as Chinese.
+  { label: "已是最新", value: "current" },
   { label: "无更新源", value: "no-source" },
 ];
 
@@ -268,7 +271,7 @@ function SkillDetailContent({
           <span className="text-xs font-medium text-foreground">分发状态</span>
           {visibleTools.length === 0 ? (
             <span className="text-xs text-muted-foreground">
-              所有工具都读取公共目录，无需分发
+              所有工具都读取共享目录，无需分发
             </span>
           ) : (
             visibleTools.map((tool) => {
@@ -1039,11 +1042,23 @@ export function SkillsPage() {
     const updateCount = result.filter((item) => item.updateAvailable).length;
     toast({
       description:
-        updateCount > 0
-          ? `发现 ${updateCount} 个技能有更新。`
-          : `已检查 ${result.length} 个远端技能，均为最新。`,
-      title: updateCount > 0 ? "发现可用更新" : "检查完成",
-      variant: updateCount > 0 ? "info" : "success",
+        result.length === 0
+          ? // Nothing was checked, so "均为最新" would claim a result we do not
+            // have. Saying so is the honest report and points at the cause.
+            "没有可检查的远端技能。本地导入和内置技能没有远端来源。"
+          : updateCount > 0
+            ? `发现 ${updateCount} 个技能有更新。`
+            : `已检查 ${result.length} 个远端技能，均为最新。`,
+      title:
+        result.length === 0
+          ? "无需检查"
+          : updateCount > 0
+            ? "发现可用更新"
+            : "检查完成",
+      // `info` when nothing was checked: a green success check would assert an
+      // outcome, and there was none to assert.
+      variant:
+        result.length === 0 ? "info" : updateCount > 0 ? "info" : "success",
     });
   };
   const checkSingleUpdate = async (skill: InstalledSkill) => {
@@ -1432,13 +1447,16 @@ export function SkillsPage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent sideOffset={6}>
-                    {direction === "desc"
-                      ? sort === "recent"
+                    {/* States the resulting order, not the direction of travel:
+                        "名称从后往前" left the reader to work out which end
+                        "后" meant. A→Z / Z→A says it in two characters. */}
+                    {sort === "recent"
+                      ? direction === "desc"
                         ? "最新安装在前"
-                        : "技能名称从后往前"
-                      : sort === "recent"
-                        ? "最早安装在前"
-                        : "技能名称从前往后"}
+                        : "最早安装在前"
+                      : direction === "desc"
+                        ? "名称 Z→A"
+                        : "名称 A→Z"}
                   </TooltipContent>
                 </Tooltip>
               </div>

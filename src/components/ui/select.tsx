@@ -12,7 +12,7 @@ function SelectTrigger({ className, size = "default", children, ...props }: Reac
 }
 
 function SelectContent({ className, children, position = "item-aligned", align = "center", ...props }: React.ComponentProps<typeof SelectPrimitive.Content>) {
-  return <SelectPrimitive.Portal><SelectPrimitive.Content align={align} className={cn("relative z-50 max-h-[var(--radix-select-content-available-height)] min-w-36 overflow-x-hidden overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-lg outline-none", className)} data-slot="select-content" position={position} {...props}><SelectScrollUpButton /><SelectPrimitive.Viewport className={cn("p-0.5", position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]")} data-position={position}>{children}</SelectPrimitive.Viewport><SelectScrollDownButton /></SelectPrimitive.Content></SelectPrimitive.Portal>;
+  return <SelectPrimitive.Portal><SelectPrimitive.Content align={align} className={cn("relative z-50 max-h-[var(--radix-select-content-available-height)] min-w-36 overflow-x-hidden overflow-y-auto rounded-md border border-border bg-popover text-sm text-popover-foreground shadow-lg outline-none", className)} data-slot="select-content" position={position} {...props}><SelectScrollUpButton /><SelectPrimitive.Viewport className={cn("p-0.5", position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]")} data-position={position}>{children}</SelectPrimitive.Viewport><SelectScrollDownButton /></SelectPrimitive.Content></SelectPrimitive.Portal>;
 }
 
 function SelectItem({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Item>) {

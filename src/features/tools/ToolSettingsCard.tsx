@@ -71,7 +71,7 @@ export function ToolSettingsCard() {
           <div className="min-w-0 flex-1">
             <CardTitle>AI 工具与分发</CardTitle>
             <CardDescription className="mt-1">
-              技能始终安装在公共目录。已经读取公共目录的工具不需要分发；其余工具需要单独建立链接。
+              技能始终安装在共享目录。已经读取共享目录的工具不需要分发；其余工具需要单独建立链接。
             </CardDescription>
           </div>
         </CardHeader>
@@ -111,7 +111,7 @@ export function ToolSettingsCard() {
                     <li key={tool.id}>
                       <Badge variant={tool.readsShared ? "muted" : "default"}>
                         {tool.label}
-                        {tool.readsShared ? " · 读公共目录" : ""}
+                        {tool.readsShared ? " · 读共享目录" : ""}
                       </Badge>
                     </li>
                   ))}
@@ -186,7 +186,7 @@ function ToolDialog({
   return (
     <Dialog
       contentClassName="px-6 py-5"
-      description="勾选「读取公共技能目录」后，该工具不再需要分发，已有链接会被移除。"
+      description="勾选「读取共享技能目录」后，该工具不再需要分发，已有链接会被移除。"
       onClose={onClose}
       open={open}
       title="AI 工具与分发"
@@ -513,7 +513,7 @@ function ToolRow({
       {tool.distributable || tool.readsShared ? (
         <label className="flex cursor-pointer items-start gap-2.5 rounded-md bg-background/60 p-2.5">
           <Checkbox
-            aria-label={`${tool.label} 读取公共技能目录`}
+            aria-label={`${tool.label} 读取共享技能目录`}
             checked={tool.readsShared}
             className="mt-0.5"
             disabled={saving}
@@ -521,7 +521,7 @@ function ToolRow({
           />
           <span className="min-w-0">
             <span className="block text-xs font-medium text-foreground">
-              读取公共技能目录
+              读取共享技能目录
             </span>
             <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
               {tool.readsShared
@@ -532,7 +532,7 @@ function ToolRow({
         </label>
       ) : (
         <p className="rounded-md bg-background/60 p-2.5 text-xs leading-5 text-muted-foreground">
-          该工具没有独立目录，只能读取公共目录。
+          该工具没有独立目录，只能读取共享目录。
         </p>
       )}
     </li>
