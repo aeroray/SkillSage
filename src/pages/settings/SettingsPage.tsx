@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getVersion } from "@tauri-apps/api/app";
 import {
   Download,
@@ -69,6 +70,10 @@ const SECTIONS = [
 
 type SectionId = (typeof SECTIONS)[number]["id"];
 
+function isSectionId(value: string | null): value is SectionId {
+  return SECTIONS.some((entry) => entry.id === value);
+}
+
 export function SettingsPage() {
   const { error, loading, refresh, save, saving, settings } = useSettings();
   const [githubToken, setGithubToken] = useState("");
@@ -76,7 +81,27 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [appVersion, setAppVersion] = useState(packageJson.version);
   const [syncOpen, setSyncOpen] = useState(false);
-  const [section, setSection] = useState<SectionId>("appearance");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // The section is in the URL, not only in component state, so a link can point
+  // at one — the sidebar's update card sends the user straight to 关于与更新
+  // instead of dropping them on 外观 to find it themselves. An unknown or absent
+  // value falls back to 外观, so a hand-edited URL cannot render a blank pane.
+  const requestedSection = searchParams.get("section");
+  const section: SectionId = isSectionId(requestedSection)
+    ? requestedSection
+    : "appearance";
+  const setSection = (next: SectionId) => {
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        // 外观 is the default, so it does not need to be in the URL.
+        if (next === "appearance") params.delete("section");
+        else params.set("section", next);
+        return params;
+      },
+      { replace: true },
+    );
+  };
   const syncExport = useSyncExport();
   const themeMode = useThemeStore((state) => state.mode);
   const themeAccent = useThemeStore((state) => state.accent);

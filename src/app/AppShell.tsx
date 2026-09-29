@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Download, FolderInput, Library, Settings, Store } from "lucide-react";
 import { Button } from "../components/ui/button";
 import {
@@ -83,9 +83,9 @@ function PageLoadingState() {
 function SidebarUpdateCard() {
   const available = useAppUpdateStore((state) => state.available);
   const error = useAppUpdateStore((state) => state.error);
-  const install = useAppUpdateStore((state) => state.install);
   const phase = useAppUpdateStore((state) => state.phase);
   const progress = useAppUpdateStore((state) => state.progress);
+  const navigate = useNavigate();
   const busy = phase === "downloading" || phase === "installing";
 
   if (!available) return null;
@@ -99,12 +99,28 @@ function SidebarUpdateCard() {
         <div className="min-w-0">
           <p className="text-xs font-medium text-foreground">发现应用更新</p>
           <p className="mt-1 text-xs text-muted-foreground" role="status">
-            {busy ? `${phase === "installing" ? "正在安装" : "正在下载"}${progress === null ? "…" : ` ${progress}%`}` : error ? "安装失败，请重试" : `v${available.version} 可用`}
+            {/* "上次操作失败" rather than "安装失败，请重试": this card cannot
+                install or retry, and `error` is set by both a failed check and a
+                failed install, so naming one of them would be a guess. The panel
+                states the actual failure and owns the retry button. */}
+            {busy ? `${phase === "installing" ? "正在安装" : "正在下载"}${progress === null ? "…" : ` ${progress}%`}` : error ? "上次操作失败" : `v${available.version} 可用`}
           </p>
         </div>
       </div>
-      <Button className="w-full" disabled={busy} onClick={() => void install()} size="sm">
-        {busy ? (phase === "installing" ? "正在安装…" : "正在下载…") : phase === "error" ? "重试安装" : "立即安装"}
+      {/* Navigation, not install. The card used to run `install()` directly,
+          which meant the one surface that announces an update was also the one
+          surface that skipped the release notes — you could replace the app
+          without ever seeing what changed, even though the notes are fetched
+          and DESIGN.md requires them to be shown. The install button lives in
+          the update panel, one click away, where the notes are on screen.
+          During a download this still navigates, so the card doubles as a way
+          back to the progress bar. */}
+      <Button
+        className="w-full"
+        onClick={() => navigate("/settings?section=about")}
+        size="sm"
+      >
+        {busy ? "查看更新进度" : "查看更新内容"}
       </Button>
     </div>
   );
