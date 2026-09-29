@@ -49,7 +49,7 @@ import type { ToolView } from "../../features/tools/api";
  * support over time, so the flag is a setting rather than a constant.
  */
 export function ToolSettingsCard() {
-  const { error, loading, refresh, save, saving, tools } = useTools();
+  const { error, loading, refresh, save, savingIds, tools } = useTools();
   const [open, setOpen] = useState(false);
 
   // Only tools that are actually installed. A tool the user does not have is
@@ -145,7 +145,7 @@ export function ToolSettingsCard() {
         onClose={() => setOpen(false)}
         onSave={save}
         open={open}
-        saving={saving}
+        savingIds={savingIds}
         tools={tools}
       />
     </>
@@ -161,7 +161,7 @@ function ToolDialog({
   onClose,
   onSave,
   open,
-  saving,
+  savingIds,
   tools,
 }: {
   loading: boolean;
@@ -172,7 +172,9 @@ function ToolDialog({
     skillsDir: string | undefined,
   ) => Promise<boolean>;
   open: boolean;
-  saving?: string;
+  /** Which tools currently have a save in flight, so each row shows only its
+   * own busy state while another row's save runs. */
+  savingIds: Set<string>;
   tools: ToolView[];
 }) {
   const [showAll, setShowAll] = useState(false);
@@ -211,7 +213,7 @@ function ToolDialog({
               <ToolRow
                 key={tool.id}
                 onSave={onSave}
-                saving={saving === tool.id}
+                saving={savingIds.has(tool.id)}
                 tool={tool}
               />
             ))}

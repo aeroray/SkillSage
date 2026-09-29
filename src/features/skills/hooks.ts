@@ -218,22 +218,31 @@ export function useSkillUpdates() {
   const [checkingIds, setCheckingIds] = useState<string[]>([]);
   const [error, setError] = useState<string>();
   const requestId = useRef(0);
+  // Read synchronously by `check`, unlike the `checking` state, which a
+  // back-to-back call would still see as false before React re-renders.
+  const checkingRef = useRef(false);
 
   const check = useCallback(async (skillId?: string, skillIds?: string[]) => {
+    // One check at a time. Without this, a single-row check started while a
+    // whole-library check was running replaced `checkingIds` (collapsing every
+    // row's 检查中 overlay to one row), and the superseded check's results were
+    // dropped by the guard below while still being returned to the caller —
+    // so the user was told "发现可用更新" for a row that showed no update.
+    if (checkingRef.current) return undefined;
     const currentRequest = ++requestId.current;
     const requestedIds = skillIds ?? (skillId ? [skillId] : []);
+    checkingRef.current = true;
     setChecking(true);
     setCheckingIds(requestedIds);
     setError(undefined);
     try {
       const result = await checkUpdates(skillId, skillIds);
-      if (currentRequest === requestId.current) {
-        setUpdates((current) => {
-          const merged = new Map(current.map((item) => [item.id, item]));
-          result.updates.forEach((item) => merged.set(item.id, item));
-          return [...merged.values()];
-        });
-      }
+      if (currentRequest !== requestId.current) return undefined;
+      setUpdates((current) => {
+        const merged = new Map(current.map((item) => [item.id, item]));
+        result.updates.forEach((item) => merged.set(item.id, item));
+        return [...merged.values()];
+      });
       return result.updates;
     } catch (reason) {
       if (currentRequest === requestId.current)
@@ -241,6 +250,7 @@ export function useSkillUpdates() {
       return undefined;
     } finally {
       if (currentRequest === requestId.current) {
+        checkingRef.current = false;
         setChecking(false);
         setCheckingIds([]);
       }
@@ -261,11 +271,15 @@ type SkillManagementOptions = {
 };
 
 export function useSkillManagement(onCompleted: () => void) {
-  const [pending, setPending] = useState<string>();
-  const [pendingAction, setPendingAction] = useState<{
-    kind: SkillManagementAction;
-    skillId: string;
-  }>();
+  // A map, not a single slot. `pending` used to be one skill id, but the row's
+  // busy state is derived per row — so with a single slot, starting an action on
+  // row B left row A's controls enabled, and whichever finished first cleared
+  // the *other* row's busy state while it was still running. The backend
+  // serializes on its write lock, so nothing was corrupted; the UI simply lied
+  // and invited a third action on a row that already had one in flight.
+  const [pendingActions, setPendingActions] = useState<
+    Map<string, SkillManagementAction>
+  >(() => new Map());
   const [error, setError] = useState<string>();
 
   const run = useCallback(
@@ -275,8 +289,9 @@ export function useSkillManagement(onCompleted: () => void) {
       kind: SkillManagementAction,
       options: SkillManagementOptions = {},
     ) => {
-      setPending(skillId);
-      setPendingAction({ kind, skillId });
+      setPendingActions((current) =>
+        new Map(current).set(skillId, kind),
+      );
       setError(undefined);
       try {
         const result = await action();
@@ -286,8 +301,13 @@ export function useSkillManagement(onCompleted: () => void) {
         setError(normalizeTauriError(reason));
         return undefined;
       } finally {
-        setPending(undefined);
-        setPendingAction(undefined);
+        // Remove only this skill's entry, so a concurrent action on another row
+        // keeps its own busy state.
+        setPendingActions((current) => {
+          const next = new Map(current);
+          next.delete(skillId);
+          return next;
+        });
       }
     },
     [onCompleted],
@@ -295,8 +315,7 @@ export function useSkillManagement(onCompleted: () => void) {
 
   return {
     error,
-    pending,
-    pendingAction,
+    pendingActions,
     uninstall: (skillId: string) =>
       run(
         skillId,
@@ -351,5 +370,9 @@ export function useInstallConflictCheck() {
     },
     [],
   );
-  return { check, checking, error };
+  /** Clears a failure so it cannot surface in a dialog that was reopened for a
+   * different skill. The dialogs stay mounted while closed, so without this the
+   * previous error banner was still rendered next to an empty path field. */
+  const clearError = useCallback(() => setError(undefined), []);
+  return { check, checking, clearError, error };
 }

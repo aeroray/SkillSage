@@ -32,6 +32,7 @@ export function ImportDialog({ onClose, onCompleted, open }: ImportDialogProps) 
   };
   const { error, importing, loading, preview, previewPath, reset, runImport } = useImport(handleCompleted);
   const conflictCheck = useInstallConflictCheck();
+  const clearConflictError = conflictCheck.clearError;
 
   useEffect(() => {
     if (!open) {
@@ -40,8 +41,11 @@ export function ImportDialog({ onClose, onCompleted, open }: ImportDialogProps) 
       setRenameTo("");
       setPathConflict(undefined);
       reset();
+      // The dialog stays mounted while closed, so a failed conflict check would
+      // otherwise still render its banner the next time it opens.
+      clearConflictError();
     }
-  }, [open, reset]);
+  }, [open, reset, clearConflictError]);
 
   const choosePath = async (directory: boolean) => {
     try {

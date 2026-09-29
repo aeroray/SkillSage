@@ -48,6 +48,7 @@ export function GithubUrlInstallDialog({
   const { error, inspect, inspection, installing, loading, reset, install } =
     useGithubUrlInstall(handleCompleted);
   const conflictCheck = useInstallConflictCheck();
+  const clearConflictError = conflictCheck.clearError;
 
   useEffect(() => {
     if (!open) {
@@ -55,8 +56,11 @@ export function GithubUrlInstallDialog({
       setSelectedPath("");
       setPathConflict(undefined);
       reset();
+      // The dialog stays mounted while closed, so a failed conflict check would
+      // otherwise still render its banner the next time it opens.
+      clearConflictError();
     }
-  }, [open, reset]);
+  }, [open, reset, clearConflictError]);
 
   useEffect(() => {
     const first = inspection?.skills[0]?.skillPath;

@@ -179,6 +179,11 @@ export function AdoptPage() {
   }, [scan]);
 
   const refreshPage = () => {
+    // Clear the previous action's failure too: this is wired as the error
+    // banner's retry, and a stale "delete failed" message would otherwise
+    // survive the rescan that was meant to recover from it.
+    setActionError(undefined);
+    setDirectoryError(undefined);
     void runScan();
   };
   const handleCompleted = () => {

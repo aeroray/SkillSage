@@ -802,6 +802,10 @@ export function SkillsPage() {
   }>();
   const [bulkUninstallOpen, setBulkUninstallOpen] = useState(false);
   const bulkWorking = bulkAction !== undefined;
+  // `management.pendingActions` is a per-skill map, so two different rows can be
+  // busy at once. The batch controls and the shared confirm dialogs care about
+  // "is anything running", which is what `managementBusy` answers.
+  const managementBusy = management.pendingActions.size > 0;
   const [completedUpdateIds, setCompletedUpdateIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -1219,6 +1223,10 @@ export function SkillsPage() {
     setMatchCandidates([]);
     setMatchError(undefined);
     setMatchExhaustive(false);
+    // Clearing this too, because the bump above makes the in-flight request's
+    // `finally` guard fail — so without it, closing mid-search left the loading
+    // state set for the next open.
+    setMatchLoading(false);
   };
   const loadOnlineMatches = async (
     skill: InstalledSkill,
@@ -1314,7 +1322,7 @@ export function SkillsPage() {
             skillsLoading ||
             updatesChecking ||
             bulkWorking ||
-            Boolean(management.pending)
+            managementBusy
           }
           onClick={rescanSkills}
           size="xs"
@@ -1560,7 +1568,7 @@ export function SkillsPage() {
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
-                        disabled={bulkWorking || Boolean(management.pending)}
+                        disabled={bulkWorking || managementBusy}
                         size="sm"
                         variant="outline"
                       >
@@ -1645,7 +1653,7 @@ export function SkillsPage() {
                     </TooltipContent>
                   </Tooltip>
                   <Button
-                    disabled={bulkWorking || Boolean(management.pending)}
+                    disabled={bulkWorking || managementBusy}
                     onClick={() => setBulkUninstallOpen(true)}
                     size="sm"
                     variant="destructive"
@@ -1684,7 +1692,7 @@ export function SkillsPage() {
                       disabled={
                         bulkWorking ||
                         updatesChecking ||
-                        Boolean(management.pending)
+                        managementBusy
                       }
                       onClick={() => void updateAllSkills()}
                       size="sm"
@@ -1829,16 +1837,16 @@ export function SkillsPage() {
                             }
                             onUninstall={setUninstallTarget}
                             onUpdate={(item) => void updateSingleSkill(item)}
-                            pending={management.pending === skill.id}
+                            pending={management.pendingActions.has(skill.id)}
                             distributionPending={
-                              management.pending === skill.id &&
-                              management.pendingAction?.kind === "distribution"
+                              management.pendingActions.get(skill.id) ===
+                              "distribution"
                             }
                             skill={skill}
                             tools={tools}
                             updating={
-                              management.pendingAction?.skillId === skill.id &&
-                              management.pendingAction.kind === "update"
+                              management.pendingActions.get(skill.id) ===
+                              "update"
                             }
                             updateAvailable={
                               updatesById.get(skill.id)?.updateAvailable ??
@@ -1872,7 +1880,7 @@ export function SkillsPage() {
             loading={matchLoading}
             onLink={(candidate) => void confirmOnlineMatch(candidate)}
             onSearchMore={() => void loadOnlineMatches(matchSkill, true)}
-            pending={Boolean(management.pending)}
+            pending={managementBusy}
             showSearchMore={
               !matchExhaustive &&
               matchCandidates.length > 0 &&
@@ -1918,8 +1926,8 @@ export function SkillsPage() {
         ) : null}
       </Dialog>
       <ConfirmDialog
-        confirmDisabled={Boolean(management.pending)}
-        confirmLabel={management.pending ? "卸载中" : "卸载"}
+        confirmDisabled={managementBusy}
+        confirmLabel={managementBusy ? "卸载中" : "卸载"}
         confirmVariant="destructive"
         description={`会删除“${uninstallTarget?.name}”在共享目录中的文件夹和记录，所有读取该目录的 AI 工具会立即失去这个技能，不影响其他技能。`}
         onConfirm={() => void confirmUninstall()}

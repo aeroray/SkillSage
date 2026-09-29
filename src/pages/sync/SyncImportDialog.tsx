@@ -74,7 +74,12 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open }
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   const submit = async () => {
-    if (!canImport) return;
+    // `canImport` is derived from the render closure, so it is still true for a
+    // second click after a successful import — the package and path remain set.
+    // Without this the whole selected set would be re-fetched from GitHub
+    // before the backend's in-lock dedupe skipped it, and settings would be
+    // applied twice.
+    if (!canImport || importing) return;
     const result = await run(path, selectedOptions);
     if (!result) return;
     if (result.settings && onApplySettings) await onApplySettings(result.settings);
