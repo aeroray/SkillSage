@@ -49,6 +49,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "../../components/ui/tooltip";
+import { useToast } from "../../components/ui/toast-context";
 import {
   useInstallConflictCheck,
   useInstalledSkills,
@@ -63,7 +64,7 @@ import {
 } from "../../features/store/hooks";
 import { translateSkillDescription } from "../../features/store/api";
 import { normalizeTauriError } from "../../lib/tauri";
-import type { PathConflict } from "../../features/skills/types";
+import type { InstallResult, PathConflict } from "../../features/skills/types";
 import type {
   LeaderboardRange,
   SkillDetail,
@@ -475,10 +476,22 @@ export function StorePage() {
   const closeDetail = useCallback(() => {
     navigate("/store");
   }, [navigate]);
-  const handleInstallCompleted = useCallback(() => {
-    void refreshInstalledSkills();
-    closeDetail();
-  }, [closeDetail, refreshInstalledSkills]);
+  const { toast } = useToast();
+  const handleInstallCompleted = useCallback(
+    (result: InstallResult) => {
+      // Confirm before closing. The dialog disappears the moment the install
+      // resolves, so without a toast a successful install had no visible result
+      // at all — the only feedback was the card quietly switching to 已安装.
+      toast({
+        description: `“${result.name}” 已安装到共享技能目录。`,
+        title: "安装完成",
+        variant: "success",
+      });
+      void refreshInstalledSkills();
+      closeDetail();
+    },
+    [closeDetail, refreshInstalledSkills, toast],
+  );
   const installState = useSkillInstall(handleInstallCompleted);
   const conflictCheck = useInstallConflictCheck();
 

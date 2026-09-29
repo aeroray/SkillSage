@@ -11,6 +11,7 @@ import {
   updateSkill,
 } from "./api";
 import type {
+  InstallResult,
   InstalledSkill,
   InstalledSkillsList,
   PathConflict,
@@ -165,7 +166,7 @@ export function distributionTargetsFor(
   );
 }
 
-export function useSkillInstall(onCompleted: () => void) {
+export function useSkillInstall(onCompleted: (result: InstallResult) => void) {
   const [installing, setInstalling] = useState(false);
   const [stage, setStage] = useState("idle");
   const [message, setMessage] = useState("");
@@ -193,7 +194,12 @@ export function useSkillInstall(onCompleted: () => void) {
         const result = await installSkill(skillId, takeover);
         setStage("done");
         setMessage("安装完成");
-        onCompleted();
+        // The result carries the installed name, which the caller needs to name
+        // the skill in its confirmation. Passing it is what lets the store's
+        // install report success at all: it previously called `onCompleted()`
+        // with nothing, closed the dialog, and said nothing — a successful
+        // install was silent.
+        onCompleted(result);
         return result;
       } catch (reason) {
         setStage("failed");

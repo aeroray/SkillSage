@@ -25,8 +25,15 @@ function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
+      // No `backdrop-filter`. A full-viewport blurred overlay is a promoted
+      // compositor layer, and tearing one down is a known source of a one-frame
+      // flash in Chromium/WebView2 — which is exactly what happens here, since
+      // the store's detail dialog closes the moment an install finishes. The
+      // blur was also decoration rather than a specific effect: DESIGN.md builds
+      // overlays from a border and `shadow-lg`, and the scrim alone already
+      // separates the dialog from the page behind it.
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/45 backdrop-blur-[2px] dark:bg-black/70",
+        "fixed inset-0 isolate z-50 bg-black/45 dark:bg-black/70",
         className
       )}
       {...props}

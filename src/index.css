@@ -217,6 +217,16 @@ body,
   margin: 0;
 }
 
+/* The themed background must be on `html`, not only on `body`. Measured: with
+   only `body` painted, `html` and `#root` are `rgba(0,0,0,0)`, so the root
+   canvas keeps the UA default (white). Any frame the compositor rebuilds from
+   that canvas — which happens when a promoted layer is removed, e.g. a dialog
+   overlay carrying `backdrop-filter` — shows white in a dark app. Painting the
+   root means such a frame shows the app background instead. */
+html {
+  background: var(--app-color-background);
+}
+
 body {
   overflow: hidden;
   background: var(--app-color-background);
