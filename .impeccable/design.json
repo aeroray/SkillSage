@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-27T14:31:25.780Z",
+  "generatedAt": "2026-09-29T02:08:03.131Z",
   "title": "Design System: SkillSage · 技匠",
   "extensions": {
     "colorMeta": {
@@ -156,26 +156,32 @@
       }
     },
     "typographyMeta": {
-      "display": {
-        "displayName": "Display",
-        "purpose": "页面标题（PageHeader），每屏最多一个。"
-      },
-      "title": {
-        "displayName": "Title",
-        "purpose": "卡片标题、分组标题、技能名。"
+      "label": {
+        "displayName": "Label",
+        "size": "0.75rem / 12px",
+        "purpose": "元信息、时间戳、计数、徽章、筛选 chip、辅助说明。"
       },
       "body": {
         "displayName": "Body",
-        "purpose": "正文、描述、按钮文字；桌面端基础字号。"
+        "size": "0.875rem / 14px",
+        "purpose": "正文、描述、按钮文字、导航项、技能名；桌面端基础字号。"
       },
-      "label": {
-        "displayName": "Label",
-        "purpose": "元信息、时间戳、计数、辅助说明。"
+      "title": {
+        "displayName": "Title",
+        "size": "1rem / 16px",
+        "purpose": "卡片标题、分区标题、详情里的关键数值。"
+      },
+      "dialogTitle": {
+        "displayName": "Dialog Title",
+        "size": "1.125rem / 18px",
+        "purpose": "弹窗标题。全站唯一比 Title 大的一档；每屏最多一个。"
       },
       "mono": {
         "displayName": "Mono",
+        "size": "0.75rem / 12px",
         "purpose": "路径、版本号、提交哈希——仅需逐字符辨认的数据，不作装饰。"
-      }
+      },
+      "note": "四个字号，没有第五个。不要使用任意字号值（text-[0.8rem]）。"
     },
     "shadows": [
       {
@@ -513,6 +519,10 @@
       {
         "title": "「可筛选的实体本身就是控件」规则",
         "detail": "把已安装的工具直接做成可点选的徽章（并集），而不是藏进下拉再配一组「结果模式」chip。前者展示可筛选的范围，后者要求用户先给问题命名。反选是整组选择的属性，做成一个开关而不是第三个徽章，且只在有选中项时出现。徽章行横向滚动时用 no-scrollbar，滚动条会与徽章争夺注意力。"
+      },
+      {
+        "title": "「四步字号」规则",
+        "detail": "只用 text-xs(12px) / text-sm(14px) / text-base(16px) / text-lg(18px，仅弹窗标题) 四档，每档含义固定。不要写任意字号（text-[0.8rem]、text-[13px]）：它绕开阶梯，并因为 cn 的 tailwind-merge 把基类字号整个替换掉，产生设计者没预期的大小——0.8rem 曾让筛选 chip 比紧挨着它的 12px 标签还大。能靠颜色和字重区分的，不要靠字号。"
       }
     ],
     "dos": [
@@ -540,7 +550,8 @@
       "Do 新增主题时补齐 primary 的六个 token（含 -text 与 -foreground）并做对比度检查。",
       "Do 让「打开目录」在目标不存在时降级到最近的存在祖先并说明打开了哪一个，而不是静默失败。",
       "Do 让可筛选的实体本身成为控件（工具徽章），而不是把它藏进下拉再配一组「结果模式」chip。",
-      "Do 横向滚动的徽章行用 no-scrollbar：滚动条会与徽章争夺注意力，而滚轮与键盘仍然可达。"
+      "Do 横向滚动的徽章行用 no-scrollbar：滚动条会与徽章争夺注意力，而滚轮与键盘仍然可达。",
+      "Do 只用 12/14/16/18px 四档字号；不要写 text-[0.8rem] 这类任意值。"
     ],
     "donts": [
       "Don't 用 text-muted-foreground 渲染彩色底上的文字（chip、彩色 Badge）——实测只有 3.5:1 左右。",
@@ -567,7 +578,8 @@
       "Don't 用多列卡片瀑布排设置项；那没有阅读顺序。",
       "Don't 让列表行高随取值数量增长。",
       "Don't 只覆盖主题的填充色而不覆盖它的文字色。",
-      "Don't 用「打开目录」顺手创建缺失的目录：目录存在是「已安装」的判定信号，创建它会让未安装的工具显示为已安装。"
+      "Don't 用「打开目录」顺手创建缺失的目录：目录存在是「已安装」的判定信号，创建它会让未安装的工具显示为已安装。",
+      "Don't 用任意字号（text-[0.8rem]、text-[13px]）——它会因 cn 的 tailwind-merge 替换掉基类字号，产生设计者没预期的大小。"
     ]
   }
 }

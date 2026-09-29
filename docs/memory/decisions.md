@@ -1,5 +1,15 @@
 # Decisions
 
+## 2026-09-29 - Four type steps, no arbitrary sizes
+
+Decision: The type ramp is exactly four steps — 12px (`text-xs`), 14px (`text-sm`), 16px (`text-base`), 18px (`text-lg`, dialog titles only) — plus mono at 12px for paths, hashes and versions. No arbitrary sizes anywhere.
+Reason: The ramp had drifted to five values because `ToggleGroupItem`'s `size="sm"` carried `text-[0.8rem]` (12.8px). That value sits on no documented step, and because `cn` runs tailwind-merge it *replaced* the base `text-sm` rather than layering on it, so every filter chip rendered at 12.8px while the 12px label immediately to its left did not — the chip looked larger than its own label, which is the "不协调" that prompted the audit. Measured across `/skills`, `/store` and `/settings` before the fix: 12, 12.8, 14, 16px. After: 12, 14, 16px. A rule rather than a cleanup, because the failure mode is invisible in review — the class string looks reasonable and only the cascade order reveals it. The `DialogTitle` primitive's own `text-base` was removed for the same reason: the dialog surface owns the title size, and two declarations meant whichever tailwind-merge saw last silently won.
+
+## 2026-09-29 - Whole-library update checks pass their ids explicitly
+
+Decision: `checkAllUpdates` passes the remote skill ids to `checkUpdatesNow` instead of calling it with no arguments.
+Reason: With no ids the backend defaulted to "every record", but the hook's `checkingIds` stayed empty, so no row could render its checking state — the only feedback was the button label changing to the easily missed "检查中". Passing the ids makes every remote row show the same per-skill spinner that a single-row check shows. The list is identical to what the backend would have checked anyway (it skips records with no remote source), so this changes visibility, not work.
+
 ## 2026-09-27 - Distribution filtering: the tools are the control
 
 Decision: The "分发" row renders one clickable badge per installed tool. Selecting several is a union, and a single "反选" toggle inverts the result. `SkillDistributionFilter` is `{ toolIds, inverted }`.
