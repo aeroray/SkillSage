@@ -29,6 +29,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@ainotation/vite": "1.0.0-beta.3",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^24.13.3",
