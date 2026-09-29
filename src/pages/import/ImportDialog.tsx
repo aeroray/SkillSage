@@ -62,7 +62,10 @@ export function ImportDialog({ onClose, onCompleted, open }: ImportDialogProps) 
 
   const canImport = Boolean(preview) && !preview?.remoteConflict && (!preview?.existingLocal || conflict !== "reject") && (conflict !== "rename" || renameTo.trim().length > 0);
   const startImport = async () => {
-    if (!preview) return;
+    // The button is disabled while importing, but the conflict check awaits
+    // before the import starts, so a second activation during that await would
+    // otherwise start a second import.
+    if (!preview || importing || conflictCheck.checking) return;
     // Check the slot the import will actually write to. With `rename` that is
     // the new name, not the one from the source SKILL.md — checking the source
     // name asked about a directory the import never touches, so a foreign

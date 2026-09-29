@@ -68,7 +68,12 @@ export function GithubUrlInstallDialog({
   );
   const canInstall = Boolean(inspection && selectedSkill);
   const startInstall = async () => {
-    if (!inspection || !selectedSkill) return;
+    // The button is disabled while installing, but the conflict check awaits
+    // before the install starts, so a second activation during that await would
+    // otherwise start a second install.
+    if (!inspection || !selectedSkill || installing || conflictCheck.checking) {
+      return;
+    }
     const found = await conflictCheck.check(selectedSkill.name);
     if (found) {
       setPathConflict(found);

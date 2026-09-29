@@ -503,7 +503,11 @@ export function StorePage() {
     navigate(`/store/${skillId.split("/").map(encodeURIComponent).join("/")}`);
   };
   const startStoreInstall = async () => {
-    if (!detail) return;
+    // Same guard as `quickInstall`. The button is disabled while installing, but
+    // the handler should not depend on that alone: the conflict check awaits
+    // before the install begins, so a second activation during that await would
+    // otherwise start a second install of the same skill.
+    if (!detail || installState.installing || conflictCheck.checking) return;
     const found = await conflictCheck.check(detail.name);
     if (found) {
       setInstallConflict({ conflict: found, skillId: detail.id });
