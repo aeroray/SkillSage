@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   CircleAlert,
-  Check,
   ChevronDown,
   Download,
   ExternalLink,
@@ -11,11 +10,13 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Trash2,
   TrendingUp,
   X,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
+import { ConfirmDialog } from "../../components/ui/confirm-dialog";
 import { ErrorBanner } from "../../components/common/ErrorBanner";
 import { PathConflictDialog } from "../../components/common/PathConflictDialog";
 import {
@@ -54,6 +55,7 @@ import {
   useInstallConflictCheck,
   useInstalledSkills,
   useSkillInstall,
+  useSkillManagement,
 } from "../../features/skills/hooks";
 import { groupByRepository } from "../../features/store/selectors";
 import {
@@ -147,14 +149,17 @@ function SkillCard({
   installedSkillIds,
   onOpen,
   onQuickInstall,
-  quickInstallDisabled,
+  onUninstall,
+  actionsDisabled,
   quickInstallingSkillId,
 }: {
   group: SkillGroup;
   installedSkillIds: ReadonlySet<string>;
   onOpen: (skillId: string) => void;
   onQuickInstall: (skill: SkillSearchResult) => void;
-  quickInstallDisabled: boolean;
+  onUninstall: (skill: { id: string; name: string }) => void;
+  /** Gates whichever action the card offers — install or uninstall. */
+  actionsDisabled: boolean;
   quickInstallingSkillId?: string;
 }) {
   const { primary, additional, source } = group;
@@ -188,21 +193,30 @@ function SkillCard({
           </CardDescription>
         </div>
         {installed ? (
+          // 卸载 rather than a disabled 已安装 badge. The card already said it was
+          // installed; a disabled control told the user nothing and left them to
+          // go to 我的技能 to undo it. Both buttons stop propagation, because the
+          // whole card is the detail link.
           <Button
-            aria-label={`${primary.name} 已安装`}
+            aria-label={`卸载 ${primary.name}`}
             className="shrink-0"
-            disabled
+            disabled={actionsDisabled}
+            onClick={(event) => {
+              event.stopPropagation();
+              onUninstall({ id: primary.id, name: primary.name });
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
             size="sm"
-            variant="secondary"
+            variant="destructive"
           >
-            <Check data-icon="inline-start" />
-            已安装
+            <Trash2 data-icon="inline-start" />
+            卸载
           </Button>
         ) : (
           <Button
             aria-label={`快速安装 ${primary.name}`}
             className="shrink-0"
-            disabled={quickInstallDisabled}
+            disabled={actionsDisabled}
             onClick={(event) => {
               event.stopPropagation();
               void onQuickInstall(primary);
@@ -432,6 +446,10 @@ export function StorePage() {
   const [isSearchComposing, setIsSearchComposing] = useState(false);
   const [range, setRange] = useState<LeaderboardRange>("all-time");
   const [installConflict, setInstallConflict] = useState<PendingInstall>();
+  const [uninstallTarget, setUninstallTarget] = useState<{
+    id: string;
+    name: string;
+  }>();
   const [quickInstallingSkillId, setQuickInstallingSkillId] =
     useState<string>();
   const [descriptionModes, setDescriptionModes] = useState<
@@ -494,6 +512,25 @@ export function StorePage() {
   );
   const installState = useSkillInstall(handleInstallCompleted);
   const conflictCheck = useInstallConflictCheck();
+  // Same hook 我的技能 uses, so both pages take the same backend path
+  // (`uninstall_skill`), the same per-skill busy state, and the same refresh.
+  const management = useSkillManagement(() => {
+    void refreshInstalledSkills();
+  });
+  const confirmUninstall = async () => {
+    if (!uninstallTarget) return;
+    const result = await management.uninstall(uninstallTarget.id);
+    // The confirmation dialog closes here, so the outcome has to be reported
+    // before it goes — the same rule the install path follows.
+    if (result !== undefined) {
+      toast({
+        description: `“${uninstallTarget.name}” 已从共享技能目录移除。`,
+        title: "卸载完成",
+        variant: "success",
+      });
+    }
+    setUninstallTarget(undefined);
+  };
 
   const isSearching = !isSearchComposing && query.trim().length >= 2;
   const activeLeaderboardLabel =
@@ -591,6 +628,13 @@ export function StorePage() {
     : "original";
   const detailTranslationLoading =
     translationLoadingSkillId === detail?.id;
+  // The store's own id space matches the installed list's, so the same lookup the
+  // grid uses answers "is the skill I am looking at already installed".
+  const detailInstalled = detail ? installedSkillIds.has(detail.id) : false;
+  const detailBusy =
+    installState.installing ||
+    conflictCheck.checking ||
+    management.pendingActions.has(detail?.id ?? "");
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -734,7 +778,8 @@ export function StorePage() {
                     key={group.source}
                     onOpen={openDetail}
                     onQuickInstall={quickInstall}
-                    quickInstallDisabled={
+                    onUninstall={setUninstallTarget}
+                    actionsDisabled={
                       installedLoading ||
                       installState.installing ||
                       conflictCheck.checking
@@ -766,24 +811,44 @@ export function StorePage() {
         description={detail?.source ?? "加载技能详情"}
         footer={
           detail ? (
-            <Button
-              aria-busy={installState.installing || conflictCheck.checking}
-              disabled={installState.installing || conflictCheck.checking}
-              onClick={() => void startStoreInstall()}
-            >
-              {installState.installing ? (
-                <LoaderCircle
-                  aria-hidden="true"
-                  className="animate-spin"
-                  data-icon="inline-start"
-                />
-              ) : (
-                <Download data-icon="inline-start" />
-              )}
-              {installState.installing
-                ? `${stageLabels[installState.stage] ?? "处理中"}…`
-                : "开始安装"}
-            </Button>
+            // The footer states what this skill's state allows: install when it
+            // is not here, uninstall when it is. It used to say 开始安装 for an
+            // already-installed skill, which is the one thing the user cannot
+            // usefully do from here.
+            detailInstalled ? (
+              <Button
+                aria-busy={detailBusy}
+                disabled={detailBusy}
+                onClick={() =>
+                  setUninstallTarget({ id: detail.id, name: detail.name })
+                }
+                variant="destructive"
+              >
+                <Trash2 data-icon="inline-start" />
+                {management.pendingActions.get(detail.id) === "uninstall"
+                  ? "卸载中…"
+                  : "卸载"}
+              </Button>
+            ) : (
+              <Button
+                aria-busy={installState.installing || conflictCheck.checking}
+                disabled={installState.installing || conflictCheck.checking}
+                onClick={() => void startStoreInstall()}
+              >
+                {installState.installing ? (
+                  <LoaderCircle
+                    aria-hidden="true"
+                    className="animate-spin"
+                    data-icon="inline-start"
+                  />
+                ) : (
+                  <Download data-icon="inline-start" />
+                )}
+                {installState.installing
+                  ? `${stageLabels[installState.stage] ?? "处理中"}…`
+                  : "开始安装"}
+              </Button>
+            )
           ) : undefined
         }
         headerActions={
@@ -848,6 +913,25 @@ export function StorePage() {
           setInstallConflict(undefined);
           if (pending) void installState.install(pending.skillId, true);
         }}
+      />
+      {/* Same copy and same shape as 我的技能's single-skill uninstall, so one
+          action reads the same wherever it is taken from. */}
+      <ConfirmDialog
+        confirmDisabled={
+          management.pendingActions.get(uninstallTarget?.id ?? "") === "uninstall"
+        }
+        confirmLabel={
+          management.pendingActions.get(uninstallTarget?.id ?? "") ===
+          "uninstall"
+            ? "卸载中"
+            : "卸载"
+        }
+        confirmVariant="destructive"
+        description={`会删除“${uninstallTarget?.name}”在共享目录中的文件夹和记录，所有读取该目录的 AI 工具会立即失去这个技能，不影响其他技能。`}
+        onConfirm={() => void confirmUninstall()}
+        onOpenChange={(open) => !open && setUninstallTarget(undefined)}
+        open={Boolean(uninstallTarget)}
+        title="确认卸载"
       />
     </div>
   );
