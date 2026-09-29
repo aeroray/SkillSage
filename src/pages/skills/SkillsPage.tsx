@@ -1016,7 +1016,14 @@ export function SkillsPage() {
   /** Checks every installed remote skill, independent of the selection. */
   const checkAllUpdates = async () => {
     setCompletedUpdateIds(new Set());
-    const result = await checkUpdatesNow();
+    // Pass the remote ids explicitly rather than letting the backend default to
+    // "everything". With no ids the hook had nothing to mark as checking, so a
+    // whole-library check showed no per-row feedback at all — the only sign it
+    // was running was the button label. These are exactly the skills the
+    // backend would check anyway (it skips records with no remote source), so
+    // the list is the same; it just makes the work visible.
+    const remoteIds = skills.filter(isRemoteUpdateable).map((skill) => skill.id);
+    const result = await checkUpdatesNow(undefined, remoteIds);
     if (result === undefined) {
       toast({
         description: "请稍后重试。",
@@ -1698,12 +1705,24 @@ export function SkillsPage() {
                     </Button>
                   ) : null}
                   <Button
+                    aria-busy={updatesChecking}
                     disabled={skillsLoading || updatesChecking || bulkWorking}
                     onClick={() => void checkAllUpdates()}
                     size="sm"
                     variant="secondary"
                   >
-                    <RefreshCw data-icon="inline-start" />
+                    {/* Spins while checking, matching 更新全部. The label alone
+                        was the only feedback, and it changes to the easily
+                        missed "检查中". */}
+                    {updatesChecking ? (
+                      <LoaderCircle
+                        aria-hidden="true"
+                        className="animate-spin"
+                        data-icon="inline-start"
+                      />
+                    ) : (
+                      <RefreshCw data-icon="inline-start" />
+                    )}
                     {updatesChecking ? "检查中" : "检查全部更新"}
                   </Button>
                 </div>

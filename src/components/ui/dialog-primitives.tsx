@@ -92,10 +92,11 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn(
-        "text-base leading-none font-medium",
-        className
-      )}
+      // No font-size here. The dialog surface owns it (`DIALOG_TITLE` in
+      // dialog-shell.ts) so every modal shares one title size; declaring a
+      // second one here would silently win or lose depending on which the
+      // tailwind-merge pass saw last.
+      className={cn("leading-none font-medium", className)}
       {...props}
     />
   )

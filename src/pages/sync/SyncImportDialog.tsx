@@ -117,7 +117,7 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open }
 
         {preview ? <>
           <Card>
-            <CardHeader><CardTitle className="text-base">预览</CardTitle><CardDescription>{preview.path} · 导出于 {preview.exportedAt}</CardDescription></CardHeader>
+            <CardHeader><CardTitle>预览</CardTitle><CardDescription>{preview.path} · 导出于 {preview.exportedAt}</CardDescription></CardHeader>
             <CardContent className="flex flex-col gap-3">
               {hasSyncPreferences ? <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">
                 <Checkbox checked={applySettings} id="sync-apply-settings" onCheckedChange={(checked) => setApplySettings(checked === true)} />
