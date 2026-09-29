@@ -63,7 +63,14 @@ export function ImportDialog({ onClose, onCompleted, open }: ImportDialogProps) 
   const canImport = Boolean(preview) && !preview?.remoteConflict && (!preview?.existingLocal || conflict !== "reject") && (conflict !== "rename" || renameTo.trim().length > 0);
   const startImport = async () => {
     if (!preview) return;
-    const found = await conflictCheck.check(preview.name);
+    // Check the slot the import will actually write to. With `rename` that is
+    // the new name, not the one from the source SKILL.md — checking the source
+    // name asked about a directory the import never touches, so a foreign
+    // directory sitting at the rename target skipped the skip/takeover dialog
+    // and surfaced as a raw backend error instead.
+    const targetName =
+      conflict === "rename" ? renameTo.trim() : preview.name;
+    const found = await conflictCheck.check(targetName);
     if (found) {
       setPathConflict(found);
       return;
