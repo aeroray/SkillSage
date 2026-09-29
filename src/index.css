@@ -249,6 +249,30 @@ button {
   }
 }
 
+/* A bounded scroll region that is *not* a Radix ScrollArea. Without this it
+   renders the platform's default scrollbar, which belongs to no design system
+   and reads as the one unfinished corner of the panel. Themed from the palette
+   and kept narrow, matching the ScrollArea thumb. */
+@utility scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-color-border) transparent;
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background-clip: content-box;
+    background-color: var(--app-color-border);
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: var(--app-color-input);
+  }
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;

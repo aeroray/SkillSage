@@ -39,10 +39,10 @@ import { AccentControl } from "../../components/common/AccentControl";
 import { ThemeControl } from "../../components/common/ThemeControl";
 import { useSettings } from "../../features/settings/hooks";
 import { ToolSettingsCard } from "../../features/tools/ToolSettingsCard";
+import { AppUpdatePanel } from "../../features/update/AppUpdatePanel";
 import { SyncImportDialog } from "../sync/SyncImportDialog";
 import { useSyncExport, type SyncSettings } from "../../features/sync";
 import { useThemeStore } from "../../features/theme/store";
-import { useAppUpdateStore } from "../../features/update/store";
 import { displayPath } from "../../lib/paths";
 import { isBrowserPreview } from "../../lib/tauri";
 import { cn } from "../../lib/utils";
@@ -50,16 +50,6 @@ import packageJson from "../../../package.json";
 
 const GITHUB_PROJECT_URL = "https://github.com/aeroray/SkillSage";
 const PRODUCT_HOME_URL = "https://aeroray.github.io/SkillSage/";
-
-function formatLastChecked(value: string | null) {
-  if (!value) return null;
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
 
 /**
  * Settings is grouped into sections rather than laid out as two columns of
@@ -92,20 +82,6 @@ export function SettingsPage() {
   const themeAccent = useThemeStore((state) => state.accent);
   const setThemeMode = useThemeStore((state) => state.setMode);
   const setThemeAccent = useThemeStore((state) => state.setAccent);
-  const appUpdate = useAppUpdateStore((state) => state.available);
-  const appUpdateChecking = useAppUpdateStore((state) => state.checking);
-  const appUpdateError = useAppUpdateStore((state) => state.error);
-  const appUpdateInstall = useAppUpdateStore((state) => state.install);
-  const appUpdatePhase = useAppUpdateStore((state) => state.phase);
-  const appUpdateProgress = useAppUpdateStore((state) => state.progress);
-  const appUpdateLastCheckedAt = useAppUpdateStore(
-    (state) => state.lastCheckedAt,
-  );
-  const checkAppUpdate = useAppUpdateStore((state) => state.check);
-  const appUpdateSource = useAppUpdateStore((state) => state.source);
-  const lastCheckedLabel = formatLastChecked(appUpdateLastCheckedAt);
-  const appUpdateBusy =
-    appUpdatePhase === "downloading" || appUpdatePhase === "installing";
 
   useEffect(() => {
     if (settings) setProxyUrl(settings.proxyUrl ?? "");
@@ -406,68 +382,7 @@ export function SettingsPage() {
                   </div>
 
                   <div className="rounded-md border border-border bg-muted/30 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs text-muted-foreground">应用更新</p>
-                        <p
-                          aria-live="polite"
-                          className="mt-1 text-sm font-medium text-foreground"
-                        >
-                          {appUpdateChecking
-                            ? "正在检查更新"
-                            : appUpdate
-                              ? `发现新版本 v${appUpdate.version}`
-                              : appUpdateError
-                                ? "检查失败"
-                                : lastCheckedLabel
-                                  ? "已是最新版本"
-                                  : "尚未检查"}
-                        </p>
-                      </div>
-                      {appUpdate ? <Badge variant="success">可更新</Badge> : null}
-                    </div>
-                    <p className="mt-2 min-h-4 text-xs text-muted-foreground">
-                      {lastCheckedLabel
-                        ? `上次检查：${lastCheckedLabel}`
-                        : "启动后会自动检查一次"}
-                      {/* Naming the source makes a slow or failing mirror
-                          diagnosable instead of invisible. */}
-                      {appUpdateSource
-                        ? ` · 通过 ${appUpdateSource === "direct" ? "GitHub 直连" : appUpdateSource}`
-                        : ""}
-                    </p>
-                    {appUpdateError ? (
-                      <p className="mt-1 line-clamp-2 text-xs text-destructive-text">
-                        检查失败：{appUpdateError}
-                      </p>
-                    ) : null}
-                    <div className="mt-4 flex items-center justify-end gap-2">
-                      <Button
-                        disabled={appUpdateChecking || appUpdateBusy || isBrowserPreview()}
-                        onClick={() => {
-                          void checkAppUpdate().catch(() => undefined);
-                        }}
-                        size="sm"
-                        variant="outline"
-                      >
-                        {appUpdateChecking ? "检查中…" : "检查更新"}
-                      </Button>
-                      {appUpdate ? (
-                        <Button
-                          disabled={appUpdateBusy || isBrowserPreview()}
-                          onClick={() => void appUpdateInstall()}
-                          size="sm"
-                        >
-                          {appUpdatePhase === "downloading"
-                            ? `下载中${appUpdateProgress === null ? "…" : ` ${appUpdateProgress}%`}`
-                            : appUpdatePhase === "installing"
-                              ? "安装中…"
-                              : appUpdatePhase === "error"
-                                ? "重试安装"
-                                : "立即安装"}
-                        </Button>
-                      ) : null}
-                    </div>
+                    <AppUpdatePanel currentVersion={appVersion} />
                   </div>
                 </CardContent>
               </Card>
