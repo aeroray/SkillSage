@@ -74,7 +74,7 @@ export function GithubUrlInstallDialog({
       setPathConflict(found);
       return;
     }
-    await install(url, selectedPath);
+    await install(url, selectedPath, inspection.resolvedCommit);
   };
 
   return (
@@ -208,7 +208,7 @@ export function GithubUrlInstallDialog({
         }}
         onTakeover={() => {
           setPathConflict(undefined);
-          void install(url, selectedPath, true);
+          void install(url, selectedPath, inspection?.resolvedCommit, true);
         }}
       />
     </>

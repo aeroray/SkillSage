@@ -8,11 +8,13 @@ export function inspectGithubUrl(url: string) {
 export function installFromGithubUrl(
   url: string,
   skillPath: string | undefined,
+  resolvedCommit: string | undefined,
   takeover?: boolean,
 ) {
   return invokeCommand<UrlInstallResult>("url_install", {
     url,
     skillPath,
+    resolvedCommit,
     conflictAction: takeover ? "takeover" : undefined,
   });
 }

@@ -16,6 +16,9 @@ export type UrlSkillCandidate = {
 export type GithubUrlInspection = {
   parsed: GithubUrlResult;
   skills: UrlSkillCandidate[];
+  /** The exact commit the candidates were read from. Echoed back to the install
+   * so it is pinned to what was previewed. */
+  resolvedCommit: string;
 };
 
 export type UrlInstallResult = {

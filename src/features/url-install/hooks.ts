@@ -31,7 +31,7 @@ export function useGithubUrlInstall(onCompleted: () => void) {
     }
   }, []);
 
-  const install = useCallback(async (url: string, skillPath: string | undefined, takeover?: boolean): Promise<UrlInstallResult | undefined> => {
+  const install = useCallback(async (url: string, skillPath: string | undefined, resolvedCommit: string | undefined, takeover?: boolean): Promise<UrlInstallResult | undefined> => {
     // Invalidate any in-flight inspection so a late response cannot repopulate
     // state after the install has already been committed.
     inspectRequestId.current += 1;
@@ -39,7 +39,9 @@ export function useGithubUrlInstall(onCompleted: () => void) {
     setInstalling(true);
     setError(undefined);
     try {
-      const result = await installFromGithubUrl(url.trim(), skillPath, takeover);
+      // The commit comes from the inspection the user approved, so the install
+      // is pinned to exactly the content that was previewed.
+      const result = await installFromGithubUrl(url.trim(), skillPath, resolvedCommit, takeover);
       onCompleted();
       return result;
     } catch (reason) {

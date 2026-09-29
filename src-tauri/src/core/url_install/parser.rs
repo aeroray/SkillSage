@@ -122,8 +122,19 @@ fn validate_component(value: &str, label: &str) -> Result<(), SkillsageError> {
     Ok(())
 }
 
+/// Validates a branch or commit reference.
+///
+/// Mirrors `core/github/client.rs`'s check exactly, including the length cap and
+/// the empty/`.`/`..` part rejection. The client would reject a bad value anyway,
+/// but keeping one authoritative rule here means a future caller that builds a
+/// URL from a parsed reference cannot be handed something the client would
+/// refuse — and the rejection happens before the value is ever interpolated.
 fn validate_reference(value: &str) -> Result<(), SkillsageError> {
     if value.is_empty()
+        || value.len() > 512
+        || value
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
         || !value.chars().all(|character| {
             character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.' | '/')
         })
@@ -167,5 +178,23 @@ mod tests {
         assert!(parse("http://github.com/acme/skills").is_err());
         assert!(parse("https://github.com/acme/skills/blob/main/%2e%2e/SKILL.md").is_err());
         assert!(parse("https://example.com/acme/skills").is_err());
+    }
+
+    #[test]
+    fn rejects_references_the_github_client_would_refuse() {
+        // Must fail here rather than surviving until the client interpolates it
+        // into an API URL.
+        let too_long = "a".repeat(513);
+        assert!(parse(&format!("https://github.com/acme/skills/tree/{too_long}/skill")).is_err());
+    }
+
+    #[test]
+    fn collapses_empty_path_segments_before_validating() {
+        // `path_segments()` drops empty segments, so a doubled slash cannot
+        // produce an empty reference part; it normalizes to `main`/`skill`.
+        let parsed = parse("https://github.com/acme/skills/tree/main//skill")
+            .expect("doubled slash should normalize, not fail");
+        assert_eq!(parsed.commit, "main");
+        assert_eq!(parsed.skill_path.as_deref(), Some("skill"));
     }
 }
