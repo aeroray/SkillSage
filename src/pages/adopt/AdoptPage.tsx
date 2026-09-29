@@ -16,6 +16,7 @@ import { Button } from "../../components/ui/button";
 import { ConfirmDialog } from "../../components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
+import { Label } from "../../components/ui/label";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
@@ -203,6 +204,9 @@ export function AdoptPage() {
   };
 
   const openPath = async (path: string) => {
+    // Guard the empty case rather than letting an empty string reach the
+    // backend, which would resolve it against the process working directory.
+    if (!path) return;
     setDirectoryError(undefined);
     try {
       await openAdoptPath(path);
@@ -268,58 +272,61 @@ export function AdoptPage() {
         {/* Same toolbar band as 我的技能: muted surface, fixed height, with the
             list below it as the only scrolling region. */}
         <CardHeader className="flex shrink-0 flex-row items-center justify-between gap-4 bg-muted/20 p-4">
-          {/* One line. The previous version stacked a heading, a summary
-              sentence, and the scanned path — three lines of chrome above a
-              list that is often one row tall, so the explanation outweighed
-              what it explained. The heading carries the meaning and the path
-              carries the detail; the per-row badges already say why an
-              individual entry cannot be adopted. */}
-          <div className="flex min-w-0 items-center gap-2">
-            <FolderOpen
-              aria-hidden="true"
-              className="size-4 shrink-0 text-muted-foreground"
+          {/* Same toolbar band as 我的技能, in the same order: the select-all
+              control sits on the left, the actions on the right. Matching that
+              page's arrangement means the same control is in the same place on
+              both list pages, so neither has to be re-learned. */}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={
+                adoptableCount > 0 && selected.length === adoptableCount
+                  ? true
+                  : selected.length > 0
+                    ? "indeterminate"
+                    : false
+              }
+              disabled={working || adoptableCount === 0}
+              id="adopt-select-all"
+              onCheckedChange={(checked) =>
+                setSelected(
+                  checked === true
+                    ? adoptableItems.map((item) => item.name)
+                    : [],
+                )
+              }
             />
-            {scan ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="min-w-0 truncate rounded-sm font-mono text-sm text-foreground outline-none transition-colors hover:text-primary-text focus-visible:ring-2 focus-visible:ring-ring/60"
-                    onClick={() => void openPath(scan.scannedRoot)}
-                    type="button"
-                  >
-                    {displayPath(scan.scannedRoot)}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-sm leading-5" sideOffset={6}>
-                  所有技能都装在这里。点击打开目录。
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <span className="text-sm text-muted-foreground">正在读取目录…</span>
-            )}
+            <Label
+              className="font-normal text-foreground/70"
+              htmlFor="adopt-select-all"
+            >
+              {adoptableCount > 0
+                ? `全选 ${adoptableCount} 个`
+                : "没有可采纳的技能"}
+            </Label>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Checkbox
-                aria-label="全选可采纳条目"
-                checked={
-                  adoptableCount > 0 && selected.length === adoptableCount
-                    ? true
-                    : selected.length > 0
-                      ? "indeterminate"
-                      : false
-                }
-                disabled={working || adoptableCount === 0}
-                onCheckedChange={(checked) =>
-                  setSelected(
-                    checked === true
-                      ? adoptableItems.map((item) => item.name)
-                      : [],
-                  )
-                }
-              />
-              <span>全选</span>
-            </label>
+          <div className="flex shrink-0 items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex">
+                  <Button
+                    aria-label="打开共享技能目录"
+                    disabled={!scan || working}
+                    onClick={() => void openPath(scan?.scannedRoot ?? "")}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <FolderOpen data-icon="inline-start" />
+                    打开共享目录
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm leading-5" sideOffset={6}>
+                所有技能都装在这里：
+                <span className="mt-1 block font-mono text-xs">
+                  {scan ? displayPath(scan.scannedRoot) : "加载中…"}
+                </span>
+              </TooltipContent>
+            </Tooltip>
             <Button
               disabled={selected.length === 0 || working}
               onClick={() => void submit()}
