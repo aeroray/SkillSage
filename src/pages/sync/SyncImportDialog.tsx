@@ -25,7 +25,7 @@ type SyncImportDialogProps = {
 };
 
 export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open }: SyncImportDialogProps) {
-  const { error, importing, loading, preview, previewPath, run, setPreview } = useSyncImport();
+  const { error, importing, loading, preview, previewPath, reset, run } = useSyncImport();
   const [path, setPath] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [applySettings, setApplySettings] = useState(true);
@@ -37,9 +37,11 @@ export function SyncImportDialog({ onApplySettings, onClose, onCompleted, open }
       setSelectedIds([]);
       setApplySettings(true);
       setResultMessage(undefined);
-      setPreview(undefined);
+      // `reset` also invalidates the in-flight preview request, so a response
+      // that arrives after the close cannot repopulate this dialog's state.
+      reset();
     }
-  }, [open, setPreview]);
+  }, [open, reset]);
 
   const selectPath = async () => {
     try {

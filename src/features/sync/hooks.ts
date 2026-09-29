@@ -72,5 +72,18 @@ export function useSyncImport() {
     }
   }, []);
 
-  return { error, importing, loading, preview, previewPath, run, setPreview };
+  const reset = useCallback(() => {
+    // Drop the in-flight preview's claim on the loading state without
+    // cancelling the request itself. Without this the dialog's close handler
+    // could only clear `preview`, leaving the request id untouched — so a
+    // response arriving after the dialog closed still passed the guard and
+    // repopulated a closed dialog's state, which the next open would render
+    // alongside an empty path field.
+    previewRequestId.current += 1;
+    setPreview(undefined);
+    setError(undefined);
+    setLoading(false);
+  }, []);
+
+  return { error, importing, loading, preview, previewPath, reset, run };
 }
