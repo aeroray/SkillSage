@@ -1,5 +1,15 @@
 # Decisions
 
+## 2026-09-29 - The GitHub-URL install is pinned to the inspected commit
+
+Decision: `inspect_github_url` returns `resolvedCommit` alongside the candidates; the dialog echoes it back to `url_install`, which resolves the files from that exact commit instead of re-resolving the branch. A missing pin still falls back to resolving the reference, and the pin is validated by the same reference rules as any other value.
+Reason: The two halves of one user action read different commits. `resolve_skills` resolved the branch to a SHA so it could read a SKILL.md for the preview, but returned the *parsed* struct whose `commit` still held the raw reference, and the frontend had no field to send a commit back — grep for `.commit` in `src/` returned zero matches. `url_install` therefore re-resolved from scratch, so anyone able to push to the branch could change the payload between the preview and the click, and the installed bytes would be bytes the user never saw. The manifest `name` from the new commit is what decides the on-disk directory, so this was not merely a stale-description problem. Verified against the real API rather than only in principle: `reference=main` resolves to `8a1541c4…`, and a pinned install resolves that same SHA (three `#[ignore]`d live tests in `src-tauri/tests/url_install_live.rs`).
+
+## 2026-09-29 - One failed candidate must not hide a repository's other skills
+
+Decision: `resolve_skills` skips a candidate whose probe fails, logs it, and only returns an error when *every* candidate failed.
+Reason: It previously propagated the first per-candidate error, so a repository with 99 readable skills and one unreadable SKILL.md listed nothing at all. `tree.rs` already handled the identical situation correctly by skipping, so the two lookup paths disagreed. An empty list would additionally render as "0 个技能" with no explanation, which reads as a broken repository rather than one bad directory.
+
 ## 2026-09-29 - The app-update panel shows the release notes
 
 Decision: The 关于与更新 panel renders `AppUpdateInfo.notes` as React elements parsed into plain strings. It never uses `dangerouslySetInnerHTML`.
@@ -7,8 +17,8 @@ Reason: The backend has always fetched the notes and we author them per release 
 
 ## 2026-09-29 - Page toolbars state the task, not the machine fact
 
-Decision: The 采纳技能 toolbar title is 「共享技能目录中的待采纳条目」, with the scanned path demoted to a clickable monospace line beneath it. Its summary names why entries are blocked ("1 个需先按 SKILL.md 整理名称，1 个缺少有效的 SKILL.md") instead of only reporting counts.
-Reason: The title was `扫描 C:\Users\PC\.agents\skills`, which made the header a machine fact rather than an explanation and pushed the one number that matters to a second line. The summary was "N 个条目，可直接采纳 M 个", which never explained *why* the numbers differed — so a page where nothing could be selected looked broken rather than informative, and gave no reason for the disabled 采纳所选 button. The three groups (adoptable / needs rename / invalid) are exactly the three states the backend already distinguishes, so the copy adds no new claims.
+Decision: The 采纳技能 toolbar is one line — the shared directory path (clickable) plus 全选 and the primary action.
+Reason: It had grown to three lines (heading, summary sentence, path) above a list that is often a single row. The summary sentence explained why counts differed, but that was a per-page restatement of what every row already says per entry (无法采纳 / 名称需整理 plus the specific reason). Spending three lines on every visit to help the rare scan that finds nothing adoptable is the wrong trade. Superseded from the same day: the earlier version of this entry argued for keeping the explanatory summary; the row-level badges made it redundant.
 
 ## 2026-09-29 - Four type steps, no arbitrary sizes
 
