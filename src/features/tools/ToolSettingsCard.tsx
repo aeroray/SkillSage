@@ -185,7 +185,6 @@ function ToolDialog({
 
   return (
     <Dialog
-      contentClassName="px-6 py-5"
       description="勾选「读取共享技能目录」后，该工具不再需要分发，已有链接会被移除。"
       onClose={onClose}
       open={open}

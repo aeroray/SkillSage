@@ -326,12 +326,23 @@ SkillSage 管理的是用户机器上一个**真实存在、所有 AI 工具都�
 
 ### Dialog / Modal（统一浮层）
 - **一个外壳，两种语义。** 外观只定义一次（`components/ui/dialog-shell.ts`），由 `Dialog`（Radix Dialog，普通表单/详情）与 `ConfirmDialog`（Radix AlertDialog，必须作出决定的打断）共同组合。保留两套语义是因为行为确实不同：AlertDialog 把焦点放在最不具破坏性的动作上、点外部不关闭；但**外观必须一致**，否则同一个删除操作在两个页面看起来像两个产品。
-- 结构固定为三段：**头部**（`px-6 py-5`，`pr-12` 给关闭按钮留位）│ **主体**（`px-6 py-6`，唯一滚动区）│ **页脚**（`border-t` + `px-6 py-4`，操作右对齐）。
+- 结构固定为三段：**头部**（`px-5 py-4`，`pr-12` 给关闭按钮留位）│ **主体**（`px-5 py-4`，唯一滚动区）│ **页脚**（`border-t` + `px-5 py-4`，操作右对齐）。这三段用的是**应用自身的分带节奏**（工具条、卡片头、列表行同为 `20/16`），不是弹窗专属的一套间距。曾经用 `px-6 py-5` / `px-6 py-6`，于是弹窗成了全应用唯一自带间距刻度的表面，看起来比它背后的窗口更松——正是「不协调」的来源。头部到主体的间距因此是 `16 + 1 + 16 = 33px`，与主窗口的「工具条 → 分隔线 → 列表」完全一致。
+- 关闭按钮 `absolute top-2.5 right-2.5`。它是 `32px`、标题是 `18px` 且 `leading-none`，在 `py-4` 下两者中心相差 `1px`；写 `top-3` 会低 `3px`。改头部内边距时同步改这里。
 - 标题 `text-lg font-semibold`，**左对齐**。描述 `text-sm leading-6 text-muted-foreground`。
 - 圆角 `rounded-lg`（14px），边框 `border-border`，阴影只用 `shadow-lg`（见「浮层才投影」）。
 - 宽度三档：`sm`（确认类）/ `default`（表单、详情）/ `lg`。**不要临时写宽度**，按用途选档。
 - 页脚是**组件的一部分**，不是各页面自己拼的按钮行。历史上每个对话框各写一个 `flex justify-end gap-2`，padding 各不相同，按钮位置随之漂移——这正是要消除的。
 - 需要「左侧提示 + 右侧操作」时用 `DIALOG_FOOTER_NOTE`（`mr-auto`），而不是另起一个布局。
+
+### Toast
+- 顶部居中，宽 `420px`，`px-4 py-3`（16/12），`rounded-lg` + `shadow-lg`。与弹窗同为浮层，用同一个阴影 token。
+- 卡片自身声明 `text-sm`，不靠继承：它挂在应用根节点（`16px` 正文）下，只声明 `text-sm` 的段落恰好正确，但任何后加的节点会继承 `16px`。**浮层容器必须声明自己实际渲染的字号**，这是全站统一的写法（`DIALOG_CONTENT`、`SelectContent`、`DropdownMenuContent` 同理）。
+- 标题 `text-sm font-medium`，描述 `text-sm text-muted-foreground`，两者之间 `mt-0.5`。图标 `size-4`，与文字同轴。
+- 空结果不得报成功：`variant` 决定图标与 `aria-live`，没有实际结论时用 `info` 而不是 `success`。
+
+### Tooltip
+- 反色表面（`bg-foreground` / `text-background`），`px-3 py-1.5`（12/6），`rounded-md`，`max-w-xs` + `leading-5` 以便放整句说明。
+- 阴影用 `shadow-lg`，**不是 `shadow-md`**。主题只定义 `--shadow-sm`（卡片）与 `--shadow-lg`（浮层）两个 token；`shadow-md` 会落到 Tailwind 的内置默认值，那是一组硬编码的黑色，不随主题变化（浅色模式偏灰、深色模式不会加深），也不属于这套系统。DESIGN.md 的「浮层才投影」把 Tooltip 与弹窗、下拉、Toast 归为同一类，所以它们共用 `shadow-lg`。
 
 ### Settings（签名页面）
 - **左侧 `176px` 分区导航 + 右侧单一分区内容。** 分区：外观 / 安全与连接 / AI 工具与分发 / 设备同步 / 关于与更新。

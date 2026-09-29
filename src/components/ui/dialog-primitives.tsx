@@ -62,7 +62,10 @@ function DialogContent({
             <Button
               aria-label="关闭"
               variant="ghost"
-              className="absolute top-3 right-3"
+              // `top-2.5`, not `top-3`: the button is 32px and the title is
+              // 18px with `leading-none`, so at the header's `py-4` the two
+              // centres align within 1px. At `top-3` the button sat 3px low.
+              className="absolute top-2.5 right-2.5"
               size="icon-sm"
             >
               <XIcon />

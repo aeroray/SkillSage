@@ -60,7 +60,11 @@ function ToastCard({
     <div
       aria-live={item.variant === "error" ? "assertive" : "polite"}
       className={cn(
-        "flex w-full items-center gap-3 rounded-lg border px-4 py-3 shadow-lg animate-[toast-in_180ms_ease-out]",
+        // `text-sm` declared here, not inherited: the card sits in the app root
+        // at the 16px body size, and its own paragraphs only happen to declare
+        // `text-sm` themselves. Stating it on the card means the rendered size
+        // is the declared size, and anything added later inherits the right one.
+        "flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg animate-[toast-in_180ms_ease-out]",
         variantStyles[item.variant ?? "info"],
       )}
       role={item.variant === "error" ? "alert" : "status"}

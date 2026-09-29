@@ -31,22 +31,32 @@ export const DIALOG_SIZES = {
 export type DialogSize = keyof typeof DIALOG_SIZES;
 
 /** Header: `pr-12` reserves the close button's corner so a long title cannot
- * run under it. */
+ * run under it.
+ *
+ * `px-5 py-4` is the app's own band rhythm, not a dialog-specific one: the
+ * workspace toolbar, the card header and every list row use the same 20/16.
+ * The dialog previously used 24/20, which made a modal the only surface in the
+ * app with its own spacing scale — and the visible effect was that a dialog
+ * read as a different, roomier product than the window behind it. */
 export const DIALOG_HEADER =
-  "flex flex-row items-start gap-4 border-b border-border px-6 py-5 pr-12";
+  "flex flex-row items-start gap-4 border-b border-border px-5 py-4 pr-12";
 
 export const DIALOG_TITLE =
   "min-w-0 truncate text-lg font-semibold tracking-tight";
 
 export const DIALOG_DESCRIPTION = "mt-1 text-sm leading-6 text-muted-foreground";
 
-/** Body. Scrolling lives here, never on the page behind it. */
-export const DIALOG_BODY = "px-6 py-6";
+/** Body. Scrolling lives here, never on the page behind it.
+ *
+ * `py-4`, so the header→body gap is `16 + 1 + 16 = 33px` — identical to the
+ * toolbar→list gap in the main window (`toolbar py-4` + separator + `list p-4`).
+ * It was `py-6`, giving 45px and a body that floated away from its own header. */
+export const DIALOG_BODY = "px-5 py-4";
 
 /** Footer: the same action row in every dialog, so the primary button is
  * always bottom-right and the cancel is always to its left. */
 export const DIALOG_FOOTER =
-  "flex flex-wrap items-center justify-end gap-2 border-t border-border px-6 py-4";
+  "flex flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-4";
 
 /** A secondary footer slot, for a hint on the left of the action row. */
 export const DIALOG_FOOTER_NOTE = "mr-auto text-xs text-muted-foreground";

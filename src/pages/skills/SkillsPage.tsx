@@ -1884,7 +1884,6 @@ export function SkillsPage() {
       </Card>
 
       <Dialog
-        contentClassName="px-6 py-4"
         description="为本地技能关联远端来源。"
         descriptionHidden
         onClose={closeOnlineMatch}

@@ -19,7 +19,14 @@ function TooltipContent({ className, sideOffset = 0, children, ...props }: React
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
-        className={cn("z-50 inline-flex w-fit max-w-xs items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background shadow-md", className)}
+        // `shadow-lg`, not `shadow-md`. The theme defines only two shadow
+        // tokens (`--shadow-sm` for cards, `--shadow-lg` for overlays), so
+        // `shadow-md` fell through to Tailwind's stock default — a hardcoded
+        // black that does not track the theme, unlike the app tokens which are
+        // tinted in light mode and deepen in dark. DESIGN.md lists Tooltip among
+        // the overlays, and its sibling popovers (dropdown, select) use
+        // `shadow-lg`, so this is the same class of surface.
+        className={cn("z-50 inline-flex w-fit max-w-xs items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background shadow-lg", className)}
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         {...props}
