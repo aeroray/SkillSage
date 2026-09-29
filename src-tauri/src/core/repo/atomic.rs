@@ -5,6 +5,31 @@ use crate::error::SkillsageError;
 
 use super::layout::RepoLayout;
 
+/// The infix `conflict::take_over` puts in a renamed-aside backup.
+pub const BACKUP_INFIX: &str = ".skillsage-backup-";
+
+/// True for an entry this app created as a backup or temp artifact, and which
+/// is therefore never a skill the user could adopt or manage.
+///
+/// Two naming schemes exist and both must be recognizable from the name alone,
+/// because a crash between a rename-aside and its `finalize()` leaves the
+/// artifact sitting in a directory other code scans:
+///
+/// - `{name}.skillsage-backup-{ts}-{pid}` — `conflict::take_over`.
+/// - `.{name}.{dir-backup|file-backup}-{pid}-{nanos}` — `unique_backup_path`.
+///
+/// The first is not dot-prefixed and the second is, so a filter written against
+/// only one shape silently admits the other. The checks are anchored to those
+/// exact suffixes rather than a loose `contains("-backup-")`, so an unrelated
+/// directory a user happens to have named `...-backup-...` is still listed.
+pub fn is_managed_artifact(name: &str) -> bool {
+    if name.contains(BACKUP_INFIX) {
+        return true;
+    }
+    name.starts_with('.')
+        && (name.contains(".dir-backup-") || name.contains(".file-backup-"))
+}
+
 pub fn create_temp_dir(layout: &RepoLayout) -> Result<PathBuf, SkillsageError> {
     layout.ensure_roots()?;
     let timestamp = SystemTime::now()
@@ -453,9 +478,26 @@ fn unique_backup_path(destination: &Path, suffix: &str) -> Result<PathBuf, Skill
 
 #[cfg(test)]
 mod tests {
-    use super::{remove_path, replace_dir_transaction, DestinationState};
+    use super::{is_managed_artifact, remove_path, replace_dir_transaction, DestinationState};
     use crate::error::SkillsageError;
     use std::fs;
+
+    #[test]
+    fn recognizes_both_backup_naming_schemes() {
+        // `conflict::take_over` — not dot-prefixed.
+        assert!(is_managed_artifact("notes-helper.skillsage-backup-1700000000-4242"));
+        // `unique_backup_path` — dot-prefixed, different infix.
+        assert!(is_managed_artifact(".notes-helper.dir-backup-4242-1700000000"));
+        assert!(is_managed_artifact(".config.json.file-backup-4242-1700000000"));
+        // Real skills are untouched by the filter.
+        assert!(!is_managed_artifact("notes-helper"));
+        assert!(!is_managed_artifact("my-skill"));
+        // A dotfile that is not ours stays visible.
+        assert!(!is_managed_artifact(".gitignore"));
+        // A user directory that merely mentions "backup" is still a skill.
+        assert!(!is_managed_artifact("my-backup-notes"));
+        assert!(!is_managed_artifact("db-backup-helper"));
+    }
 
     fn test_root(name: &str) -> std::path::PathBuf {
         let root = std::env::temp_dir().join(format!(

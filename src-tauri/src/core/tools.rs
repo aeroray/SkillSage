@@ -76,7 +76,13 @@ pub const TOOLS: &[ToolSpec] = &[
         label: "OpenAI Codex CLI",
         skills_dir: Some(".codex/skills"),
         reads_shared_default: false,
-        source: "https://cursor.com/docs/skills",
+        // Was `https://cursor.com/docs/skills`, which documents *Cursor*. That
+        // page does list `.codex/skills` as a directory Cursor reads for
+        // compatibility, but it is not Codex's own documentation, and `source`
+        // exists precisely so a wrong path can be checked against the page the
+        // entry came from. The path came from the third-party table used by the
+        // other unverified entries, so it points there now.
+        source: "https://raw.githubusercontent.com/vercel-labs/skills/main/src/agents.ts",
         verified: false,
     },
     ToolSpec {

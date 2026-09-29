@@ -62,6 +62,13 @@ pub fn scan(layout: &RepoLayout) -> Result<AdoptScanResult, SkillsageError> {
             continue;
         };
         let name = name.to_string();
+        // A backup or temp artifact this app left behind (a crash between a
+        // rename-aside and its finalize) is not a skill, and must not be
+        // offered for adoption — adopting it would track a stale copy under a
+        // name like `notes-helper.skillsage-backup-...`.
+        if atomic::is_managed_artifact(&name) {
+            continue;
+        }
         if conflict::is_tracked(&lock, &name) {
             continue;
         }
