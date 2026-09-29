@@ -1,5 +1,15 @@
 # Decisions
 
+## 2026-09-29 - The app-update panel shows the release notes
+
+Decision: The 关于与更新 panel renders `AppUpdateInfo.notes` as React elements parsed into plain strings. It never uses `dangerouslySetInnerHTML`.
+Reason: The backend has always fetched the notes and we author them per release in `docs/releases/<tag>.md`, but no UI ever rendered them — so the one piece of information that justifies pressing 立即安装 was the one piece not on screen. The panel now leads with `v1.0.2 → v1.0.3` (both ends monospace) instead of naming only the target, because "发现新版本 v1.0.3" makes the reader recall their own version to judge the size of the jump. Rendering as text rather than markup is a security decision, not styling: the minisign signature covers the *installer*, not the manifest, so whichever mirror wins the race controls this string. Parsing to strings and letting React escape makes injection impossible by construction. The parser is deliberately small (headings, bullets, `**bold**`, indented continuations) and any unrecognized line becomes a paragraph rather than being dropped, so a note can never silently disappear. Progress replaces the notes region while downloading so the panel does not grow mid-action; an unknown content-length shows a pulsing bar rather than an invented percentage.
+
+## 2026-09-29 - Page toolbars state the task, not the machine fact
+
+Decision: The 采纳技能 toolbar title is 「共享技能目录中的待采纳条目」, with the scanned path demoted to a clickable monospace line beneath it. Its summary names why entries are blocked ("1 个需先按 SKILL.md 整理名称，1 个缺少有效的 SKILL.md") instead of only reporting counts.
+Reason: The title was `扫描 C:\Users\PC\.agents\skills`, which made the header a machine fact rather than an explanation and pushed the one number that matters to a second line. The summary was "N 个条目，可直接采纳 M 个", which never explained *why* the numbers differed — so a page where nothing could be selected looked broken rather than informative, and gave no reason for the disabled 采纳所选 button. The three groups (adoptable / needs rename / invalid) are exactly the three states the backend already distinguishes, so the copy adds no new claims.
+
 ## 2026-09-29 - Four type steps, no arbitrary sizes
 
 Decision: The type ramp is exactly four steps — 12px (`text-xs`), 14px (`text-sm`), 16px (`text-base`), 18px (`text-lg`, dialog titles only) — plus mono at 12px for paths, hashes and versions. No arbitrary sizes anywhere.
