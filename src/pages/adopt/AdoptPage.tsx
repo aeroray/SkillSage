@@ -14,7 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { ConfirmDialog } from "../../components/ui/confirm-dialog";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
+import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { Separator } from "../../components/ui/separator";
@@ -157,27 +157,6 @@ function AdoptCandidateRow({
   );
 }
 
-/**
- * What the list actually contains, in the user's terms.
- *
- * The old header read "N 个条目，可直接采纳 M 个", which never explained *why*
- * the two numbers differed — so a page where nothing could be selected looked
- * broken rather than informative. Naming the reason each group is blocked turns
- * a count into an explanation, and explains why 采纳所选 is disabled.
- */
-function summarizeScan(items: AdoptableItem[], adoptableCount: number) {
-  if (items.length === 0) return "共享目录里的技能都已由 SkillSage 管理。";
-  const needsRename = items.filter(
-    (item) => item.valid && item.declaredName,
-  ).length;
-  const invalid = items.filter((item) => !item.valid).length;
-  const parts: string[] = [];
-  if (adoptableCount > 0) parts.push(`${adoptableCount} 个可直接采纳`);
-  if (needsRename > 0) parts.push(`${needsRename} 个需先按 SKILL.md 整理名称`);
-  if (invalid > 0) parts.push(`${invalid} 个缺少有效的 SKILL.md`);
-  return `${parts.join("，")}。`;
-}
-
 export function AdoptPage() {
   const navigate = useNavigate();
   const { error, runScan, scan, scanning } = useAdoptScan();
@@ -289,37 +268,35 @@ export function AdoptPage() {
         {/* Same toolbar band as 我的技能: muted surface, fixed height, with the
             list below it as the only scrolling region. */}
         <CardHeader className="flex shrink-0 flex-row items-center justify-between gap-4 bg-muted/20 p-4">
-          <div className="min-w-0">
-            {/* The heading says what the page is for. The directory it happens
-                to scan is a detail, so it sits below as a path — previously it
-                was the title itself ("扫描 C:\\Users\\…"), which made the
-                header a machine fact rather than an explanation, and pushed
-                the one number that matters off to a second line. */}
-            <CardTitle className="text-sm font-medium">
-              共享技能目录中的待采纳条目
-            </CardTitle>
-            <CardDescription className="mt-1">
-              {scan ? summarizeScan(scan.items, adoptableCount) : "正在读取目录…"}
-            </CardDescription>
+          {/* One line. The previous version stacked a heading, a summary
+              sentence, and the scanned path — three lines of chrome above a
+              list that is often one row tall, so the explanation outweighed
+              what it explained. The heading carries the meaning and the path
+              carries the detail; the per-row badges already say why an
+              individual entry cannot be adopted. */}
+          <div className="flex min-w-0 items-center gap-2">
+            <FolderOpen
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-foreground"
+            />
             {scan ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="mt-1.5 flex max-w-full items-center gap-1.5 rounded-sm font-mono text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+                    className="min-w-0 truncate rounded-sm font-mono text-sm text-foreground outline-none transition-colors hover:text-primary-text focus-visible:ring-2 focus-visible:ring-ring/60"
                     onClick={() => void openPath(scan.scannedRoot)}
                     type="button"
                   >
-                    <FolderOpen aria-hidden="true" className="size-3.5 shrink-0" />
-                    <span className="truncate">
-                      {displayPath(scan.scannedRoot)}
-                    </span>
+                    {displayPath(scan.scannedRoot)}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-sm leading-5" sideOffset={6}>
                   所有技能都装在这里。点击打开目录。
                 </TooltipContent>
               </Tooltip>
-            ) : null}
+            ) : (
+              <span className="text-sm text-muted-foreground">正在读取目录…</span>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-3">
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
