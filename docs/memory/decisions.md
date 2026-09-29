@@ -1,5 +1,14 @@
 # Decisions
 
+## 2026-09-29 - The tool registry was verified against vendor docs, and backups are not skills
+
+Decision: `atomic::is_managed_artifact(name)` recognizes both backup naming schemes, and `scanner::scan` skips them. The `codex` entry's `source` now cites the third-party table it came from rather than Cursor's docs.
+Reason: Two independent findings from auditing the registry and the atomic helpers.
+
+**Backups were adoptable.** `conflict::take_over` renames a displaced directory aside as `{name}.skillsage-backup-{ts}-{pid}` and deletes it only after the install and lockfile are both committed, so a crash between those steps leaves it in the public root. `unique_backup_path` uses a *different* scheme — `.{name}.{dir,file}-backup-{pid}-{ns}`, dot-prefixed — and the scanner filtered neither. The 采纳技能 page therefore offered a stale copy of a real skill as an adoptable entry, which would have been tracked under a name like `notes-helper.skillsage-backup-1700000000-4242`. The predicate is anchored to those exact suffixes rather than a loose `contains("-backup-")`, because a user directory that merely mentions "backup" is still a skill.
+
+**The registry's `reads_shared_default` flags were checked against vendor documentation** (Cursor, Cline, Amp, Devin/Cascade, Roo, Gemini CLI, OpenCode, Factory Droid, GitHub Copilot) rather than trusted. All eight `true` entries are correct — which matters more than the one error found, because a wrong `true` is the dangerous direction: it skips distribution entirely while the tool cannot actually see the shared directory. Two real errors existed: `codex` cited `cursor.com/docs/skills` (that page lists `.codex/skills` only as a directory *Cursor* reads for compatibility), and nothing else. The entry was already `verified: false` and rendered with the 路径未核实 badge, so the UI was honest — the citation was wrong. No duplicate ids, no duplicate directories, and no path escapes home.
+
 ## 2026-09-29 - Busy state is per-row, because the UI reads it per-row
 
 Decision: A hook that tracks in-flight work whose busy state the UI renders per row must key that state by id — a `Map<id, action>` or `Set<id>` — never a single slot. `useSkillManagement` holds `pendingActions: Map<skillId, action>`; `useTools` holds `savingIds: Set<toolId>`. Batch controls and shared dialogs read a derived "anything running" value (`managementBusy = pendingActions.size > 0`).
