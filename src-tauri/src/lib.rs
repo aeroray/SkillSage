@@ -21,6 +21,7 @@ pub fn run() {
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::conflict::check_install_conflict,
+            commands::external::open_external_url,
             commands::files::open_path,
             commands::files::open_skill_directory,
             commands::install::install_skill,
@@ -115,11 +116,18 @@ pub fn run() {
                             file_name: Some("skillsage.log".into()),
                         },
                     )])
-                    // `Debug` keeps the updater plugin's own diagnostics
-                    // ("checking for updates <url>", "using proxy", request
-                    // failures) in the log. Without it an update failure is
-                    // reported only as a one-line error with no context.
+                    // `Debug` keeps plugin diagnostics ("checking for updates
+                    // <url>", request failures) in the log. Without it an update
+                    // failure is reported only as a one-line error with no
+                    // context. The proxy URL is a user setting that may carry
+                    // `user:pass@`, so the updater plugin's own `log::debug!`
+                    // lines are capped below — that is the one place a credential
+                    // would otherwise reach the log file verbatim.
                     .level(log::LevelFilter::Debug)
+                    // The update module reports the winning mirror and elapsed
+                    // time itself, so the plugin's Debug chatter (which includes
+                    // `using proxy {proxy}`) is not needed for support.
+                    .level_for("tauri_plugin_updater", log::LevelFilter::Info)
                     // The HTML scraper logs one DEBUG line per element it tests
                     // against a selector, so parsing a single skills.sh
                     // leaderboard emitted 79 lines for one page and buried

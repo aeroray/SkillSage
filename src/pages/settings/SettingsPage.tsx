@@ -45,7 +45,8 @@ import { SyncImportDialog } from "../sync/SyncImportDialog";
 import { useSyncExport, type SyncSettings } from "../../features/sync";
 import { useThemeStore } from "../../features/theme/store";
 import { displayPath } from "../../lib/paths";
-import { isBrowserPreview } from "../../lib/tauri";
+import { openExternal } from "../../lib/external-link";
+import { isBrowserPreview, normalizeTauriError } from "../../lib/tauri";
 import { cn } from "../../lib/utils";
 import packageJson from "../../../package.json";
 
@@ -81,6 +82,7 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [appVersion, setAppVersion] = useState(packageJson.version);
   const [syncOpen, setSyncOpen] = useState(false);
+  const [linkError, setLinkError] = useState<string>();
   const [searchParams, setSearchParams] = useSearchParams();
   // The section is in the URL, not only in component state, so a link can point
   // at one — the sidebar's update card sends the user straight to 关于与更新
@@ -159,6 +161,16 @@ export function SettingsPage() {
     setThemeMode(next.themeMode);
     setThemeAccent(next.themeAccent);
     await save({ proxyUrl: next.proxyUrl || undefined });
+  };
+
+  /** Opens one of the About links in the OS browser. */
+  const openLink = async (url: string) => {
+    setLinkError(undefined);
+    try {
+      await openExternal(url);
+    } catch (error) {
+      setLinkError(normalizeTauriError(error));
+    }
   };
 
   return (
@@ -389,22 +401,34 @@ export function SettingsPage() {
                       GitHub 项目与产品主页
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <Button asChild size="sm" variant="outline">
-                        <a href={GITHUB_PROJECT_URL} rel="noreferrer" target="_blank">
-                          <GitFork data-icon="inline-start" />
-                          GitHub 项目
-                          <ExternalLink data-icon="inline-end" />
-                        </a>
+                      {/* Buttons, not `<a target="_blank">`: the WebView has
+                          no new-window handler, so those anchors were inert.
+                          The backend hands the URL to the OS browser. */}
+                      <Button
+                        onClick={() => void openLink(GITHUB_PROJECT_URL)}
+                        size="sm"
+                        variant="outline"
+                      >
+                        <GitFork data-icon="inline-start" />
+                        GitHub 项目
+                        <ExternalLink data-icon="inline-end" />
                       </Button>
-                      <Button asChild size="sm" variant="outline">
-                        <a href={PRODUCT_HOME_URL} rel="noreferrer" target="_blank">
-                          <Globe2 data-icon="inline-start" />
-                          产品主页
-                          <ExternalLink data-icon="inline-end" />
-                        </a>
+                      <Button
+                        onClick={() => void openLink(PRODUCT_HOME_URL)}
+                        size="sm"
+                        variant="outline"
+                      >
+                        <Globe2 data-icon="inline-start" />
+                        产品主页
+                        <ExternalLink data-icon="inline-end" />
                       </Button>
                     </div>
                   </div>
+
+                  {/* A failed launch is reported the way this card already
+                      reports its other failures (`syncExport.error`), rather
+                      than through a second, page-wide channel. */}
+                  {linkError ? <ErrorBanner error={linkError} /> : null}
 
                   <div className="rounded-md border border-border bg-muted/30 p-4">
                     <AppUpdatePanel currentVersion={appVersion} />

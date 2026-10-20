@@ -1,4 +1,5 @@
 pub mod conflict;
+pub mod external;
 pub mod files;
 pub mod import;
 pub mod install;
