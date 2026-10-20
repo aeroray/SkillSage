@@ -12,16 +12,24 @@ pub const BACKUP_INFIX: &str = ".skillsage-backup-";
 /// is therefore never a skill the user could adopt or manage.
 ///
 /// Two naming schemes exist and both must be recognizable from the name alone,
-/// because a crash between a rename-aside and its `finalize()` leaves the
-/// artifact sitting in a directory other code scans:
+/// because these artifacts sit in a directory other code scans:
 ///
-/// - `{name}.skillsage-backup-{ts}-{pid}` — `conflict::take_over`.
+/// - `{name}.skillsage-backup-{ts}-{pid}` — `conflict::take_over`. Since
+///   `PendingTakeover::finalize` keeps the displaced entity on purpose, this is
+///   now a *permanent* leftover after a successful takeover, not only a
+///   crash remnant.
 /// - `.{name}.{dir-backup|file-backup}-{pid}-{nanos}` — `unique_backup_path`.
+///   `dir-backup` is still produced by `replace_dir_transaction`; `file-backup`
+///   is no longer produced (see below).
 ///
 /// The first is not dot-prefixed and the second is, so a filter written against
 /// only one shape silently admits the other. The checks are anchored to those
 /// exact suffixes rather than a loose `contains("-backup-")`, so an unrelated
 /// directory a user happens to have named `...-backup-...` is still listed.
+///
+/// `file-backup` is still matched even though `replace_file` no longer creates
+/// one (it is a single rename with no backup step): builds before that change
+/// could have left one behind.
 pub fn is_managed_artifact(name: &str) -> bool {
     if name.contains(BACKUP_INFIX) {
         return true;
@@ -270,10 +278,13 @@ pub fn remove_dir(path: &Path) -> Result<(), SkillsageError> {
 }
 
 /// Removes a path that may be a directory, a file, or a link, refusing only
-/// links (which are never ours to delete here). Used for the renamed-aside
-/// backups created by takeover: the displaced entry can be a stray *file*
-/// sitting at the target name, which `remove_dir_all` cannot delete — leaving
-/// `<name>.skillsage-backup-<ts>` accumulating on disk forever.
+/// links (which are never ours to delete here).
+///
+/// Takeover no longer calls this: `PendingTakeover::finalize` intentionally
+/// keeps the displaced entity, so a rename-aside backup is never deleted by
+/// this app. The helper is retained as the general "delete this entry, whatever
+/// kind it is" primitive, and `remove_dir_all` alone cannot express it — a
+/// stray *file* at a skill name would fail there.
 pub fn remove_path(path: &Path) -> Result<(), SkillsageError> {
     match std::fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => Err(SkillsageError::Io(format!(
@@ -287,6 +298,16 @@ pub fn remove_path(path: &Path) -> Result<(), SkillsageError> {
     }
 }
 
+/// Atomically replaces `destination` with `temporary_path`.
+///
+/// The final step is a *single* `std::fs::rename` over the destination, which
+/// POSIX defines as atomic and Windows implements with `MOVEFILE_REPLACE_EXISTING`.
+/// There is deliberately no rename-directory-aside-then-rename-in dance: that
+/// left a window in which the destination did not exist at all, so a crash
+/// between the two renames made `lockfile::load` map `NotFound` to an empty lock
+/// file (untracking every skill), and a concurrent reader could observe zero
+/// skills. `rename` also replaces an existing destination on Windows, which is
+/// what makes the single step legal there.
 pub fn replace_file(temporary_path: &Path, destination: &Path) -> Result<(), SkillsageError> {
     let temporary_metadata = std::fs::symlink_metadata(temporary_path)?;
     if temporary_metadata.file_type().is_symlink() || !temporary_metadata.is_file() {
@@ -312,7 +333,6 @@ pub fn replace_file(temporary_path: &Path, destination: &Path) -> Result<(), Ski
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(error.into()),
     }
-    let backup = unique_backup_path(destination, "file-backup")?;
 
     let mut file = std::fs::OpenOptions::new()
         .read(true)
@@ -323,50 +343,8 @@ pub fn replace_file(temporary_path: &Path, destination: &Path) -> Result<(), Ski
     file.sync_all()?;
     drop(file);
 
-    match std::fs::symlink_metadata(destination) {
-        Ok(_) => std::fs::rename(destination, &backup)?,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error.into()),
-    }
-    match std::fs::rename(temporary_path, destination) {
-        Ok(()) => {
-            if std::fs::symlink_metadata(&backup).is_ok() {
-                if let Err(error) = std::fs::remove_file(&backup) {
-                    return Err(SkillsageError::Io(format!(
-                        "文件已替换，但无法清理备份 {}: {error}",
-                        backup.display()
-                    )));
-                }
-            }
-            Ok(())
-        }
-        Err(error) => {
-            let cleanup = match std::fs::symlink_metadata(destination) {
-                Ok(metadata) if metadata.file_type().is_symlink() => Err(SkillsageError::Io(
-                    "替换失败后的目标路径变成了符号链接".into(),
-                )),
-                Ok(metadata) if metadata.is_file() => {
-                    std::fs::remove_file(destination).map_err(SkillsageError::from)
-                }
-                Ok(_) => Err(SkillsageError::Io("替换失败后的目标路径不是文件".into())),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(error) => Err(error.into()),
-            };
-            let restore = if std::fs::symlink_metadata(&backup).is_ok() {
-                std::fs::rename(&backup, destination).map_err(SkillsageError::from)
-            } else {
-                Ok(())
-            };
-            let cleanup_error = cleanup.err();
-            let restore_error = restore.err();
-            match cleanup_error.or(restore_error) {
-                None => Err(error.into()),
-                Some(recovery) => Err(SkillsageError::Io(format!(
-                    "文件替换失败: {error}; 恢复失败: {recovery}"
-                ))),
-            }
-        }
-    }
+    std::fs::rename(temporary_path, destination)?;
+    Ok(())
 }
 
 pub fn write_file(destination: &Path, content: &[u8]) -> Result<(), SkillsageError> {
@@ -478,7 +456,9 @@ fn unique_backup_path(destination: &Path, suffix: &str) -> Result<PathBuf, Skill
 
 #[cfg(test)]
 mod tests {
-    use super::{is_managed_artifact, remove_path, replace_dir_transaction, DestinationState};
+    use super::{
+        is_managed_artifact, remove_path, replace_dir_transaction, replace_file, DestinationState,
+    };
     use crate::error::SkillsageError;
     use std::fs;
 
@@ -556,8 +536,8 @@ mod tests {
 
     #[test]
     fn remove_path_deletes_a_file_that_remove_dir_cannot() {
-        // A stray file at the target name is renamed aside by takeover; the
-        // backup must be deletable or it leaks permanently.
+        // `remove_dir_all` fails on a stray file at a skill name, so the
+        // general removal primitive has to dispatch on the entry's kind.
         let root = test_root("remove-path");
         let file = root.join("stray.txt");
         fs::write(&file, "stray").expect("write stray file");
@@ -572,6 +552,80 @@ mod tests {
 
         // A missing path is not an error.
         remove_path(&root.join("absent")).expect("missing path should be fine");
+
+        fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[test]
+    fn replace_file_swaps_the_content_and_leaves_no_backup_behind() {
+        // The destination is replaced in one rename, so it exists at every
+        // observable moment — unlike the old two-rename dance, whose midpoint
+        // had no destination at all (a concurrent `lockfile::load` would have
+        // read that as an empty lock file).
+        let root = test_root("replace-file");
+        let destination = root.join("skill-lock.json");
+        fs::write(&destination, "old").expect("write destination");
+        let temporary = root.join("skill-lock.json.tmp");
+        fs::write(&temporary, "new").expect("write temporary");
+
+        replace_file(&temporary, &destination).expect("replace should succeed");
+
+        assert_eq!(
+            fs::read_to_string(&destination).expect("read destination"),
+            "new"
+        );
+        assert!(!temporary.exists(), "the temp file must be consumed");
+        // No `.file-backup-*` artifact is produced any more. Older builds could
+        // leave one, which is why `is_managed_artifact` still recognizes it.
+        let leftovers: Vec<String> = fs::read_dir(&root)
+            .expect("read test root")
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(leftovers, vec!["skill-lock.json".to_string()]);
+
+        // Replacing an existing file works (this is the MOVEFILE_REPLACE_EXISTING
+        // behaviour on Windows and the POSIX rename contract).
+        let second = root.join("second.tmp");
+        fs::write(&second, "newer").expect("write second");
+        replace_file(&second, &destination).expect("second replace should succeed");
+        assert_eq!(
+            fs::read_to_string(&destination).expect("read destination"),
+            "newer"
+        );
+
+        fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[test]
+    fn replace_file_refuses_a_symlinked_destination() {
+        let root = test_root("replace-file-link");
+        let destination = root.join("skill-lock.json");
+        let elsewhere = root.join("elsewhere.json");
+        fs::write(&elsewhere, "not ours").expect("write elsewhere");
+        #[cfg(unix)]
+        let linked = std::os::unix::fs::symlink(&elsewhere, &destination).is_ok();
+        #[cfg(windows)]
+        // Creating a symlink needs Developer Mode or elevation on Windows, so
+        // this test only asserts where the platform allowed one to be made.
+        let linked = std::os::windows::fs::symlink_file(&elsewhere, &destination).is_ok();
+        if !linked {
+            fs::remove_dir_all(root).expect("remove test root");
+            return;
+        }
+
+        let temporary = root.join("skill-lock.json.tmp");
+        fs::write(&temporary, "new").expect("write temporary");
+
+        let result = replace_file(&temporary, &destination);
+        assert!(matches!(result, Err(SkillsageError::Io(_))));
+        // The link target is untouched, and the temp file is left for the
+        // caller to clean up.
+        assert_eq!(
+            fs::read_to_string(&elsewhere).expect("read elsewhere"),
+            "not ours"
+        );
+        assert!(temporary.is_file());
 
         fs::remove_dir_all(root).expect("remove test root");
     }
