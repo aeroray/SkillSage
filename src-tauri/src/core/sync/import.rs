@@ -79,29 +79,27 @@ pub fn preview_at(layout: &RepoLayout, path: &str) -> Result<SyncImportPreview, 
     })
 }
 
+/// The package entries the user selected, in selection order and deduplicated.
+///
+/// An empty selection means nothing is imported. It does *not* mean "everything":
+/// the dialog keeps the selection in state and sends the full id list when the
+/// user means all, and its checkbox grid can legitimately be cleared while the
+/// user only wants the package's settings — treating that as "all" installed the
+/// entire package.
 pub fn selected_entries(
     package: &SyncPackage,
     selected_ids: &[String],
 ) -> Result<Vec<SyncSkillEntry>, SkillsageError> {
-    let selected: Vec<String> = if selected_ids.is_empty() {
-        package
-            .skills
-            .iter()
-            .map(|entry| entry.id.clone())
-            .collect()
-    } else {
-        selected_ids.to_vec()
-    };
     let mut entries = Vec::new();
     let mut seen = HashSet::new();
-    for id in selected {
+    for id in selected_ids {
         if !seen.insert(id.clone()) {
             continue;
         }
         let entry = package
             .skills
             .iter()
-            .find(|entry| entry.id == id)
+            .find(|entry| &entry.id == id)
             .cloned()
             .ok_or_else(|| SkillsageError::SyncInvalid(format!("同步数据中不存在技能: {id}")))?;
         entries.push(entry);
@@ -230,4 +228,71 @@ fn validate_skill_path(value: &str) -> Result<(), SkillsageError> {
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{selected_entries, SyncPackage, SyncSkillEntry, FORMAT_VERSION};
+    use crate::error::SkillsageError;
+
+    fn entry(id: &str) -> SyncSkillEntry {
+        let (owner, name) = id.split_once('/').expect("id has an owner and a name");
+        SyncSkillEntry {
+            id: id.to_string(),
+            name: name.to_string(),
+            owner: owner.to_string(),
+            repo: "skills".into(),
+            skill_path: None,
+            source: format!("https://github.com/{owner}/skills/tree/main/{name}"),
+            current_version: "abc123".into(),
+            current_hash: "hash".into(),
+            description: String::new(),
+        }
+    }
+
+    fn package() -> SyncPackage {
+        SyncPackage {
+            format_version: FORMAT_VERSION,
+            exported_at: "1".into(),
+            settings: None,
+            translated_descriptions: Default::default(),
+            skills: vec![entry("acme/alpha"), entry("acme/beta"), entry("acme/gamma")],
+        }
+    }
+
+    #[test]
+    fn an_empty_selection_selects_no_entries() {
+        // The dialog can submit with every checkbox cleared while importing
+        // only the package's settings; that must not install the whole package.
+        let selected = selected_entries(&package(), &[]).expect("empty selection is valid");
+        assert!(selected.is_empty());
+    }
+
+    #[test]
+    fn a_subset_selects_exactly_those_entries_in_selection_order() {
+        let selected = selected_entries(
+            &package(),
+            &["acme/gamma".into(), "acme/alpha".into()],
+        )
+        .expect("subset should resolve");
+        let ids: Vec<&str> = selected.iter().map(|entry| entry.id.as_str()).collect();
+        assert_eq!(ids, vec!["acme/gamma", "acme/alpha"]);
+    }
+
+    #[test]
+    fn duplicate_ids_are_deduplicated() {
+        let selected = selected_entries(
+            &package(),
+            &["acme/alpha".into(), "acme/alpha".into(), "acme/beta".into()],
+        )
+        .expect("duplicates should resolve");
+        let ids: Vec<&str> = selected.iter().map(|entry| entry.id.as_str()).collect();
+        assert_eq!(ids, vec!["acme/alpha", "acme/beta"]);
+    }
+
+    #[test]
+    fn an_unknown_id_is_a_sync_invalid_error() {
+        let result = selected_entries(&package(), &["acme/does-not-exist".into()]);
+        assert!(matches!(result, Err(SkillsageError::SyncInvalid(_))));
+    }
 }

@@ -36,11 +36,21 @@ pub struct SyncImportOptions {
     pub apply_settings: bool,
 }
 
+/// Writes a peer's package from this device's lock file and preferences.
+///
+/// This is the only read-only-looking sync command that takes the write lock:
+/// it both reads the lock file and writes a user-visible artifact derived from
+/// it, and the prefs it exports are written by `set_settings`/`save_translation`
+/// under the same lock. Without it an export racing a mutation can capture a
+/// half-applied state, and a concurrent lockfile replacement is exactly the
+/// thing the atomic writer exists to serialize.
 #[tauri::command]
 pub async fn export_package(
     destination: String,
     sync_settings: Option<export::SyncSettings>,
+    state: State<'_, AppState>,
 ) -> Result<String, SkillsageError> {
+    let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
         export::export_at(&layout, &destination, sync_settings.unwrap_or_default())
@@ -116,31 +126,6 @@ pub async fn import_package(
     };
 
     for entry in selected {
-        // Pre-check on the blocking pool: reading the lockfile is synchronous
-        // I/O and would otherwise stall the async runtime once per entry.
-        let already_installed = {
-            let _write_guard = state.write_lock.lock().await;
-            let layout_for_check = layout.clone();
-            let entry_id = entry.id.clone();
-            let entry_name = entry.name.clone();
-            tokio::task::spawn_blocking(move || {
-                let existing = lockfile::load(&layout_for_check)?;
-                Ok::<_, SkillsageError>(
-                    existing.skills.contains_key(&entry_id)
-                        || existing
-                            .skills
-                            .values()
-                            .any(|record| record.name == entry_name),
-                )
-            })
-            .await
-            .map_err(|error| SkillsageError::Task(error.to_string()))??
-        };
-        if already_installed {
-            result.skipped.push(entry.id);
-            continue;
-        }
-
         let record = lockfile::SkillLockRecord {
             id: entry.id.clone(),
             name: entry.name.clone(),
@@ -180,36 +165,29 @@ pub async fn import_package(
             files,
         };
         let _write_guard = state.write_lock.lock().await;
-        // Re-check and install on the blocking pool: the lockfile read and the
-        // directory replacement + blake3 hashing are all synchronous work that
-        // would otherwise stall a tokio worker while holding the write lock.
+        // Install on the blocking pool: the lockfile read and the directory
+        // replacement + blake3 hashing are all synchronous work that would
+        // otherwise stall a tokio worker while holding the write lock.
+        //
+        // There is deliberately no separate "already installed?" pre-check: it
+        // would load and scan the lock file a second time per entry. The
+        // install's own up-front `AlreadyInstalled`/`NameConflict` guards are
+        // the same checks and are already inside the write lock, so the error
+        // is classified instead of pre-empted.
         let layout_for_install = layout.clone();
-        let entry_id = entry.id.clone();
-        let entry_name = entry.name.clone();
         let installed = tokio::task::spawn_blocking(move || {
-            let latest_lock = lockfile::load(&layout_for_install)?;
-            if latest_lock.skills.contains_key(&entry_id)
-                || latest_lock
-                    .skills
-                    .values()
-                    .any(|record| record.name == entry_name)
-            {
-                return Ok::<_, SkillsageError>(None);
+            install::install_skill_from_store_at(&layout_for_install, detail, None)
+        })
+        .await
+        .map_err(|error| SkillsageError::Task(error.to_string()))?;
+        match installed {
+            Ok(installed) => result.imported.push(installed),
+            Err(SkillsageError::AlreadyInstalled(_) | SkillsageError::NameConflict(_)) => {
+                result.skipped.push(entry.id)
             }
             // An install failure is reported per entry, not as a fatal error
             // for the whole batch.
-            Ok(Some(install::install_skill_from_store_at(
-                &layout_for_install,
-                detail,
-                None,
-            )))
-        })
-        .await
-        .map_err(|error| SkillsageError::Task(error.to_string()))??;
-        match installed {
-            None => result.skipped.push(entry.id),
-            Some(Ok(installed)) => result.imported.push(installed),
-            Some(Err(error)) => result.failed.push(SyncImportFailure {
+            Err(error) => result.failed.push(SyncImportFailure {
                 id: entry.id,
                 reason: error.to_string(),
             }),
