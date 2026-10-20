@@ -287,6 +287,11 @@ export function useSkillManagement(onCompleted: () => void) {
     Map<string, SkillManagementAction>
   >(() => new Map());
   const [error, setError] = useState<string>();
+  // The state above is only readable on the next render, and a caller that
+  // awaits an action needs the reason *synchronously* to report it — e.g. the
+  // store toasts an uninstall failure before its dialog can close. The ref
+  // carries the last failure to that continuation.
+  const lastErrorRef = useRef<string | undefined>(undefined);
 
   const run = useCallback(
     async <T>(
@@ -298,13 +303,16 @@ export function useSkillManagement(onCompleted: () => void) {
       setPendingActions((current) =>
         new Map(current).set(skillId, kind),
       );
+      lastErrorRef.current = undefined;
       setError(undefined);
       try {
         const result = await action();
         if (options.refresh !== false) onCompleted();
         return result;
       } catch (reason) {
-        setError(normalizeTauriError(reason));
+        const message = normalizeTauriError(reason);
+        lastErrorRef.current = message;
+        setError(message);
         return undefined;
       } finally {
         // Remove only this skill's entry, so a concurrent action on another row
@@ -321,8 +329,11 @@ export function useSkillManagement(onCompleted: () => void) {
 
   return {
     error,
+    /** The most recent failure's message, readable without waiting for a
+     * re-render. Undefined once the next action starts. */
+    getLastError: () => lastErrorRef.current,
     pendingActions,
-    uninstall: (skillId: string) =>
+    uninstall: (skillId: string, options?: SkillManagementOptions) =>
       run(
         skillId,
         async () => {
@@ -330,6 +341,7 @@ export function useSkillManagement(onCompleted: () => void) {
           return true;
         },
         "uninstall",
+        options,
       ),
     setToolDistribution: (
       skillId: string,

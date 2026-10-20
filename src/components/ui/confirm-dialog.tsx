@@ -18,6 +18,11 @@ type ConfirmDialogProps = {
   children?: ReactNode;
   /** Defaults to 取消. */
   cancelLabel?: string;
+  /** Keep the dialog open after the confirm is pressed. For an action whose
+   * outcome is only known after an await and whose failure must stay on screen
+   * — the caller closes it explicitly on success. Defaults to closing, which is
+   * what a decision that cannot fail wants. */
+  closeOnConfirm?: boolean;
   confirmDisabled?: boolean;
   confirmLabel: string;
   /** `destructive` for anything that deletes or overwrites. */
@@ -43,6 +48,7 @@ type ConfirmDialogProps = {
 export function ConfirmDialog({
   cancelLabel = "取消",
   children,
+  closeOnConfirm = true,
   confirmDisabled,
   confirmLabel,
   confirmVariant = "default",
@@ -93,7 +99,13 @@ export function ConfirmDialog({
             <AlertDialogPrimitive.Action asChild>
               <Button
                 disabled={confirmDisabled}
-                onClick={onConfirm}
+                onClick={(event) => {
+                  // `Action` closes through `DialogClose`, whose own handler
+                  // honours `defaultPrevented` — suppressing it here is what
+                  // lets an async action keep this dialog open on failure.
+                  if (!closeOnConfirm) event.preventDefault();
+                  onConfirm();
+                }}
                 variant={confirmVariant}
               >
                 {confirmLabel}

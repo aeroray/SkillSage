@@ -65,6 +65,7 @@ import {
   useSkillSearch,
 } from "../../features/store/hooks";
 import { translateSkillDescription } from "../../features/store/api";
+import { openExternal } from "../../lib/external-link";
 import { normalizeTauriError } from "../../lib/tauri";
 import type { InstallResult, PathConflict } from "../../features/skills/types";
 import type {
@@ -522,13 +523,23 @@ export function StorePage() {
     const result = await management.uninstall(uninstallTarget.id);
     // The confirmation dialog closes here, so the outcome has to be reported
     // before it goes — the same rule the install path follows.
-    if (result !== undefined) {
+    if (result === undefined) {
+      // Read the hook's last failure rather than `management.error`: that is
+      // React state and would still hold the previous render's value at this
+      // point in the async continuation. The dialog stays open (`closeOnConfirm`
+      // is off), so the failure is visible next to the retry the user needs.
       toast({
-        description: `“${uninstallTarget.name}” 已从共享技能目录移除。`,
-        title: "卸载完成",
-        variant: "success",
+        description: management.getLastError() ?? "请稍后重试。",
+        title: "卸载失败",
+        variant: "error",
       });
+      return;
     }
+    toast({
+      description: `“${uninstallTarget.name}” 已从共享技能目录移除。`,
+      title: "卸载完成",
+      variant: "success",
+    });
     setUninstallTarget(undefined);
   };
 
@@ -548,8 +559,12 @@ export function StorePage() {
   );
   const openDetail = (skillId: string) => {
     // Clear a previous quick-install failure so it cannot surface in the
-    // detail dialog of an unrelated skill.
+    // detail dialog of an unrelated skill. The conflict-check error is part of
+    // the same chain `DetailContent` renders, so it has to be cleared too —
+    // the dialog stays mounted while closed, and without this a failed check
+    // from one skill appeared above the install section of the next.
     installState.clearError();
+    conflictCheck.clearError();
     navigate(`/store/${skillId.split("/").map(encodeURIComponent).join("/")}`);
   };
   const startStoreInstall = async () => {
@@ -579,6 +594,24 @@ export function StorePage() {
       await installState.install(skill.id);
     } finally {
       setQuickInstallingSkillId(undefined);
+    }
+  };
+  /**
+   * Opens the skill's skills.sh page in the OS browser.
+   *
+   * Reported with a toast rather than the page's error banner: the button only
+   * exists inside the detail dialog, and a banner on the grid behind the modal
+   * scrim would be hidden. The toast paints above the dialog.
+   */
+  const openDetailInBrowser = async (url: string) => {
+    try {
+      await openExternal(url);
+    } catch (reason) {
+      toast({
+        description: normalizeTauriError(reason),
+        title: "打开链接失败",
+        variant: "error",
+      });
     }
   };
   const translateDescription = async () => {
@@ -643,11 +676,14 @@ export function StorePage() {
           up. */}
       {/* Quick install happens on the grid, where the detail dialog (the only
           other place install errors render) is not open. Surface failures here
-          so a failed quick install is never silent. */}
-      {!selectedSkillId && (installState.error ?? conflictCheck.error) ? (
+          so a failed quick install is never silent. `management.error` belongs
+          to the same family: a failed uninstall from a card has nowhere else to
+          appear. */}
+      {!selectedSkillId &&
+      (installState.error ?? conflictCheck.error ?? management.error) ? (
         <ErrorBanner
           className="mb-4"
-          error={installState.error ?? conflictCheck.error}
+          error={installState.error ?? conflictCheck.error ?? management.error}
           onOpenSettings={() => navigate("/settings")}
         />
       ) : null}
@@ -853,16 +889,18 @@ export function StorePage() {
         }
         headerActions={
           detail ? (
+            // A button, not an `<a target="_blank">`: the WebView denies the
+            // navigation because the app registers no new-window handler, so
+            // the anchor rendered as a dead icon. The backend hands the URL to
+            // the OS browser instead.
             <Button
               aria-label="在 skills.sh 打开详情"
-              asChild
+              onClick={() => void openDetailInBrowser(detail.url)}
               size="icon"
               title="在 skills.sh 打开详情"
               variant="ghost"
             >
-              <a href={detail.url} rel="noreferrer" target="_blank">
-                <ExternalLink aria-hidden="true" className="size-4" />
-              </a>
+              <ExternalLink aria-hidden="true" className="size-4" />
             </Button>
           ) : undefined
         }
@@ -886,7 +924,9 @@ export function StorePage() {
           <DetailContent
             descriptionMode={detailDescriptionMode}
             detail={detail}
-            installError={installState.error ?? conflictCheck.error}
+            installError={
+              installState.error ?? conflictCheck.error ?? management.error
+            }
             onDescriptionModeChange={(mode) => {
               setDescriptionModes((current) => ({
                 ...current,
@@ -915,8 +955,11 @@ export function StorePage() {
         }}
       />
       {/* Same copy and same shape as 我的技能's single-skill uninstall, so one
-          action reads the same wherever it is taken from. */}
+          action reads the same wherever it is taken from. Unlike that page's
+          version, this dialog stays open until the uninstall resolves: a
+          failure has to keep the retry (and its reason) on screen. */}
       <ConfirmDialog
+        closeOnConfirm={false}
         confirmDisabled={
           management.pendingActions.get(uninstallTarget?.id ?? "") === "uninstall"
         }
