@@ -25,6 +25,7 @@ use serde::Deserialize;
 use tokio::task::JoinSet;
 use url::Url;
 
+use crate::core::limits::MAX_UPDATE_JSON_BYTES;
 use crate::error::SkillsageError;
 
 /// The canonical, unproxied manifest URL. Mirrors are addressed by prefixing
@@ -127,11 +128,51 @@ fn build_client(proxy: Option<&str>) -> Result<reqwest::Client, SkillsageError> 
     Ok(builder.build()?)
 }
 
+/// Whether an already-buffered body may be handed to the JSON parser.
+///
+/// Split out from the streaming reader so the cap can be tested without a
+/// network round-trip; the reader enforces the same comparison chunk by chunk.
+fn is_within_limit(length: usize) -> bool {
+    length <= MAX_UPDATE_JSON_BYTES
+}
+
+/// Streams a mirror response into memory, refusing to buffer more than
+/// [`MAX_UPDATE_JSON_BYTES`].
+///
+/// Mirrors are volunteer-run third-party hosts, so their response size is not
+/// trusted. `content_length()` is checked first because it lets an oversized
+/// response be rejected before any body is read, but it is optional — the
+/// streaming loop is what actually enforces the cap for a chunked response,
+/// which would otherwise be buffered in full before a post-hoc check could
+/// reject it. This mirrors `bounded_bytes` in `core/github/client.rs`.
+async fn bounded_body(
+    mut response: reqwest::Response,
+    label: &str,
+) -> Result<Vec<u8>, SkillsageError> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_UPDATE_JSON_BYTES as u64)
+    {
+        return Err(SkillsageError::ResponseTooLarge(format!(
+            "{label}超过 {} KiB",
+            MAX_UPDATE_JSON_BYTES / 1024
+        )));
+    }
+    let mut collected = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if !is_within_limit(collected.len().saturating_add(chunk.len())) {
+            return Err(SkillsageError::ResponseTooLarge(format!(
+                "{label}超过 {} KiB",
+                MAX_UPDATE_JSON_BYTES / 1024
+            )));
+        }
+        collected.extend_from_slice(&chunk);
+    }
+    Ok(collected)
+}
+
 /// Fetches `url` and returns the body if it is a valid manifest.
-async fn fetch_manifest(
-    client: &reqwest::Client,
-    url: &str,
-) -> Result<String, SkillsageError> {
+async fn fetch_manifest(client: &reqwest::Client, url: &str) -> Result<String, SkillsageError> {
     let response = client.get(url).send().await?;
     if !response.status().is_success() {
         return Err(SkillsageError::Network(format!(
@@ -140,7 +181,11 @@ async fn fetch_manifest(
             response.status()
         )));
     }
-    let body = response.text().await?;
+    let bytes = bounded_body(response, "更新清单").await?;
+    // Lossy like the `text()` this replaced: a node answering 200 with an HTML
+    // error page in another charset is still rejected by `is_valid_manifest`,
+    // and a decoding failure would only produce a less useful message.
+    let body = String::from_utf8_lossy(&bytes).into_owned();
     if !is_valid_manifest(&body) {
         return Err(SkillsageError::Network(format!(
             "{url} did not return a valid update manifest"
@@ -223,11 +268,7 @@ fn repository() -> Result<(String, String), SkillsageError> {
 
 /// The numeric asset id in an `api.github.com/.../releases/assets/<id>` URL.
 fn asset_id_from_api_url(asset_url: &Url) -> Option<u64> {
-    asset_url
-        .path_segments()?
-        .next_back()?
-        .parse::<u64>()
-        .ok()
+    asset_url.path_segments()?.next_back()?.parse::<u64>().ok()
 }
 
 #[derive(Debug, Deserialize)]
@@ -276,7 +317,15 @@ pub async fn proxied_asset_url(
     if !response.status().is_success() {
         return Ok(None);
     }
-    let Ok(metadata) = response.json::<ReleaseMetadata>().await else {
+    // A node is a third-party host; its response size is not trusted either.
+    let bytes = match bounded_body(response, "镜像发布信息").await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            tracing::warn!(error = %error, "镜像发布信息读取失败，回退到直连");
+            return Ok(None);
+        }
+    };
+    let Ok(metadata) = serde_json::from_slice::<ReleaseMetadata>(&bytes) else {
         return Ok(None);
     };
     let Some(asset) = metadata.assets.iter().find(|asset| asset.id == asset_id) else {
@@ -287,6 +336,208 @@ pub async fn proxied_asset_url(
     // addressing convention.
     let proxied = format!("{mirror_base}/{}", asset.browser_download_url);
     Ok(Some(Url::parse(&proxied)?))
+}
+
+/// Name suffixes of the updater artifact for the running platform, most
+/// specific first.
+///
+/// Only one of these exists in a release's asset list for a given platform:
+/// Tauri publishes the NSIS `-setup.exe` (or `.msi`) on Windows, and the
+/// `.app.tar.gz` updater artifact on macOS — the `.dmg` is listed as a fallback
+/// because a dmg-only release would still announce one in its manifest.
+fn installer_suffixes() -> &'static [&'static str] {
+    #[cfg(target_os = "windows")]
+    {
+        &["-setup.exe", ".msi"]
+    }
+    #[cfg(target_os = "macos")]
+    {
+        &[".app.tar.gz", ".dmg"]
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        &[]
+    }
+}
+
+fn asset_size(asset: &serde_json::Value) -> Option<u64> {
+    asset.get("size")?.as_u64()
+}
+
+fn asset_by_id(metadata: &serde_json::Value, id: u64) -> Option<&serde_json::Value> {
+    metadata
+        .get("assets")?
+        .as_array()?
+        .iter()
+        .find(|asset| asset.get("id").and_then(|value| value.as_u64()) == Some(id))
+}
+
+fn asset_by_name<'a>(metadata: &'a serde_json::Value, name: &str) -> Option<&'a serde_json::Value> {
+    metadata
+        .get("assets")?
+        .as_array()?
+        .iter()
+        .find(|asset| asset.get("name").and_then(|value| value.as_str()) == Some(name))
+}
+
+fn first_installer_asset<'a>(
+    metadata: &'a serde_json::Value,
+    suffixes: &[&str],
+) -> Option<&'a serde_json::Value> {
+    let assets = metadata.get("assets")?.as_array()?;
+    for suffix in suffixes {
+        if let Some(asset) = assets.iter().find(|asset| {
+            asset
+                .get("name")
+                .and_then(|value| value.as_str())
+                .is_some_and(|name| name.ends_with(suffix))
+        }) {
+            return Some(asset);
+        }
+    }
+    None
+}
+
+/// The announced size of the installer the updater plugin would download, or
+/// `None` when the trusted metadata cannot identify it.
+///
+/// Resolution order:
+/// 1. the asset id in the manifest's own `api.github.com` URL — exact, and it
+///    is precisely the asset the plugin will fetch;
+/// 2. the file name in a `releases/download/...` URL, for a manifest that
+///    announces browser URLs instead of asset ids;
+/// 3. the platform's installer shape, which is the only remaining way to name
+///    the expected artifact when the manifest's id is absent from the trusted
+///    release (the replay case: an older signed installer under a newer tag).
+fn announced_size_from_metadata(
+    metadata: &serde_json::Value,
+    asset_url: &Url,
+    suffixes: &[&str],
+) -> Option<u64> {
+    if let Some(id) = asset_id_from_api_url(asset_url) {
+        if let Some(size) = asset_by_id(metadata, id).and_then(asset_size) {
+            return Some(size);
+        }
+    }
+    if let Some(name) = asset_url
+        .path_segments()
+        .and_then(|mut segments| segments.next_back())
+    {
+        if !name.is_empty() {
+            if let Some(size) = asset_by_name(metadata, name).and_then(asset_size) {
+                return Some(size);
+            }
+        }
+    }
+    first_installer_asset(metadata, suffixes).and_then(asset_size)
+}
+
+/// Whether `version` can be used as a release tag path segment.
+///
+/// A semver string never contains `/`, so this is defence in depth: the value
+/// reaches an API path, and a malformed one must not be interpolated. It is
+/// not an error — a version the trusted API cannot address simply means the
+/// cross-check has no data, and the update proceeds.
+fn is_addressable_version(version: &str) -> bool {
+    !version.is_empty()
+        && version.len() <= 64
+        && version.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '+')
+        })
+}
+
+/// The announced size of the installer asset for `version`, read from GitHub's
+/// trusted API (not from a mirror's copy of the release metadata).
+///
+/// This is a **size** cross-check, not a hash check: the updater plugin
+/// exposes no digest for the downloaded artifact, so the byte length is the
+/// only signal available without re-implementing the release format. It is
+/// enough to catch the replay this guards against — an older signed installer
+/// served under a newer version label has a different length from the asset
+/// that version actually published. Minisign still proves the bytes are a
+/// genuine release; this proves they are *this* release.
+///
+/// Every failure path returns `None` rather than an error: a rate limit or a
+/// network hiccup while reading metadata must not break an otherwise valid
+/// update, so the caller logs and installs. The one thing this function must
+/// never do is report a size it did not read from the trusted tag.
+///
+/// The request goes to `api.github.com` directly and never through a mirror,
+/// even when a mirror won the manifest race: a mirror-supplied "expected size"
+/// would be exactly what a malicious node controls, so consulting one here
+/// would neutralise the check it is meant to perform. The cost of that choice
+/// is that where the GitHub API itself is unreachable the check fails open and
+/// only the minisign signature protects the download — the deliberate
+/// trade-off of never turning unreachable metadata into a broken update.
+pub async fn announced_asset_size(
+    version: &str,
+    asset_url: &Url,
+    proxy: Option<&str>,
+) -> Option<u64> {
+    if !is_addressable_version(version) {
+        tracing::warn!(version, "更新版本号无法用于查询发布信息，跳过大小校验");
+        return None;
+    }
+    let (owner, repo) = match repository() {
+        Ok(repository) => repository,
+        Err(error) => {
+            tracing::warn!(error = %error, "无法解析仓库信息，跳过更新包大小校验");
+            return None;
+        }
+    };
+    // Cache-busted like every other release-metadata request (constraint 30):
+    // a stale cached response would report the *previous* release's asset
+    // sizes, which are not what the version under check published, and the
+    // cross-check would fail a legitimate update instead of a replayed one.
+    let url = format!(
+        "https://api.github.com/repos/{owner}/{repo}/releases/tags/v{version}?{}",
+        cache_buster()
+    );
+    let client = match build_client(proxy) {
+        Ok(client) => client,
+        Err(error) => {
+            tracing::warn!(error = %error, "无法创建 GitHub 请求客户端，跳过更新包大小校验");
+            return None;
+        }
+    };
+    let response = match client
+        .get(&url)
+        .header("accept", "application/vnd.github+json")
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::warn!(error = %error, "无法读取 GitHub 发布信息，跳过更新包大小校验");
+            return None;
+        }
+    };
+    if !response.status().is_success() {
+        tracing::warn!(status = %response.status(), "GitHub 发布信息请求失败，跳过更新包大小校验");
+        return None;
+    }
+    let bytes = match bounded_body(response, "GitHub 发布信息").await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            tracing::warn!(error = %error, "GitHub 发布信息读取失败，跳过更新包大小校验");
+            return None;
+        }
+    };
+    let metadata: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            tracing::warn!(error = %error, "GitHub 发布信息无法解析，跳过更新包大小校验");
+            return None;
+        }
+    };
+    let size = announced_size_from_metadata(&metadata, asset_url, installer_suffixes());
+    if size.is_none() {
+        tracing::warn!(
+            version,
+            "GitHub 发布信息中找不到对应的安装包，跳过更新包大小校验"
+        );
+    }
+    size
 }
 
 #[cfg(test)]
@@ -332,11 +583,13 @@ mod tests {
 
     #[test]
     fn extracts_the_asset_id_from_an_api_url() {
-        let url = Url::parse("https://api.github.com/repos/aeroray/SkillSage/releases/assets/556955915")
-            .expect("url");
+        let url =
+            Url::parse("https://api.github.com/repos/aeroray/SkillSage/releases/assets/556955915")
+                .expect("url");
         assert_eq!(asset_id_from_api_url(&url), Some(556955915));
 
-        let not_an_asset = Url::parse("https://api.github.com/repos/aeroray/SkillSage").expect("url");
+        let not_an_asset =
+            Url::parse("https://api.github.com/repos/aeroray/SkillSage").expect("url");
         assert_eq!(asset_id_from_api_url(&not_an_asset), None);
     }
 
@@ -386,5 +639,149 @@ mod tests {
             direct.endpoint().expect("endpoint").as_str(),
             format!("{MANIFEST_URL}?skillsage=456")
         );
+    }
+
+    #[test]
+    fn a_body_within_the_limit_is_accepted_and_an_oversized_one_is_not() {
+        // The streaming reader compares accumulated length against this, so the
+        // boundary itself is what has to be right.
+        assert!(is_within_limit(0));
+        assert!(is_within_limit(1024));
+        assert!(is_within_limit(MAX_UPDATE_JSON_BYTES));
+        assert!(!is_within_limit(MAX_UPDATE_JSON_BYTES + 1));
+        assert!(!is_within_limit(MAX_UPDATE_JSON_BYTES * 2));
+    }
+
+    #[test]
+    fn a_manifest_and_release_metadata_fit_the_update_limit() {
+        // The limit must not reject a real document: a mirror that returns a
+        // valid manifest slightly over the cap would otherwise fail the race
+        // for every user at once. 256 KiB is ~40x the observed ~6.5 KiB.
+        // Asserted at compile time rather than in a test body, because clippy
+        // is right that comparing two constants at runtime proves nothing.
+        const _: () = assert!(MAX_UPDATE_JSON_BYTES >= 64 * 1024);
+        const _: () = assert!(MAX_UPDATE_JSON_BYTES <= crate::core::limits::MAX_REMOTE_JSON_BYTES);
+    }
+
+    #[test]
+    fn reads_the_announced_size_of_the_installers_asset_id() {
+        // The manifest points at an asset id; the trusted metadata resolves it.
+        let metadata = serde_json::json!({
+            "assets": [
+                { "id": 10, "name": "SkillSage_1.0.6_aarch64.app.tar.gz", "size": 7_058_805 },
+                { "id": 11, "name": "SkillSage_1.0.6_x64-setup.exe", "size": 4_473_815 },
+            ]
+        });
+        let asset_url =
+            Url::parse("https://api.github.com/repos/aeroray/SkillSage/releases/assets/11")
+                .expect("url");
+        assert_eq!(
+            announced_size_from_metadata(&metadata, &asset_url, installer_suffixes()),
+            Some(4_473_815)
+        );
+    }
+
+    #[test]
+    fn falls_back_to_the_browser_download_url_name() {
+        // A manifest that announces a browser URL instead of an asset id still
+        // maps onto the trusted metadata by file name.
+        let metadata = serde_json::json!({
+            "assets": [
+                { "id": 11, "name": "SkillSage_1.0.6_x64-setup.exe", "size": 4_473_815 },
+            ]
+        });
+        let asset_url = Url::parse(
+            "https://github.com/aeroray/SkillSage/releases/download/v1.0.6/SkillSage_1.0.6_x64-setup.exe",
+        )
+        .expect("url");
+        assert_eq!(
+            announced_size_from_metadata(&metadata, &asset_url, installer_suffixes()),
+            Some(4_473_815)
+        );
+    }
+
+    #[test]
+    fn falls_back_to_the_installer_shaped_asset_when_the_id_is_unknown() {
+        // The replay this guards against: the manifest announces a *newer*
+        // version but its asset id belongs to an older release, so it is absent
+        // from the trusted tag. The installer shape still identifies the asset
+        // whose size the new version published.
+        let metadata = serde_json::json!({
+            "assets": [
+                { "id": 20, "name": "SkillSage_1.0.6_x64-setup.exe", "size": 4_473_815 },
+                { "id": 21, "name": "SkillSage_1.0.6_x64-setup.exe.sig", "size": 420 },
+                { "id": 22, "name": "latest.json", "size": 6_616 },
+            ]
+        });
+        let stale_asset_url =
+            Url::parse("https://api.github.com/repos/aeroray/SkillSage/releases/assets/99")
+                .expect("url");
+        let suffixes = installer_suffixes();
+        if suffixes.is_empty() {
+            // A host with no updater artifact has nothing to cross-check.
+            assert_eq!(
+                announced_size_from_metadata(&metadata, &stale_asset_url, suffixes),
+                None
+            );
+            return;
+        }
+        assert_eq!(
+            announced_size_from_metadata(&metadata, &stale_asset_url, suffixes),
+            Some(4_473_815)
+        );
+        // The signature sidecar must never be mistaken for the installer.
+        assert_ne!(
+            announced_size_from_metadata(&metadata, &stale_asset_url, suffixes),
+            Some(420)
+        );
+    }
+
+    #[test]
+    fn an_unknown_asset_is_accepted_rather_than_failing_the_update() {
+        // Fail open: metadata without the asset, without sizes, or empty must
+        // yield `None` so the caller installs normally. A mirror or a rate
+        // limit must not be able to break updates entirely.
+        let asset_url =
+            Url::parse("https://api.github.com/repos/aeroray/SkillSage/releases/assets/99")
+                .expect("url");
+        assert_eq!(
+            announced_size_from_metadata(
+                &serde_json::json!({ "assets": [] }),
+                &asset_url,
+                installer_suffixes()
+            ),
+            None
+        );
+        assert_eq!(
+            announced_size_from_metadata(&serde_json::json!({}), &asset_url, installer_suffixes()),
+            None
+        );
+        assert_eq!(
+            announced_size_from_metadata(
+                &serde_json::json!({ "assets": [{ "id": 1, "name": "x" }] }),
+                &asset_url,
+                installer_suffixes()
+            ),
+            None
+        );
+        // Nothing installer-shaped is present at all.
+        assert_eq!(
+            announced_size_from_metadata(
+                &serde_json::json!({ "assets": [{ "id": 1, "name": "latest.json", "size": 10 }] }),
+                &asset_url,
+                installer_suffixes()
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_a_version_that_cannot_address_a_release_tag() {
+        assert!(is_addressable_version("1.0.6"));
+        assert!(is_addressable_version("1.0.6-beta.1+build2"));
+        assert!(!is_addressable_version(""));
+        // The value reaches an API path; a malformed one must not be sent.
+        assert!(!is_addressable_version("1.0.6/../../other"));
+        assert!(!is_addressable_version(&"1".repeat(65)));
     }
 }

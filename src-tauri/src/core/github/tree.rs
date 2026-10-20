@@ -163,9 +163,28 @@ async fn find_skill_file_by_manifest(
     }
 
     let mut matched: Option<(usize, String)> = None;
+    let mut first_error: Option<SkillsageError> = None;
     while let Some(result) = jobs.join_next().await {
+        // One unreadable candidate must not hide the others: a 404, an
+        // oversized SKILL.md, or a transient failure on the first probe would
+        // otherwise abort the whole lookup, and `constraints.md` requires that
+        // a repository's other skills stay visible. Mirrors
+        // `core/url_install/resolver.rs`, which treats the same situation the
+        // same way.
         let (index, candidate, contents) =
-            result.map_err(|error| SkillsageError::Task(error.to_string()))??;
+            match result.map_err(|error| SkillsageError::Task(error.to_string())) {
+                Ok(Ok(probed)) => probed,
+                Ok(Err(error)) => {
+                    tracing::warn!(error = %error, "跳过无法读取的技能候选清单");
+                    first_error.get_or_insert(error);
+                    continue;
+                }
+                Err(error) => {
+                    tracing::warn!(error = %error, "技能候选探测任务异常结束");
+                    first_error.get_or_insert(error);
+                    continue;
+                }
+            };
         let Ok(parsed) = parse_skill_md(&contents) else {
             continue;
         };
@@ -182,7 +201,12 @@ async fn find_skill_file_by_manifest(
 
     match matched {
         Some((_, candidate)) => Ok(candidate),
-        None => Err(SkillsageError::PathNotFound(exact_skill_file.into())),
+        // Everything that could be read failed: surface the reason rather than
+        // a misleading "path not found".
+        None => match first_error {
+            Some(error) => Err(error),
+            None => Err(SkillsageError::PathNotFound(exact_skill_file.into())),
+        },
     }
 }
 

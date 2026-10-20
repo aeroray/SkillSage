@@ -1,7 +1,9 @@
 use serde::Serialize;
 use std::sync::Arc;
 
-use crate::core::github::{client::GitHubClient, download::fetch_skill_files};
+use crate::core::github::{
+    client::GitHubClient, download::fetch_skill_files, tree::find_skill_files_with_path,
+};
 use crate::core::limits::MAX_REMOTE_SKILL_CANDIDATES;
 use crate::core::skill::parser::parse_skill_md;
 use crate::core::store::models::{SkillDetail, SkillFile};
@@ -174,6 +176,13 @@ pub async fn resolve_detail(
     })
 }
 
+/// Resolves a single candidate's name and description.
+///
+/// Only the manifest is needed for the listing, so this resolves the skill
+/// directory from the tree and then fetches just its `SKILL.md`. Calling
+/// `fetch_skill_files` here would download every blob under the directory for
+/// up to [`MAX_REMOTE_SKILL_CANDIDATES`] candidates — the file list is only
+/// required by [`resolve_detail`], which installs the skill.
 async fn candidate_at(
     client: &GitHubClient,
     parsed: &GitHubUrlResult,
@@ -181,8 +190,22 @@ async fn candidate_at(
     commit: &str,
     skill_path: &str,
 ) -> Result<UrlSkillCandidate, SkillsageError> {
-    let files = fetch_skill_files(client, &parsed.owner, &parsed.repo, commit, skill_path).await?;
-    let manifest = manifest_from_files(&files)?;
+    // The file list is deliberately discarded: the listing needs only the
+    // manifest, and the tree walk is what maps the skill path onto the
+    // directory that actually holds `SKILL.md`.
+    let (resolved_path, _) =
+        find_skill_files_with_path(client, &parsed.owner, &parsed.repo, commit, skill_path).await?;
+    let manifest_file = if resolved_path.is_empty() {
+        "SKILL.md".to_string()
+    } else {
+        format!("{resolved_path}/SKILL.md")
+    };
+    let url = format!(
+        "https://raw.githubusercontent.com/{}/{}/{commit}/{manifest_file}",
+        parsed.owner, parsed.repo
+    );
+    let contents = client.get_text(&url).await?;
+    let manifest = parse_skill_md(&contents)?.manifest;
     Ok(UrlSkillCandidate {
         name: manifest.name,
         description: manifest.description,

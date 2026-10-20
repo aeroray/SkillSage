@@ -12,6 +12,8 @@
 //! binary from a community mirror cannot substitute different content — a
 //! tampered mirror produces a signature failure, not an install.
 
+use std::time::Duration;
+
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::UpdaterExt;
@@ -19,6 +21,17 @@ use url::Url;
 
 use crate::core::mirrors;
 use crate::error::SkillsageError;
+
+/// Connect and read (idle) timeouts for the updater plugin's client.
+///
+/// The plugin applies no timeout at all unless one is configured, so a mirror
+/// that completes the TLS handshake and then stalls would hang
+/// `check_app_update` / `install_app_update` forever. A *total* timeout is not
+/// used because a legitimate installer download is large and slow on the
+/// connections this app targets; bounding connect and per-read silence keeps
+/// the useful failure mode (a dead node) without cutting off a working download.
+const UPDATER_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const UPDATER_READ_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,6 +77,13 @@ fn updater_for(
     proxy: Option<&str>,
 ) -> Result<tauri_plugin_updater::Updater, SkillsageError> {
     let mut builder = app.updater_builder().endpoints(vec![hit.endpoint()?])?;
+    // `configure_client` hands the plugin's own `reqwest` builder here, so the
+    // timeouts are the only thing set; endpoint and proxy handling stay above.
+    builder = builder.configure_client(|client| {
+        client
+            .connect_timeout(UPDATER_CONNECT_TIMEOUT)
+            .read_timeout(UPDATER_READ_TIMEOUT)
+    });
     if let Some(proxy_url) = proxy {
         builder = builder.proxy(Url::parse(proxy_url)?);
     }
@@ -109,6 +129,11 @@ pub async fn install_app_update(
         return Err(SkillsageError::Network("没有可用的更新".into()));
     };
 
+    // The manifest's own asset URL identifies the exact artifact (an
+    // `api.github.com/.../assets/<id>`), so the size cross-check below resolves
+    // it before the mirror rewrite replaces `update.download_url` with the
+    // node's `releases/download/...` path.
+    let announced_url = update.download_url.clone();
     // The manifest leaves the asset URL pointing at `api.github.com`, which
     // mirrors reject; rewrite it onto the node that served the manifest. If the
     // rewrite cannot be resolved the original URL is kept, because a direct
@@ -128,8 +153,12 @@ pub async fn install_app_update(
 
     let app_for_progress = app.clone();
     let mut downloaded: u64 = 0;
-    let result = update
-        .download_and_install(
+    // Downloaded separately from installation so the verified bytes can be
+    // cross-checked against the announced version *before* the installer runs.
+    // `download` returns only minisign-verified bytes, so signature
+    // verification still happens on every path.
+    let bytes = update
+        .download(
             move |chunk_length, content_length| {
                 downloaded += chunk_length as u64;
                 let _ = app_for_progress.emit(
@@ -141,17 +170,60 @@ pub async fn install_app_update(
                     },
                 );
             },
-            move || {
-                let _ = app.emit(
-                    "app-update-progress",
-                    AppUpdateProgress {
-                        phase: "installing".into(),
-                        downloaded,
-                        total: None,
-                    },
-                );
-            },
+            // The install phase is reported after the size cross-check below,
+            // not here: the download callback fires before that check runs, so
+            // announcing it now would claim an install that may be aborted.
+            || {},
         )
         .await?;
-    Ok(result)
+
+    // Minisign proves the release key signed these bytes *at some point*; it
+    // does not prove they belong to `update.version`, which is just a string in
+    // a mirror-supplied manifest. Because the UI shows that string and the
+    // plugin trusts that manifest's URL/signature pair, a racing mirror could
+    // serve an older release's signed installer under a newer label — a silent
+    // downgrade presented as the newest version. Binding the downloaded length
+    // to the size the trusted GitHub API publishes for that tag closes it.
+    //
+    // The check fails open when the size cannot be established (network error,
+    // rate limit, unidentified asset): metadata must never be able to break a
+    // working update. It fails closed only when the size is known and differs.
+    let expected_size =
+        mirrors::announced_asset_size(&update.version, &announced_url, proxy.as_deref()).await;
+    let actual_size = bytes.len() as u64;
+    match expected_size {
+        Some(expected) if expected != actual_size => {
+            tracing::warn!(
+                version = %update.version,
+                expected,
+                actual = actual_size,
+                "更新包大小与发布信息不一致，已中止安装"
+            );
+            return Err(SkillsageError::Network(format!(
+                "更新包校验失败：v{} 的安装包大小与发布信息不一致（预期 {expected} 字节，实际 {actual_size} 字节），已中止安装",
+                update.version
+            )));
+        }
+        Some(_) => {}
+        None => {
+            tracing::warn!(
+                version = %update.version,
+                "无法从 GitHub 获取发布信息，跳过更新包大小校验"
+            );
+        }
+    }
+
+    // The download finished and passed both checks; the installer is about to
+    // run. The final size comes from the verified bytes rather than the
+    // progress counter, whose last value lives inside the download closure.
+    let _ = app.emit(
+        "app-update-progress",
+        AppUpdateProgress {
+            phase: "installing".into(),
+            downloaded: actual_size,
+            total: None,
+        },
+    );
+    update.install(bytes)?;
+    Ok(())
 }

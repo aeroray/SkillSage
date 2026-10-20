@@ -7,10 +7,22 @@ use crate::core::store::models::SkillFile;
 use crate::core::{repo::layout::RepoLayout, settings};
 use crate::error::SkillsageError;
 
+/// Loads settings off the async runtime.
+///
+/// `settings::load_runtime` does `ensure_roots` filesystem work and a blocking
+/// `keyring::Entry::get_password()` call; running either inline in an `async fn`
+/// ties up a runtime worker. Every other caller already wraps it in
+/// `spawn_blocking`, and these two used to be the exception.
+async fn runtime_settings() -> Result<settings::RuntimeSettings, SkillsageError> {
+    tokio::task::spawn_blocking(|| settings::load_runtime(&RepoLayout::from_user_home()?))
+        .await
+        .map_err(|error| SkillsageError::Task(error.to_string()))?
+}
+
 pub async fn fetch_latest(
     record: &SkillLockRecord,
 ) -> Result<(String, Vec<SkillFile>), SkillsageError> {
-    let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
+    let runtime = runtime_settings().await?;
     let client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
     fetch_latest_with_client(&client, record).await
 }
@@ -48,7 +60,7 @@ pub async fn fetch_at(
     record: &SkillLockRecord,
     commit: &str,
 ) -> Result<Vec<SkillFile>, SkillsageError> {
-    let runtime = settings::load_runtime(&RepoLayout::from_user_home()?)?;
+    let runtime = runtime_settings().await?;
     let client = GitHubClient::new_with_config(runtime.github_token, runtime.proxy_url)?;
     fetch_at_commit(record, &client, commit).await
 }
