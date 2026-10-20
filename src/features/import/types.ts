@@ -18,5 +18,6 @@ export type ImportResult = {
   owner: string;
   currentVersion: string;
   currentHash: string;
-  installedPath: string;
+  /** Matches the Rust `InstallResult`, which serializes `installPath`. */
+  installPath: string;
 };

@@ -1006,18 +1006,33 @@ export function SkillsPage() {
       return;
     }
     const updateCount = result.filter((item) => item.updateAvailable).length;
-    // Say how many were actually checked: the selection can include local
-    // skills that this action deliberately skips.
+    // The backend swallows per-skill failures and returns only the successes,
+    // so a short — or empty — result means the checks did not all run. Counting
+    // the requested ids as "checked" claimed an outcome that never happened.
     const skipped = selectedSkills.length - ids.length;
     const skippedNote =
       skipped > 0 ? `已跳过 ${skipped} 个没有远端来源的技能。` : "";
+    const missingNote =
+      ids.length > result.length ? `另有 ${ids.length - result.length} 个未能检查。` : "";
     toast({
       description:
-        updateCount > 0
-          ? `发现 ${updateCount} 个技能有更新。${skippedNote}`
-          : `已检查 ${ids.length} 个技能，均为最新。${skippedNote}`,
-      title: updateCount > 0 ? "发现可用更新" : "检查完成",
-      variant: updateCount > 0 ? "info" : "success",
+        result.length === 0
+          ? // Nothing came back, so "均为最新" would assert a result we do not
+            // have. Saying the checks may have failed is the honest report.
+            `未取得检查结果，所选技能的检查可能都失败了。${skippedNote}`
+          : updateCount > 0
+            ? `发现 ${updateCount} 个技能有更新。${missingNote}${skippedNote}`
+            : `已检查 ${result.length} 个技能，均为最新。${missingNote}${skippedNote}`,
+      title:
+        result.length === 0
+          ? "未取得检查结果"
+          : updateCount > 0
+            ? "发现可用更新"
+            : "检查完成",
+      // `info` when nothing was checked: a green success check would assert an
+      // outcome, and there was none to assert.
+      variant:
+        result.length === 0 ? "info" : updateCount > 0 ? "info" : "success",
     });
   };
   /** Checks every installed remote skill, independent of the selection. */
@@ -1078,14 +1093,22 @@ export function SkillsPage() {
       return;
     }
     const update = result.find((item) => item.id === skill.id);
+    // The backend swallows a failed check and returns no entry, so a missing
+    // `update` is "no result", not "already up to date".
     toast({
-      description: update?.updateAvailable
-        ? "发现新版本，可以从技能菜单中更新。"
-        : update
-          ? "当前已是最新版本。"
-          : "已完成当前技能的更新检查。",
-      title: update?.updateAvailable ? "发现可用更新" : "检查完成",
-      variant: update?.updateAvailable ? "info" : "success",
+      description: update
+        ? update.updateAvailable
+          ? "发现新版本，可以从技能菜单中更新。"
+          : "当前已是最新版本。"
+        : "本次检查没有返回结果，可能失败了，请稍后重试。",
+      title: update
+        ? update.updateAvailable
+          ? "发现可用更新"
+          : "检查完成"
+        : "未取得检查结果",
+      // `info`, not `success`: a missing result means nothing was checked, so
+      // there is no success to report — and no up-to-date claim to make.
+      variant: update && !update.updateAvailable ? "success" : "info",
     });
   };
   /**
@@ -1171,7 +1194,10 @@ export function SkillsPage() {
     let failedCount = 0;
     try {
       for (const skill of targets) {
-        const result = await management.uninstall(skill.id);
+        // No refresh per skill: the bulk loop forces one at the end. With the
+        // default every uninstall re-ran `refresh_installed`, turning an N-item
+        // batch into N full directory scans.
+        const result = await management.uninstall(skill.id, { refresh: false });
         if (result === undefined) {
           failedCount += 1;
         } else {

@@ -40,11 +40,12 @@ export function useTools() {
       toolId: string,
       readsShared: boolean | undefined,
       skillsDir: string | undefined,
+      options: { clearSkillsDir?: boolean } = {},
     ) => {
       setSavingIds((current) => new Set(current).add(toolId));
       setError(undefined);
       try {
-        setTools(await setToolOverride(toolId, readsShared, skillsDir));
+        setTools(await setToolOverride(toolId, readsShared, skillsDir, options));
         return true;
       } catch (reason) {
         setError(normalizeTauriError(reason));

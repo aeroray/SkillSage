@@ -27,5 +27,6 @@ export type UrlInstallResult = {
   owner: string;
   currentVersion: string;
   currentHash: string;
-  installedPath: string;
+  /** Matches the Rust `InstallResult`, which serializes `installPath`. */
+  installPath: string;
 };

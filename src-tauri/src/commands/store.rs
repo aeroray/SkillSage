@@ -11,7 +11,7 @@ use crate::state::AppState;
 /// The proxy for a store request.
 ///
 /// Deliberately not `load_runtime`: that also reads the GitHub token from the
-/// OS keyring, and none of these commands send it 鈥?the store is a public site
+/// OS keyring, and none of these commands send it — the store is a public site
 /// and translation goes to Sogou. The keyring read is blocking and on macOS can
 /// raise a system prompt, so paying for it on every search would be both slow
 /// and, on a machine where the user has never saved a token, a prompt for

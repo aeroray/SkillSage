@@ -170,6 +170,7 @@ function ToolDialog({
     toolId: string,
     readsShared: boolean | undefined,
     skillsDir: string | undefined,
+    options?: { clearSkillsDir?: boolean },
   ) => Promise<boolean>;
   open: boolean;
   /** Which tools currently have a save in flight, so each row shows only its
@@ -247,6 +248,7 @@ function ToolRow({
     toolId: string,
     readsShared: boolean | undefined,
     skillsDir: string | undefined,
+    options?: { clearSkillsDir?: boolean },
   ) => Promise<boolean>;
   saving: boolean;
   tool: ToolView;
@@ -298,11 +300,17 @@ function ToolRow({
   };
 
   const persist = async (nextPath: string | undefined) => {
-    // Sending the default back as `undefined` clears the override, so a later
-    // registry correction reaches a user who never meant to pin anything.
+    // Sending the default back as `undefined` leaves that field untouched; an
+    // explicit value equal to the registry default is normalized away by the
+    // backend, so a later registry correction still reaches a user who never
+    // meant to pin anything.
     const readsShared =
       tool.readsShared === tool.readsSharedDefault ? undefined : tool.readsShared;
-    return onSave(tool.id, readsShared, nextPath);
+    // An empty input means "use the registry directory", and an absent path
+    // alone would keep the stored one — `clearSkillsDir` is what removes it.
+    return onSave(tool.id, readsShared, nextPath, {
+      clearSkillsDir: nextPath === undefined,
+    });
   };
 
   const commitPath = async () => {
@@ -337,14 +345,26 @@ function ToolRow({
   };
 
   const toggleReadsShared = (checked: boolean) => {
-    const value = checked === tool.readsSharedDefault ? undefined : checked;
-    void onSave(tool.id, value, undefined);
+    // Only the flag is sent. The write is a patch, so the tool's customized
+    // directory is left alone; it used to be replaced wholesale, which deleted
+    // the user's path on every flip.
+    //
+    // The value is always explicit: under patch semantics an absent field means
+    // "keep the stored value", so `undefined` could not switch the flag back to
+    // the registry default. Sending the default is what clears the override —
+    // the backend normalizes a value equal to the default away.
+    void onSave(tool.id, checked, undefined);
   };
 
   const reset = () => {
     setDraftPath("");
     setEditing(false);
-    void onSave(tool.id, undefined, undefined);
+    // Both fields go, so a customized flag does not survive "恢复默认". The
+    // backend drops an override equal to the registry default, and
+    // `clearSkillsDir` is what removes the path.
+    void onSave(tool.id, tool.readsSharedDefault, undefined, {
+      clearSkillsDir: true,
+    });
   };
 
   return (

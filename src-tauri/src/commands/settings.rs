@@ -92,17 +92,29 @@ pub async fn list_tools() -> Result<Vec<ToolView>, SkillsageError> {
 /// Saves one tool's override, then reconciles the links on disk with the new
 /// rule. Turning "reads shared directory" on removes the now-redundant links;
 /// turning it off leaves the tool ready to be distributed into again.
+///
+/// The arguments are a patch, not a replacement: an omitted field keeps its
+/// stored value, and `clearSkillsDir` is what explicitly removes a customized
+/// path. Without that split, the reads-shared toggle (which has no path to
+/// send) would delete the user's customized directory on every flip.
 #[tauri::command]
 pub async fn set_tool_override(
     tool_id: String,
     reads_shared: Option<bool>,
     skills_dir: Option<String>,
+    clear_skills_dir: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ToolView>, SkillsageError> {
     let _write_guard = state.write_lock.lock().await;
     tokio::task::spawn_blocking(move || {
         let layout = RepoLayout::from_user_home()?;
-        settings::save_tool_override(&layout, tool_id.clone(), reads_shared, skills_dir)?;
+        settings::save_tool_override(
+            &layout,
+            tool_id.clone(),
+            reads_shared,
+            skills_dir,
+            clear_skills_dir.unwrap_or(false),
+        )?;
         let resolver = tool_resolver(&layout)?;
 
         // The rule changed, so bring the filesystem in line: drop links for any
@@ -118,7 +130,7 @@ pub async fn set_tool_override(
                             skill = %record.name,
                             tool = %tool.id,
                             error = %error,
-                            "切换为读取公共目录后无法移除旧链接"
+                            "切换为读取共享目录后无法移除旧链接"
                         );
                     }
                 }

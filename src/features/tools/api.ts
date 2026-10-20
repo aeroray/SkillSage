@@ -25,20 +25,26 @@ export function listTools() {
 }
 
 /**
- * Saves one tool's override and returns the refreshed list.
+ * Patches one tool's override and returns the refreshed list.
  *
- * `undefined` clears a field back to the registry default rather than storing
- * the current value as an explicit override, so a later registry fix reaches a
- * user who never meant to pin anything.
+ * The arguments are a patch, not a replacement: an omitted field keeps its
+ * stored value, so a write that only touches one field cannot delete the other.
+ * The reads-shared toggle therefore sends only `readsShared` and no path, which
+ * is what stops it from wiping a customized directory. `skillsDir` sets the
+ * path; removing it needs `clearSkillsDir`, since an absent path means "leave
+ * it alone". Also, a `readsShared` equal to the registry default is normalized
+ * away by the backend, which is how that field is restored.
  */
 export function setToolOverride(
   toolId: string,
   readsShared: boolean | undefined,
   skillsDir: string | undefined,
+  options: { clearSkillsDir?: boolean } = {},
 ) {
   return invokeCommand<ToolView[]>("set_tool_override", {
     toolId,
     readsShared,
     skillsDir,
+    clearSkillsDir: options.clearSkillsDir,
   });
 }

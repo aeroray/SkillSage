@@ -81,18 +81,48 @@ const previewDistributed = new Map<string, Set<string>>();
 const PREVIEW_TOOLS: {
   id: string;
   label: string;
+  /** The registry path, relative to home; `null` for a tool with no directory. */
   skillsDir: string | null;
-  readsShared: boolean;
+  readsSharedDefault: boolean;
   detected: boolean;
   source: string;
   verified: boolean;
 }[] = [
-  { id: "claude-code", label: "Claude Code", skillsDir: ".claude/skills", readsShared: false, detected: true, source: "https://code.claude.com/docs/en/skills", verified: true },
-  { id: "codebuddy", label: "CodeBuddy / WorkBuddy", skillsDir: ".codebuddy/skills", readsShared: false, detected: false, source: "https://www.workbuddy.ai/docs/cli/skills", verified: true },
-  { id: "codex", label: "OpenAI Codex CLI", skillsDir: ".codex/skills", readsShared: false, detected: true, source: "https://cursor.com/docs/skills", verified: false },
-  { id: "cursor", label: "Cursor", skillsDir: ".cursor/skills", readsShared: true, detected: true, source: "https://cursor.com/docs/skills", verified: true },
-  { id: "copilot", label: "GitHub Copilot", skillsDir: ".copilot/skills", readsShared: true, detected: true, source: "https://docs.github.com/en/copilot/concepts/agents/about-agent-skills", verified: true },
+  { id: "claude-code", label: "Claude Code", skillsDir: ".claude/skills", readsSharedDefault: false, detected: true, source: "https://code.claude.com/docs/en/skills", verified: true },
+  { id: "codebuddy", label: "CodeBuddy / WorkBuddy", skillsDir: ".codebuddy/skills", readsSharedDefault: false, detected: false, source: "https://www.workbuddy.ai/docs/cli/skills", verified: true },
+  { id: "codex", label: "OpenAI Codex CLI", skillsDir: ".codex/skills", readsSharedDefault: false, detected: true, source: "https://cursor.com/docs/skills", verified: false },
+  { id: "cursor", label: "Cursor", skillsDir: ".cursor/skills", readsSharedDefault: true, detected: true, source: "https://cursor.com/docs/skills", verified: true },
+  { id: "copilot", label: "GitHub Copilot", skillsDir: ".copilot/skills", readsSharedDefault: true, detected: true, source: "https://docs.github.com/en/copilot/concepts/agents/about-agent-skills", verified: true },
 ];
+
+/** Per-tool overrides, mirroring the backend's patch semantics: an absent field
+ * keeps the stored value, so the reads-shared toggle cannot delete a customized
+ * directory. A field equal to the registry default is not stored, matching the
+ * backend's normalization. */
+const previewToolOverrides = new Map<
+  string,
+  { readsShared?: boolean; skillsDir?: string }
+>();
+
+/** The registry entry with the preview's overrides applied, in the shape the
+ * real `list_tools` returns. */
+function previewToolView(tool: (typeof PREVIEW_TOOLS)[number]) {
+  const override = previewToolOverrides.get(tool.id);
+  return {
+    ...tool,
+    skillsDir:
+      override?.skillsDir ??
+      (tool.skillsDir
+        ? `C:\\Users\\PC\\${tool.skillsDir.replace(/\//g, "\\")}`
+        : null),
+    readsShared: override?.readsShared ?? tool.readsSharedDefault,
+    customized:
+      override?.readsShared !== undefined || override?.skillsDir !== undefined,
+    distributable:
+      Boolean(override?.skillsDir ?? tool.skillsDir) &&
+      !(override?.readsShared ?? tool.readsSharedDefault),
+  };
+}
 const previewMatchedLocalSkills = new Set<string>();
 const previewLocalMatch = {
   id: "vercel-labs/agent-skills/local-research",
@@ -174,9 +204,9 @@ async function previewInvoke<T>(
     previewDistributed.set(
       skill.id,
       new Set(
-        PREVIEW_TOOLS.filter((tool) => tool.skillsDir && !tool.readsShared).map(
-          (tool) => tool.id,
-        ),
+        PREVIEW_TOOLS.map(previewToolView)
+          .filter((tool) => tool.skillsDir && !tool.readsShared)
+          .map((tool) => tool.id),
       ),
     );
     return {
@@ -226,9 +256,9 @@ async function previewInvoke<T>(
       ],
       // Mirrors the backend: only tools that do NOT read the shared directory
       // are offered, and only tools with their own directory can be.
-      distributableTools: PREVIEW_TOOLS.filter(
-        (tool) => !tool.readsShared,
-      ).map(({ id, label }) => ({ id, label })),
+      distributableTools: PREVIEW_TOOLS.map(previewToolView)
+        .filter((tool) => tool.distributable)
+        .map(({ id, label }) => ({ id, label })),
       detectedTools: PREVIEW_TOOLS.filter((tool) => tool.detected).map(
         (tool) => tool.id,
       ),
@@ -258,36 +288,41 @@ async function previewInvoke<T>(
     } as T;
   }
   if (command === "list_tools") {
-    return PREVIEW_TOOLS.map((tool) => ({
-      ...tool,
-      skillsDir: tool.skillsDir
-        ? `C:\\Users\\PC\\${tool.skillsDir.replace(/\//g, "\\")}`
-        : null,
-      readsSharedDefault: tool.readsShared,
-      customized: false,
-      distributable: Boolean(tool.skillsDir) && !tool.readsShared,
-    })) as T;
+    return PREVIEW_TOOLS.map(previewToolView) as T;
   }
   if (command === "set_tool_override") {
     const toolId = String(args?.toolId ?? "");
-    const target = PREVIEW_TOOLS.find((tool) => tool.id === toolId);
-    if (target) {
-      if (args?.readsShared !== undefined) {
-        target.readsShared = args.readsShared === true;
-      }
-      if (args?.skillsDir !== undefined) {
-        target.skillsDir = args.skillsDir ? String(args.skillsDir) : null;
+    const tool = PREVIEW_TOOLS.find((entry) => entry.id === toolId);
+    if (tool) {
+      const current = previewToolOverrides.get(toolId) ?? {};
+      // A patch, not a replacement: only the fields the caller named change.
+      // An absent `skillsDir` keeps the stored path; only `clearSkillsDir`
+      // removes it. That split is what keeps the reads-shared toggle from
+      // deleting a customized directory.
+      const nextReadsShared =
+        args?.readsShared !== undefined
+          ? // The backend normalizes an override equal to the registry default
+            // away, so it is not kept as an explicit value.
+            args.readsShared === tool.readsSharedDefault
+            ? undefined
+            : args.readsShared === true
+          : current.readsShared;
+      const nextSkillsDir =
+        args?.clearSkillsDir === true
+          ? undefined
+          : args?.skillsDir !== undefined
+            ? String(args.skillsDir) || undefined
+            : current.skillsDir;
+      if (nextReadsShared === undefined && nextSkillsDir === undefined) {
+        previewToolOverrides.delete(toolId);
+      } else {
+        previewToolOverrides.set(toolId, {
+          readsShared: nextReadsShared,
+          skillsDir: nextSkillsDir,
+        });
       }
     }
-    return PREVIEW_TOOLS.map((tool) => ({
-      ...tool,
-      skillsDir: tool.skillsDir
-        ? `C:\\Users\\PC\\${tool.skillsDir.replace(/\//g, "\\")}`
-        : null,
-      readsSharedDefault: tool.id === "cursor" || tool.id === "copilot",
-      customized: false,
-      distributable: Boolean(tool.skillsDir) && !tool.readsShared,
-    })) as T;
+    return PREVIEW_TOOLS.map(previewToolView) as T;
   }
   if (command === "search_local_skill_matches") {
     return [
@@ -347,20 +382,21 @@ async function previewInvoke<T>(
       owner: "local",
       currentVersion: "local",
       currentHash: "preview",
-      installedPath: "C:\\Users\\PC\\.agents\\skills\\local-research",
+      installPath: "C:\\Users\\PC\\.agents\\skills\\local-research",
     } as T;
   }
   if (command === "inspect_github_url") {
+    const parsed = {
+      owner: "vercel-labs",
+      repo: "agent-skills",
+      skillPath: undefined,
+      commit: "main",
+      canonicalUrl: String(
+        args?.url ?? "https://github.com/vercel-labs/agent-skills",
+      ),
+    };
     return {
-      parsed: {
-        owner: "vercel-labs",
-        repo: "agent-skills",
-        skillPath: undefined,
-        commit: "main",
-        canonicalUrl: String(
-          args?.url ?? "https://github.com/vercel-labs/agent-skills",
-        ),
-      },
+      parsed,
       skills: [
         {
           name: "frontend-design",
@@ -369,6 +405,9 @@ async function previewInvoke<T>(
           url: "https://github.com/vercel-labs/agent-skills/tree/main/skills/frontend-design",
         },
       ],
+      // The type requires the pin and the install dialog echoes it, so the
+      // preview has to return one or the flow it stands in for is untested.
+      resolvedCommit: parsed.commit,
     } as T;
   }
   if (command === "url_install") {
@@ -378,7 +417,7 @@ async function previewInvoke<T>(
       owner: "vercel-labs",
       currentVersion: "preview",
       currentHash: "preview",
-      installedPath: "C:\\Users\\PC\\.agents\\skills\\frontend-design",
+      installPath: "C:\\Users\\PC\\.agents\\skills\\frontend-design",
     } as T;
   }
   if (command === "export_package")
@@ -462,6 +501,15 @@ async function previewInvoke<T>(
   if (command === "remove_adopt_candidate") return undefined as T;
   if (command === "rename_adopt_candidate") return "notes-helper" as T;
   if (command === "open_skill_directory") return undefined as T;
+  // The preview runs in a normal browser, where `window.open` works — the
+  // desktop WebView has no new-window handler, which is why the app hands the
+  // URL to the OS instead.
+  if (command === "open_external_url") {
+    if (typeof window !== "undefined") {
+      window.open(String(args?.url ?? ""), "_blank", "noopener");
+    }
+    return undefined as T;
+  }
   // The preview stands in for a tool whose own directory does not exist yet, so
   // the fallback notice is exercised rather than only the happy path.
   if (command === "open_path")

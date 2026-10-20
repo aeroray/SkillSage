@@ -119,19 +119,33 @@ pub fn load_tool_overrides(
     Ok(stored.tool_overrides)
 }
 
-/// Persists one tool's override. `None` for both fields clears the entry, so
-/// the registry default applies again rather than the override lingering as an
-/// explicit "same as default".
+/// Patches one tool's override rather than replacing it, so a write that only
+/// touches one field cannot silently drop the other.
+///
+/// The UI sends a field only when the user changed it: the "reads the shared
+/// directory" toggle sends `reads_shared` and no path, while saving a custom
+/// path sends the path. Replacing the whole entry meant toggling the flag sent
+/// `skills_dir: None` and deleted the user's customized directory.
+///
+/// `skills_dir` therefore needs `clear_skills_dir` to say "remove the override"
+/// rather than "leave it alone" — `None` alone cannot mean both. `reads_shared`
+/// has no separate clear flag: writing the registry's own default is how the UI
+/// restores that field, since an override equal to the default carries no
+/// meaning and would only hide a later registry correction.
+///
+/// An entry with no fields left is removed, so "restore default" (both fields
+/// cleared) goes back to the registry rather than lingering as an explicit
+/// "same as default".
 pub fn save_tool_override(
     layout: &RepoLayout,
     tool_id: String,
     reads_shared: Option<bool>,
     skills_dir: Option<String>,
+    clear_skills_dir: bool,
 ) -> Result<(), SkillsageError> {
     let tool_id = tool_id.trim().to_string();
-    if crate::core::tools::find(&tool_id).is_none() {
-        return Err(SkillsageError::Settings(format!("未知的工具: {tool_id}")));
-    }
+    let tool = crate::core::tools::find(&tool_id)
+        .ok_or_else(|| SkillsageError::Settings(format!("未知的工具: {tool_id}")))?;
     let skills_dir = skills_dir
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
@@ -140,16 +154,40 @@ pub fn save_tool_override(
     let mut stored = load_stored(layout)?;
     validate_tool_overrides(&stored.tool_overrides)?;
 
-    if reads_shared.is_none() && skills_dir.is_none() {
+    let current = stored
+        .tool_overrides
+        .get(&tool_id)
+        .cloned()
+        .unwrap_or_default();
+    let next = crate::core::tools::ToolOverride {
+        // `Some` sets the flag, `None` keeps whatever is stored. An explicit
+        // value equal to the registry default clears it instead of storing a
+        // no-op override.
+        reads_shared: reads_shared
+            .or(current.reads_shared)
+            .filter(|value| *value != tool.reads_shared_default),
+        skills_dir: if clear_skills_dir {
+            None
+        } else {
+            // `Some` sets the path, `None` keeps whatever is stored; clearing
+            // needs `clear_skills_dir`, which is why it exists.
+            skills_dir.or(current.skills_dir)
+        },
+    };
+
+    if next == crate::core::tools::ToolOverride::default() {
         stored.tool_overrides.remove(&tool_id);
     } else {
-        stored.tool_overrides.insert(
-            tool_id,
-            crate::core::tools::ToolOverride {
-                reads_shared,
-                skills_dir,
-            },
-        );
+        // Validate the value being written, not only what was already on disk:
+        // a `..` segment reaching the file would fail every later read.
+        let candidate = crate::core::tools::ToolOverride {
+            reads_shared: next.reads_shared,
+            skills_dir: next.skills_dir.clone(),
+        };
+        let mut probe = stored.tool_overrides.clone();
+        probe.insert(tool_id.clone(), candidate);
+        validate_tool_overrides(&probe)?;
+        stored.tool_overrides.insert(tool_id, next);
     }
     write_stored(layout, &stored)
 }
@@ -421,8 +459,21 @@ fn delete_token() -> Result<(), SkillsageError> {
 mod tests {
     use std::fs;
 
-    use super::{load_translations, normalize_proxy, save_translation};
+    use super::{
+        load_tool_overrides, load_translations, normalize_proxy, save_tool_override,
+        save_translation,
+    };
     use crate::core::repo::layout::RepoLayout;
+
+    fn test_layout(name: &str) -> RepoLayout {
+        let root = std::env::temp_dir().join(format!(
+            "skillsage-settings-{name}-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create shared test parent");
+        RepoLayout::new(root.join("central"), root.join("public"))
+    }
 
     #[test]
     fn normalizes_empty_and_rejects_invalid_proxy_values() {
@@ -457,5 +508,101 @@ mod tests {
         );
 
         fs::remove_dir_all(root).expect("remove settings test root");
+    }
+
+    #[test]
+    fn toggling_reads_shared_keeps_a_customized_skills_dir() {
+        // The Settings toggle sends only `readsShared`; replacing the entry
+        // wholesale used to drop the user's custom path with it.
+        let layout = test_layout("toggle-keeps-dir");
+        save_tool_override(
+            &layout,
+            "claude-code".into(),
+            None,
+            Some("D:\\custom\\claude".into()),
+            false,
+        )
+        .expect("saving a custom dir should succeed");
+
+        save_tool_override(&layout, "claude-code".into(), Some(true), None, false)
+            .expect("toggling reads_shared should succeed");
+
+        let overrides = load_tool_overrides(&layout).expect("overrides should load");
+        let entry = overrides.get("claude-code").expect("entry should exist");
+        assert_eq!(entry.reads_shared, Some(true));
+        assert_eq!(
+            entry.skills_dir.as_deref(),
+            Some("D:\\custom\\claude"),
+            "toggling the flag must not delete the custom directory"
+        );
+    }
+
+    #[test]
+    fn clearing_the_skills_dir_removes_only_that_field() {
+        let layout = test_layout("clear-dir");
+        save_tool_override(
+            &layout,
+            "claude-code".into(),
+            Some(true),
+            Some("D:\\custom\\claude".into()),
+            false,
+        )
+        .expect("saving both fields should succeed");
+
+        save_tool_override(&layout, "claude-code".into(), None, None, true)
+            .expect("clearing the dir should succeed");
+
+        let overrides = load_tool_overrides(&layout).expect("overrides should load");
+        let entry = overrides.get("claude-code").expect("entry should still exist");
+        assert_eq!(entry.reads_shared, Some(true), "the flag must survive");
+        assert_eq!(entry.skills_dir, None);
+    }
+
+    #[test]
+    fn clearing_both_fields_removes_the_entry() {
+        // "恢复默认" clears the customized path and sends the registry's own
+        // flag value; an override equal to the default carries no meaning, so
+        // the entry must disappear rather than linger as an explicit no-op.
+        let layout = test_layout("clear-both");
+        save_tool_override(
+            &layout,
+            "claude-code".into(),
+            Some(true),
+            Some("D:\\custom\\claude".into()),
+            false,
+        )
+        .expect("saving both fields should succeed");
+
+        save_tool_override(&layout, "claude-code".into(), Some(false), None, true)
+            .expect("restore default should succeed");
+
+        assert!(
+            !load_tool_overrides(&layout)
+                .expect("overrides should load")
+                .contains_key("claude-code"),
+            "restoring the registry defaults must remove the override entry"
+        );
+
+        fs::remove_dir_all(layout.root.parent().expect("test root"))
+            .expect("remove settings test root");
+    }
+
+    #[test]
+    fn a_skills_dir_with_a_parent_segment_is_rejected() {
+        // `..` stays rejected; accepting a new path must not bypass the check.
+        let layout = test_layout("validate-dotdot");
+        let result = save_tool_override(
+            &layout,
+            "claude-code".into(),
+            None,
+            Some("../../escape".into()),
+            false,
+        );
+        assert!(result.is_err());
+        assert!(!load_tool_overrides(&layout)
+            .expect("overrides should load")
+            .contains_key("claude-code"));
+        fs::remove_dir_all(layout.root.parent().expect("test root"))
+            .expect("remove settings test root");
     }
 }
