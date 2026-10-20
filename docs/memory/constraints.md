@@ -1,56 +1,53 @@
 # Constraints
 
-- Do not call `npx skills`; download, parse, install, update, and uninstall are Rust-owned.
-- All skills install as real content directly into the single shared public directory (`~/.agents/skills/`, flat, no per-owner subfolder). Per-tool distribution is a managed directory link at the tool's own skills directory and never copies content. The tool list lives only in `core/tools.rs`; each entry carries its path, whether it reads the shared directory, the documentation URL, and a `verified` flag. The frontend must not name a tool itself.
-- Whether a tool reads the shared directory is user-overridable in Settings (`StoredSettings.toolOverrides`). A tool marked as reading the shared directory must not be linked, and turning the flag on removes that tool's existing links.
-- Only tools detected on the machine (plus any already holding a link for that skill) appear in per-skill distribution UI. Settings lists the full registry. Never render all ~19 distributable tools against every skill row.
-- The lock file is version 3 and stores `distributedTo: Vec<String>` of tool ids, recomputed from the filesystem on read. Version 2 files are migrated in place by folding their `claudeDistributed` / `workbuddyDistributed` booleans into the list; version 1 files are still treated as absent.
-- `~/.workbuddy-ai/skills` is not a real directory and must never be written to again. The correct CodeBuddy/WorkBuddy path is `~/.codebuddy/skills` (see `docs/research/workbuddy-skill-path.md`). Legacy links there are removed at startup only when they resolve inside the shared directory.
-- The application is desktop-only: the main window must open at 1200×800, never resize below 1200×800, and may be maximized; do not add mobile-specific layout requirements.
-- The old Phase 1 shell is historical; the shipped application includes the completed store, lifecycle, adopt, sync, and settings flows. There is no app-level cleanup/stop-management flow.
-- UI uses Slate Blue primary colors, system fonts, CSS radius variables (`--radius`, `--radius-lg`), 4px spacing increments, `shadow-sm`/`shadow-lg` only, Lucide icons, and shadcn-style primitives.
-- All scrollable UI content uses a shared ScrollArea abstraction; do not introduce native `overflow-auto` containers.
-- Long-running write operations will later share one async lock; read-only operations may run concurrently.
-- MemoryCustodian rules remain authoritative for loading, routing, budgets, compaction, and forgetting behavior.
-- The Phase 2 built-in fixture is test-only and offline; user-facing installation uses the live store, GitHub URL, or local import flows.
-- Until token/settings support exists, do not depend on skills.sh `/api/v1`; it requires Vercel OIDC. Use the public legacy search and HTML store pages for Phase 3.
-- Remote update checks and updates support GitHub-backed skills.sh records only; the offline Phase 2 fixture is intentionally not updateable, and skill version history/rollback is not maintained.
-- Phase 5 local import accepts a `SKILL.md` file, a skill directory, or a directory containing exactly one immediate skill directory; symlinks are rejected and same-name remote records cannot be overwritten by local import.
-- Phase 5 GitHub URL installation supports repository, tree, blob, and raw `SKILL.md` URLs; repository URLs enumerate candidate skills from the resolved Git tree.
-- Phase 5 settings persist proxy configuration in `~/.skillsage/settings.json` and store the GitHub token in the OS keyring; request clients must receive both through the Rust settings layer.
-- Sync exports only HTTPS-backed remote lock records plus non-secret application preferences (display mode, theme accent, and proxy); local and built-in fixture skills are excluded because they cannot be reconstructed on another device, and GitHub Tokens are never exported.
-- Sync import is metadata-only for skills: each selected entry is fetched again at its recorded commit and installed through the existing Rust lifecycle. Users may also restore the package's non-secret application preferences.
-- The adopt scanner (successor to Phase 6 migration) only scans the single public directory; untracked real directories with a valid SKILL.md are adoptable in place after folder/name agreement (no move/copy), the SKILL.md declared name is authoritative, and cross-tool lock-sniffed provenance is only trusted after a verified content-hash match against a re-fetch. Invalid safe directories can be removed explicitly; name mismatches can be resolved by renaming the folder.
-- Install-time path conflicts (an untracked foreign directory/link already at the target name) use explicit skip, takeover, or cancel; takeover renames the foreign entity aside (`<name>.skillsage-backup-<timestamp>`) and never adopts or deletes it. This is distinct from a name already owned by a tracked record, which is a hard `NameConflict`, not a takeover candidate.
-- Frontend pages must use the installed shadcn/Radix primitives for controls and overlays; do not reintroduce page-level native selects, details menus, or custom component CSS classes.
-- Tailwind v4 is the active frontend version; use the first-party Vite plugin and CSS-first theme tokens, and do not reintroduce a v3 PostCSS/config pipeline.
-- Removing the desktop application is outside the app UI and does not modify the shared public directory; individual skill uninstall remains available from the installed-skills page.
-- Phase 7 logs are written to Tauri's platform app log directory; GitHub tokens must never enter settings JSON or logs.
-- Phase 7 cross-platform automation targets Windows and macOS; macOS runtime verification remains CI/manual QA because development runs on Windows.
-- In-app updates race every node in `core/mirrors.rs`'s `MIRRORS` plus direct GitHub concurrently and use the first valid manifest; `MANIFEST_URL` must stay equal to `plugins.updater.endpoints` (enforced by a test). The updater plugin supplies signature verification and the installer, never endpoint selection. Every manifest and release-metadata request must carry a unique cache-busting token, and the plugin's own fetch must reuse the winning hit's token via `ManifestHit::endpoint()` — mirrors cache `latest.json`, and since a cache hit is faster than a fresh fetch, racing without a token systematically selects stale data and reports "already up to date". A mirror's asset URL must be rewritten to the node's `releases/download/...` form before downloading, because nodes leave it pointing at `api.github.com` and reject that form; a rewrite failure falls back to the original URL rather than failing the update. The minisign signature is always verified — never bypass it to make a mirror work.
-- Release notes are one file per tag at `docs/releases/<tag>.md`; the workflow reads it and fails when absent or empty. Do not inline release notes in `release.yml` again, and do not enable `generateReleaseNotes` while an authored body is passed.
-- `open_path` must open the nearest existing ancestor when the requested directory is missing and report which path it used (`{ opened, exact }`); it must never create the missing directory, because `ToolResolver::detected` counts the skills directory or its parent existing as "installed". `open_skill_directory` stays strict and errors when an installed skill's directory is absent.
-- The distribution filter renders one clickable badge per installed tool (`SkillDistributionFilter = { toolIds, inverted }`). Selecting several is a union; "反选" inverts the result and appears only once a tool is selected. An empty `toolIds` must not filter in either direction. The badge row scrolls horizontally with `no-scrollbar`. Do not reintroduce a tool dropdown or outcome chips (任一 / 全部 / 均无 / 部分, 已全部分发 / 有未分发).
-- The type ramp is exactly four steps: `text-xs` (12px), `text-sm` (14px), `text-base` (16px), `text-lg` (18px, dialog titles only), plus mono at 12px for paths/hashes/versions. Never use an arbitrary size (`text-[0.8rem]`, `text-[13px]`): `cn` runs tailwind-merge, so an arbitrary size silently replaces a component's base size rather than layering on it. Font weights stay at 400/500/600. A dialog's title size is owned by `DIALOG_TITLE` alone.
-- A whole-library update check must pass the remote skill ids to `checkUpdatesNow`, so every remote row can render its checking state; calling it with no ids leaves `checkingIds` empty and the only feedback is the button label.
-- Update release notes (`AppUpdateInfo.notes`) are untrusted: the minisign signature covers the installer, not the manifest, so the fastest mirror controls that string. Render it only through `features/update/release-notes.ts` + `ReleaseNotes.tsx`, which produce plain strings React escapes. Never use `dangerouslySetInnerHTML` for it. The parser must keep unrecognized lines as paragraphs rather than dropping them.
-- Busy/in-flight state that the UI renders per row must be keyed by id (`Map`/`Set`), and its `finally` must remove only its own entry — never a single slot cleared unconditionally. `useSkillManagement.pendingActions` and `useTools.savingIds` are the pattern; derive an "anything running" value for batch controls rather than reusing the per-row state.
-- SkillSage's own backup/temp artifacts must never be treated as skills. Two naming schemes exist and differ in whether they are dot-prefixed — `{name}.skillsage-backup-{ts}-{pid}` (`conflict::take_over`) and `.{name}.{dir,file}-backup-{pid}-{ns}` (`atomic::unique_backup_path`) — so any code scanning a directory for skills must filter with `atomic::is_managed_artifact`, which matches both. A crash between a rename-aside and its `finalize()` leaves one of these in the public root.
-- `ToolSpec.source` must cite the page the path actually came from. A vendor page that merely lists another tool's directory as a compatibility location is not that tool's documentation. An entry whose path came from a third-party table sets `verified: false` and is rendered with the 路径未核实 badge; do not present an unverified path as vendor-documented.
-- `useSkillUpdates.check` is single-flight: it returns `undefined` when a check is already running or when its own response was superseded. Never return results that were not written to state — the caller toasts them, so a discarded result becomes a claim about a row that shows nothing.
-- Dialog close effects must clear every piece of state the dialog renders, including hook-owned errors (`conflictCheck.clearError()`), and must call the hook's `reset()` rather than a raw setter. The dialogs stay mounted while closed, so anything not cleared is visible on the next open.
-- A submit handler whose enablement is computed in the render closure must re-check its own in-flight flag; `canImport`/`canSubmit` staying true after a success is how a repeat action starts.
-- List-page toolbars keep the same control order: select-all always leftmost, actions right. The shared directory is opened by a button (`打开共享目录`) with the path in its tooltip, not by clickable path text.
-- The GitHub-URL install must be pinned to the commit the preview was read from: `inspect_github_url` returns `resolvedCommit`, the frontend echoes it to `url_install`, and `resolve_detail` resolves files from that commit rather than re-resolving the branch. Never drop the pin — re-resolving lets anyone who can push to the branch swap the payload between the preview and the click, and the manifest name from the new commit decides the on-disk directory. A missing pin falls back to resolving the reference.
-- `resolve_skills` must skip a candidate whose probe fails and only error when every candidate failed; one unreadable SKILL.md must not hide a repository's other skills. `parser.rs`'s `validate_reference` must stay identical to `client.rs`'s (length cap plus empty/`.`/`..` part rejection).
-- The shared skills directory is called 共享目录 / 共享技能目录 in all user-facing copy. Do not reintroduce 公共目录 / 公共技能目录 — the same concept had four names, and the project docs use the 共享 forms almost exclusively.
-- A component that renders text must declare its own size at the step it actually renders. Do not carry over the shadcn `text-base md:text-sm` pair on `Input` (this app's window never goes under 1200px, so `md:` always won and `text-base` was dead), and do not leave a portalled container (`SelectContent`, `DropdownMenuContent`) without a size — it would inherit the 16px body size while its items declare `text-sm`. `DIALOG_CONTENT` is the pattern: the container declares `text-sm`.
-- A status message must not assert an outcome that did not occur. An empty result set ("checked 0 skills") is not "均为最新" and must not carry a success variant; say there was nothing to check and name the reason. Report the resulting order ("名称 A→Z") rather than a direction of travel ("名称从后往前").
-- Overlays use the app's own band rhythm `px-5 py-4` (20/16), never a scale of their own. `dialog-shell.ts`'s `DIALOG_HEADER`/`DIALOG_BODY`/`DIALOG_FOOTER` all use it, so the header→body gap is `16 + 1 + 16 = 33px`, identical to the main window's toolbar→list gap. Do not pass `contentClassName` to override a dialog's padding — that is how the dialog drifted to `px-6 py-5`/`px-6 py-6` and read as a roomier product than the window behind it. The dialog close button is `absolute top-2.5 right-2.5`, tuned to the `py-4` header (32px button vs 18px `leading-none` title, centres within 1px); changing the header padding means re-tuning it.
-- Only `shadow-sm` (cards) and `shadow-lg` (overlays) exist as tokens. Any other `shadow-*` utility falls through to Tailwind's stock hardcoded black, which does not track the theme — `Tooltip` used `shadow-md` for exactly this reason and now uses `shadow-lg` like the dialogs, dropdowns and toasts. Every overlay container must also declare its own font size (`DIALOG_CONTENT`, `SelectContent`, `DropdownMenuContent`, and the toast card all declare `text-sm`) rather than inheriting the 16px body size from the app root.
-- The sidebar update card navigates, it never installs: its button goes to `/settings?section=about` (查看更新内容, or 查看更新进度 while downloading) so the notes are read before the app is replaced. `立即安装` exists only in `AppUpdatePanel`. Do not call `install()` from the sidebar, and keep its failure line 上次操作失败 rather than 安装失败，请重试 — `error` covers a failed check too and the card cannot retry.
-- The settings section lives in the URL (`/settings?section=<id>`), not component state, so a link can point at one section. An absent or unrecognized id falls back to 外观 (which is omitted from the URL), so a hand-edited URL cannot render a blank pane.
-- The themed background must be painted on `html`, not only `body`. With only `body` set, `html` and `#root` compute to `rgba(0,0,0,0)` and the root canvas keeps the UA default white, so any frame the compositor rebuilds from it flashes white in dark mode.
-- Dialog overlays must not use `backdrop-filter`. A full-viewport blurred overlay is promoted to its own compositor layer, and tearing one down can flash a frame in Chromium/WebView2 — which the store's detail dialog triggers, since it closes the moment an install finishes. The scrim is `bg-black/45` (`dark:bg-black/70`) only, and `DialogOverlay` and the AlertDialog overlay must stay identical.
-- An operation that closes its own surface must report its result before closing. `useSkillInstall` passes its `InstallResult` to `onCompleted` so `StorePage` can name the installed skill in a 安装完成 toast; without that, a successful store install closed the dialog and said nothing at all.
-- The store offers the action a skill's state implies, on both surfaces: an installed card shows 卸载 (never a disabled 已安装 badge) and the detail footer shows 卸载 rather than 开始安装. Both use `useSkillManagement`, the same hook 我的技能 uses, so the two pages share one `uninstall_skill` path, one per-skill busy state (`pendingActions`), one confirmation dialog and its copy, and one refresh. Both card buttons stop propagation because the whole card is the detail link.
+## MC-CON-20261020-9201ae25 — One shared directory is the only real copy
+
+Status: active
+Scope: project
+Subject: MC-SUBJ-20261020-aa80508b
+Facet: data-model
+
+Evidence:
+- repo:src-tauri/src/core/repo/layout.rs
+
+Constraint:
+Skills install as real content into one shared directory (`~/.agents/skills/`, flat). Tools that do not read it get a managed link to that copy; content is never copied into a tool directory.
+
+## MC-CON-20261020-6c231048 — Takeover keeps the displaced directory
+
+Status: active
+Scope: project
+Subject: MC-SUBJ-20261020-aa80508b
+Facet: behavior
+
+Evidence:
+- repo:src-tauri/src/core/repo/conflict.rs
+
+Constraint:
+Takeover renames an untracked path aside as `<name>.skillsage-backup-<ts>-<pid>` and **keeps it**; `finalize()` stays a logged no-op, because the conflict dialog promises to keep the displaced content under a new name.
+
+## MC-CON-20261020-8759e3ee — Secrets never reach settings JSON or logs
+
+Status: active
+Scope: project
+Subject: MC-SUBJ-20261020-aa80508b
+Facet: security
+
+Evidence:
+- repo:src-tauri/src/core/settings.rs
+
+Constraint:
+The GitHub token lives only in the OS keyring — never in `settings.json`, sync exports, or logs. Proxy URLs may embed credentials, so updater logging stays at Info.
+
+## MC-CON-20261020-71bb11af — Desktop-only, minimum window 1200×800
+
+Status: active
+Scope: project
+Subject: MC-SUBJ-20261020-aa80508b
+Facet: interface
+
+Evidence:
+- repo:src-tauri/tauri.conf.json
+
+Constraint:
+The main window opens at 1200×800 and never shrinks below it. No mobile breakpoints.
