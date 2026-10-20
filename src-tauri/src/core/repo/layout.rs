@@ -57,7 +57,7 @@ impl RepoLayout {
         // Validate and create every missing ancestor one component at a time.
         // This prevents a user-controlled `.agents` symlink from redirecting
         // writes outside the intended home directory.
-        ensure_directory_chain(&self.public_root, "公共技能目录")?;
+        ensure_directory_chain(&self.public_root, "共享技能目录")?;
         Ok(())
     }
 }

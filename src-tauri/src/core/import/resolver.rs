@@ -245,10 +245,11 @@ pub fn import_at(
     if let Err(error) = replacement.finalize() {
         tracing::warn!(error = %error, "无法清理本地导入的旧技能备份");
     }
+    // The displaced foreign directory is *kept* under its backup name; see
+    // `PendingTakeover::finalize` and constraints.md's takeover rule. Nothing to
+    // report here, and no warn arm — it cannot fail.
     if let Some(pending) = pending {
-        if let Err(error) = pending.finalize() {
-            tracing::warn!(error = %error, "无法清理被接管的旧技能目录备份");
-        }
+        let _ = pending.finalize();
     }
 
     Ok(InstallResult {

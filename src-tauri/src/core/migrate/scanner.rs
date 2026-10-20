@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde::Serialize;
 
 use crate::core::import::source::validate_tree;
@@ -165,7 +167,13 @@ pub fn rename_mismatch(layout: &RepoLayout, name: &str) -> Result<String, Skills
         .ok_or_else(|| SkillsageError::InvalidSkill("该技能没有需要整理的 SKILL.md 名称".into()))?;
     let source = layout.skill(name)?;
     let destination = layout.skill(&declared_name)?;
-    if std::fs::symlink_metadata(&destination).is_ok() {
+    // On a case-insensitive filesystem (NTFS, APFS) the destination "exists"
+    // whenever the source does and the two names differ only in case — it *is*
+    // the same directory. Refusing there made the mismatch unresolvable forever
+    // and the entry unremovable, since a valid SKILL.md is not removable. When
+    // both sides canonicalize to the same path, the rename is legal and is
+    // precisely what fixes the case.
+    if std::fs::symlink_metadata(&destination).is_ok() && !same_file(&source, &destination) {
         return Err(SkillsageError::NameConflict(declared_name));
     }
     let lock = lockfile::load(layout)?;
@@ -183,12 +191,26 @@ pub fn rename_mismatch(layout: &RepoLayout, name: &str) -> Result<String, Skills
     Ok(declared_name)
 }
 
+/// True when two existing paths resolve to the same file or directory. Used to
+/// tell a real conflict (a *different* entry already occupies the target name)
+/// from the case-only alias a case-insensitive filesystem reports as present:
+/// `canonicalize` resolves every component to its on-disk casing, so the two
+/// spellings of one directory compare equal, while two distinct directories on
+/// a case-sensitive filesystem still do not.
+fn same_file(left: &Path, right: &Path) -> bool {
+    match (std::fs::canonicalize(left), std::fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
 
     use super::{remove_invalid, rename_mismatch, scan};
     use crate::core::repo::layout::RepoLayout;
+    use crate::error::SkillsageError;
 
     fn test_layout(name: &str) -> RepoLayout {
         let root = std::env::temp_dir().join(format!(
@@ -305,6 +327,79 @@ mod tests {
         assert_eq!(next_name, "notes-helper");
         assert!(!original.exists());
         assert!(layout.public_root.join("notes-helper").is_dir());
+
+        fs::remove_dir_all(&layout.root).expect("remove central root");
+        fs::remove_dir_all(&layout.public_root).expect("remove public root");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn renames_a_folder_that_differs_from_the_declared_name_only_in_case() {
+        // A case-insensitive filesystem reports the target name as existing
+        // because it *is* this same directory. The old code treated that as a
+        // `NameConflict`, so the mismatch could never be repaired and the entry
+        // could not be removed either (a valid SKILL.md is not removable).
+        let layout = test_layout("rename-case-only");
+        layout.ensure_roots().expect("create layout");
+        let original = layout.public_root.join("Video-Editor");
+        fs::create_dir_all(&original).expect("create mismatch dir");
+        fs::write(
+            original.join("SKILL.md"),
+            "---\nname: video-editor\ndescription: Video helper.\n---\n",
+        )
+        .expect("write manifest");
+
+        let item = scan(&layout)
+            .expect("scan should succeed")
+            .items
+            .into_iter()
+            .next()
+            .expect("mismatch item present");
+        assert_eq!(item.declared_name.as_deref(), Some("video-editor"));
+
+        // Guard against a case-sensitive test filesystem: only exercise this
+        // when the lower-case spelling resolves to the same entry.
+        let lower_case_exists = fs::symlink_metadata(layout.public_root.join("video-editor")).is_ok();
+        if lower_case_exists {
+            let next_name =
+                rename_mismatch(&layout, &item.name).expect("case-only rename should succeed");
+            assert_eq!(next_name, "video-editor");
+            // The directory is now listed under the declared casing.
+            let listing: Vec<String> = fs::read_dir(&layout.public_root)
+                .expect("read public root")
+                .filter_map(Result::ok)
+                .filter_map(|entry| entry.file_name().into_string().ok())
+                .collect();
+            assert!(
+                listing.contains(&"video-editor".to_string()),
+                "expected the folder to be listed as video-editor, got {listing:?}"
+            );
+        }
+
+        fs::remove_dir_all(&layout.root).expect("remove central root");
+        fs::remove_dir_all(&layout.public_root).expect("remove public root");
+    }
+
+    #[test]
+    fn a_different_directory_at_the_declared_name_is_still_a_conflict() {
+        // The case-only repair must not weaken the real conflict: two genuinely
+        // distinct entries competing for one name still fail.
+        let layout = test_layout("rename-conflict");
+        layout.ensure_roots().expect("create layout");
+        let original = layout.public_root.join("old-notes");
+        fs::create_dir_all(&original).expect("create mismatch dir");
+        fs::write(
+            original.join("SKILL.md"),
+            "---\nname: notes-helper\ndescription: Notes helper.\n---\n",
+        )
+        .expect("write manifest");
+        let occupied = layout.public_root.join("notes-helper");
+        fs::create_dir_all(&occupied).expect("create occupying dir");
+        fs::write(occupied.join("marker.txt"), "someone else's").expect("write marker");
+
+        let result = rename_mismatch(&layout, "old-notes");
+        assert!(matches!(result, Err(SkillsageError::NameConflict(_))));
+        assert!(occupied.join("marker.txt").is_file());
 
         fs::remove_dir_all(&layout.root).expect("remove central root");
         fs::remove_dir_all(&layout.public_root).expect("remove public root");

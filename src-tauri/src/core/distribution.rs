@@ -37,7 +37,7 @@ pub fn set_at(
         // The tool already sees the shared directory; creating a link would
         // duplicate it and contradict the setting.
         return Err(SkillsageError::Io(format!(
-            "{} 已设置为读取公共技能目录，无需分发",
+            "{} 已设置为读取共享技能目录，无需分发",
             tool.label
         )));
     }
@@ -266,7 +266,7 @@ fn ensure_real_skill_directory(path: &Path) -> Result<(), SkillsageError> {
     match std::fs::symlink_metadata(path) {
         Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => Ok(()),
         Ok(_) => Err(SkillsageError::Io(format!(
-            "公共技能目录不是受 SkillSage 管理的真实目录: {}",
+            "共享技能目录不是受 SkillSage 管理的真实目录: {}",
             path.display()
         ))),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -345,10 +345,12 @@ fn create_link(source: &Path, target_path: &Path, tool: &ToolSpec) -> Result<(),
         // and does not escape cmd.exe metacharacters: a home directory such as
         // `C:\Users\a&b` would be split at `&`, creating the junction against a
         // truncated path and running the remainder as a second command.
+        let target_argument = quote_for_cmd(target_path, tool)?;
+        let source_argument = quote_for_cmd(source, tool)?;
         let mut command = std::process::Command::new("cmd");
         command.arg("/C").arg("mklink").arg("/J");
-        command.raw_arg(quote_for_cmd(target_path));
-        command.raw_arg(quote_for_cmd(source));
+        command.raw_arg(target_argument);
+        command.raw_arg(source_argument);
         let output = command.output()?;
         if !output.status.success() {
             let reason = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -372,24 +374,29 @@ fn create_link(source: &Path, target_path: &Path, tool: &ToolSpec) -> Result<(),
     Ok(())
 }
 
-/// Wraps a path in double quotes for `cmd.exe`, escaping embedded quotes and
-/// neutralizing `%` (which cmd would otherwise expand as a variable) with
-/// `^`. A `"` inside a path is not representable for cmd, so it is escaped as
-/// best as possible rather than silently truncating the argument.
+/// Wraps a path in double quotes for `cmd.exe`, refusing the two characters
+/// cmd.exe makes unrepresentable on a re-parsed command line.
+///
+/// `%` cannot be neutralized: `cmd /C echo "x^%TEMP%y"` still expands the
+/// variable, because expansion happens during parsing, before `^` takes effect
+/// on an already-quoted argument. `"` cannot be escaped either — `\"` is not
+/// cmd.exe syntax, and the quote would end the argument. Both therefore produce
+/// an argument that differs from the path the app records in its lock file, so
+/// the link is refused rather than created against a different directory.
+///
+/// The long-term fix is to create the link directly with
+/// `CreateSymbolicLinkW`/junction APIs instead of going through `cmd`, which
+/// removes this parsing layer entirely.
 #[cfg(windows)]
-fn quote_for_cmd(path: &Path) -> String {
+fn quote_for_cmd(path: &Path, tool: &ToolSpec) -> Result<String, SkillsageError> {
     let value = path.to_string_lossy();
-    let mut escaped = String::with_capacity(value.len() + 2);
-    escaped.push('"');
-    for character in value.chars() {
-        match character {
-            '%' => escaped.push_str("^%"),
-            '"' => escaped.push_str("\\\""),
-            other => escaped.push(other),
-        }
+    if let Some(character) = value.chars().find(|character| matches!(character, '%' | '"')) {
+        return Err(SkillsageError::Io(format!(
+            "{} 的技能目录路径包含无法用于创建链接的字符 {character}：{value}",
+            tool.label
+        )));
     }
-    escaped.push('"');
-    escaped
+    Ok(format!("\"{value}\""))
 }
 
 fn remove_owned_link(
@@ -710,5 +717,30 @@ mod tests {
         set_at(&layout, &resolver, TEST_SKILL_ID, false, tool("claude-code"))
             .expect("link should be removed");
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn quote_for_cmd_quotes_plain_paths_and_refuses_percent_or_quote() {
+        let claude = tool("claude-code");
+
+        // A path cmd.exe can represent is quoted unchanged apart from the
+        // surrounding quotes.
+        assert_eq!(
+            super::quote_for_cmd(std::path::Path::new(r"C:\Users\a b\skills"), claude)
+                .expect("plain path should be quoted"),
+            "\"C:\\Users\\a b\\skills\""
+        );
+
+        // `%VAR%` would be expanded by cmd during parsing even inside quotes and
+        // even behind `^`, so the link would point somewhere else than the app
+        // records. Refuse instead of silently creating the wrong junction.
+        let percent = super::quote_for_cmd(std::path::Path::new(r"C:\Users\%TEMP%\skills"), claude);
+        let percent = percent.expect_err("a % path must be refused");
+        assert!(percent.to_string().contains('%'));
+        assert!(percent.to_string().contains("%TEMP%"));
+
+        // `"` is not escapable in cmd syntax either.
+        assert!(super::quote_for_cmd(std::path::Path::new("C:\\odd\"name"), claude).is_err());
     }
 }
