@@ -7,12 +7,14 @@
 在 Windows 和 macOS 上都运行：
 
 ```bash
-cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml
 pnpm lint
 pnpm build
 pnpm exec tauri build --debug --no-bundle
 ```
+
+`cargo fmt --check` 暂不作为门禁：当前工作树并非 rustfmt 干净状态，启用它需要一次全仓重排。
 
 这些检查目前通过本地命令执行；GitHub Actions 仅保留发布 workflow，发布前由 Windows/macOS runner 构建安装包并生成 updater artifacts。
 

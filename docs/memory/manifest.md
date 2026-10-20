@@ -86,6 +86,10 @@ Discover optional memory without loading it. Entries here are not default loads.
   - activation: path-or-explicit
   - paths: `scripts/**`, `.github/workflows/**`, `docs/releases/**`
   - description: Release pipeline, version synchronization, and release notes.
+- `areas/legacy-paths.md`
+  - activation: path-or-explicit
+  - paths: `src-tauri/src/core/tools.rs`, `src-tauri/src/core/distribution.rs`
+  - description: Retired tool paths and their startup cleanup.
 - `areas/store.md`
   - activation: path-or-explicit
   - paths: `src-tauri/src/core/store/**`, `src-tauri/src/core/github/**`, `src-tauri/src/core/url_install/**`, `src-tauri/src/commands/store.rs`, `src-tauri/src/commands/url_install.rs`, `src/pages/store/**`
