@@ -110,11 +110,20 @@ impl PendingTakeover {
         Ok(())
     }
 
-    /// Permanently remove the displaced foreign path after the new install
-    /// and lockfile have both been committed. Uses `remove_path` because the
-    /// displaced entry may be a stray file, not only a directory.
+    /// Commits a successful takeover by *keeping* the renamed-aside path.
+    ///
+    /// This deliberately does nothing to the backup. `docs/memory/constraints.md`
+    /// requires takeover to rename the foreign entity aside and never adopt or
+    /// delete it, and `PathConflictDialog.tsx` promises the user 把现有内容改名保留
+    /// (备份后继续). Deleting the backup here would silently destroy the folder the
+    /// dialog just said would be kept, which is exactly what this used to do.
+    /// A failed later step still calls `restore()`, which moves it back.
     pub fn finalize(self) -> Result<(), SkillsageError> {
-        super::atomic::remove_path(&self.backup_path)
+        tracing::info!(
+            backup = %self.backup_path.display(),
+            "接管内容已保留为备份"
+        );
+        Ok(())
     }
 }
 
@@ -219,6 +228,35 @@ mod tests {
         assert!(!original.exists());
         pending.restore().expect("restore should succeed");
         assert!(original.join("marker.txt").is_file());
+
+        fs::remove_dir_all(&layout.root).expect("remove central root");
+        fs::remove_dir_all(&layout.public_root).expect("remove public root");
+    }
+
+    #[test]
+    fn finalize_keeps_the_taken_over_directory_as_a_backup() {
+        let layout = test_layout("takeover-finalize");
+        layout.ensure_roots().expect("create layout");
+        let original = layout.skill("foo").expect("path should resolve");
+        fs::create_dir_all(&original).expect("create dir");
+        fs::write(original.join("marker.txt"), "keep me").expect("write marker");
+
+        let pending = take_over(&layout, "foo").expect("takeover should succeed");
+        let backup = pending.backup_path.clone();
+        assert!(!original.exists());
+
+        pending.finalize().expect("finalize should succeed");
+
+        // The original name stays free for the skill being installed...
+        assert!(!original.exists());
+        // ...but the displaced content must still be on disk under the backup
+        // name: `PathConflictDialog` promises 把现有内容改名保留, and the
+        // constraint is that takeover never deletes the foreign entity.
+        assert!(backup.is_dir(), "finalize must keep the backup directory");
+        assert_eq!(
+            fs::read_to_string(backup.join("marker.txt")).expect("marker should survive"),
+            "keep me"
+        );
 
         fs::remove_dir_all(&layout.root).expect("remove central root");
         fs::remove_dir_all(&layout.public_root).expect("remove public root");
