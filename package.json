@@ -2,6 +2,12 @@
   "name": "skillsage",
   "private": true,
   "version": "1.0.6",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aeroray/SkillSage.git"
+  },
+  "homepage": "https://github.com/aeroray/SkillSage#readme",
   "type": "module",
   "scripts": {
     "dev": "vite",
